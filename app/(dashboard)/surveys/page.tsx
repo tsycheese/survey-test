@@ -4,14 +4,7 @@ import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import {
-  PlusCircle,
-  BarChart2,
-  Edit,
-  Trash2,
-  Share2,
-  LogOut,
-} from "lucide-react"
+import { PlusCircle, BarChart2, Edit, Trash2, Share2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -82,107 +75,107 @@ export default function SurveysPage() {
     toast.success("链接已复制")
   }
 
-  async function handleLogout() {
-    await fetch("/api/auth/logout", { method: "POST" })
-    window.location.href = "/login"
-  }
-
   return (
-    <div className="min-h-svh p-6">
-      <div className="mx-auto max-w-4xl">
-        <header className="mb-8 flex items-center justify-between">
+    <div className="p-8">
+      <div className="mb-6 flex items-center justify-between">
+        <div>
           <h1 className="text-2xl font-bold">我的问卷</h1>
-          <div className="flex items-center gap-2">
-            <Button onClick={() => router.push("/surveys/new")}>
-              <PlusCircle className="mr-2 h-4 w-4" />
-              新建问卷
-            </Button>
-            <Button variant="outline" size="sm" onClick={handleLogout}>
-              <LogOut className="mr-2 h-4 w-4" />
-              退出
-            </Button>
-          </div>
-        </header>
+          <p className="mt-1 text-sm text-muted-foreground">
+            共 {surveys.length} 份问卷
+          </p>
+        </div>
+        <Button onClick={() => router.push("/surveys/new")}>
+          <PlusCircle className="mr-2 h-4 w-4" />
+          新建问卷
+        </Button>
+      </div>
 
-        {loading ? (
-          <p className="text-muted-foreground">加载中...</p>
-        ) : surveys.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-24 text-center">
-            <p className="text-muted-foreground">
-              还没有问卷，点击「新建问卷」开始
-            </p>
-          </div>
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2">
-            {surveys.map((survey) => (
-              <Card key={survey.id}>
-                <CardHeader>
-                  <div className="flex items-start justify-between gap-2">
-                    <CardTitle className="text-lg">{survey.title}</CardTitle>
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-xs ${
-                        survey.published
-                          ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
-                          : "bg-muted text-muted-foreground"
-                      }`}
-                    >
-                      {survey.published ? "已发布" : "草稿"}
-                    </span>
-                  </div>
-                  {survey.description && (
-                    <CardDescription>{survey.description}</CardDescription>
-                  )}
-                </CardHeader>
-                <CardContent className="text-sm text-muted-foreground">
-                  {survey._count.questions} 题 · {survey._count.responses}{" "}
-                  份回答
-                </CardContent>
-                <CardFooter className="flex flex-wrap gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => router.push(`/surveys/${survey.id}/edit`)}
+      {loading ? (
+        <div className="flex h-40 items-center justify-center text-muted-foreground">
+          加载中...
+        </div>
+      ) : surveys.length === 0 ? (
+        <div className="flex h-60 flex-col items-center justify-center gap-4 rounded-xl border border-dashed text-muted-foreground">
+          <p>还没有问卷，快来创建第一份吧</p>
+          <Button onClick={() => router.push("/surveys/new")}>
+            <PlusCircle className="mr-2 h-4 w-4" />
+            新建问卷
+          </Button>
+        </div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {surveys.map((survey) => (
+            <Card key={survey.id} className="flex flex-col">
+              <CardHeader className="pb-2">
+                <div className="flex items-start justify-between gap-2">
+                  <CardTitle className="line-clamp-2 text-base">
+                    {survey.title}
+                  </CardTitle>
+                  <span
+                    className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
+                      survey.published
+                        ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                        : "bg-muted text-muted-foreground"
+                    }`}
                   >
+                    {survey.published ? "已发布" : "草稿"}
+                  </span>
+                </div>
+                {survey.description && (
+                  <CardDescription className="line-clamp-2">
+                    {survey.description}
+                  </CardDescription>
+                )}
+              </CardHeader>
+              <CardContent className="pb-2">
+                <div className="flex gap-4 text-xs text-muted-foreground">
+                  <span>{survey._count.questions} 道题</span>
+                  <span>{survey._count.responses} 份回答</span>
+                </div>
+              </CardContent>
+              <CardFooter className="mt-auto flex flex-wrap gap-2 pt-2">
+                <Link href={`/surveys/${survey.id}/edit`}>
+                  <Button variant="outline" size="sm">
                     <Edit className="mr-1 h-3 w-3" />
                     编辑
                   </Button>
+                </Link>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleTogglePublish(survey)}
+                >
+                  {survey.published ? "取消发布" : "发布"}
+                </Button>
+                {survey.published && (
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => handleTogglePublish(survey)}
+                    onClick={() => handleCopyLink(survey.shareToken)}
                   >
-                    {survey.published ? "取消发布" : "发布"}
+                    <Share2 className="mr-1 h-3 w-3" />
+                    复制链接
                   </Button>
-                  {survey.published && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleCopyLink(survey.shareToken)}
-                    >
-                      <Share2 className="mr-1 h-3 w-3" />
-                      复制链接
-                    </Button>
-                  )}
-                  <Link href={`/surveys/${survey.id}/results`}>
-                    <Button variant="outline" size="sm">
-                      <BarChart2 className="mr-1 h-3 w-3" />
-                      统计
-                    </Button>
-                  </Link>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleDelete(survey.id)}
-                  >
-                    <Trash2 className="mr-1 h-3 w-3" />
-                    删除
+                )}
+                <Link href={`/surveys/${survey.id}/results`}>
+                  <Button variant="outline" size="sm">
+                    <BarChart2 className="mr-1 h-3 w-3" />
+                    统计
                   </Button>
-                </CardFooter>
-              </Card>
-            ))}
-          </div>
-        )}
-      </div>
+                </Link>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleDelete(survey.id)}
+                >
+                  <Trash2 className="mr-1 h-3 w-3" />
+                  删除
+                </Button>
+              </CardFooter>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
