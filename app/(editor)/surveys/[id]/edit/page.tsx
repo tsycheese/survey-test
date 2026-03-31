@@ -220,7 +220,7 @@ export default function EditSurveyPage() {
       {/* 三栏主体 */}
       <div className="relative flex flex-1 overflow-hidden">
         {/* 左栏：题型列表 */}
-        <aside className="absolute left-0 top-0 z-10 flex h-full w-64 flex-col border-r bg-background shadow-lg">
+        <aside className="absolute left-4 top-4 z-10 flex h-[calc(100%-2rem)] w-64 flex-col rounded-xl border bg-background shadow-xl">
           <div className="border-b px-3 py-2 text-xs font-medium text-muted-foreground">
             添加题目
           </div>
@@ -332,7 +332,7 @@ export default function EditSurveyPage() {
         </div>
 
         {/* 右栏：属性编辑 */}
-        <aside className="absolute right-0 top-0 z-10 flex h-full w-80 flex-col border-l bg-background shadow-lg">
+        <aside className="absolute right-4 top-4 z-10 flex h-[calc(100%-2rem)] w-80 flex-col rounded-xl border bg-background shadow-xl">
           {selectedQuestion ? (
             <QuestionEditor
               key={selectedQuestion.id}
