@@ -220,7 +220,7 @@ export default function EditSurveyPage() {
       {/* 三栏主体 */}
       <div className="relative flex flex-1 overflow-hidden">
         {/* 左栏：题型列表 */}
-        <aside className="absolute left-4 top-4 z-10 flex h-[calc(100%-2rem)] w-64 flex-col rounded-xl border bg-background shadow-xl">
+        <aside className="absolute top-4 left-4 z-10 flex h-[calc(100%-2rem)] w-64 flex-col rounded-xl border bg-background shadow-xl">
           <div className="border-b px-3 py-2 text-xs font-medium text-muted-foreground">
             添加题目
           </div>
@@ -244,95 +244,110 @@ export default function EditSurveyPage() {
         </aside>
 
         {/* 中栏：问卷主体 */}
-        <div className="flex flex-1 flex-col overflow-hidden bg-muted/30">
-          <div className="flex-1 overflow-y-auto px-72 py-6">
-            <div className="mx-auto max-w-2xl space-y-3">
-              {/* 问卷标题描述预览 */}
-              <div className="rounded-lg border bg-background p-4">
-                <div className="text-lg font-semibold">
-                  {title || "未命名问卷"}
-                </div>
-                {description && (
-                  <div className="mt-1 text-sm text-muted-foreground">
-                    {description}
-                  </div>
-                )}
-              </div>
+        <div className="flex flex-1 flex-col overflow-hidden bg-muted/50 dark:bg-muted/20">
+          <div className="flex-1 overflow-y-auto px-72 py-10">
+            <div className="mx-auto max-w-2xl">
+              {/* 问卷纸张 */}
+              <div className="rounded-sm bg-background shadow-[0_4px_24px_rgba(0,0,0,0.10)] ring-1 ring-border">
+                {/* 顶部色条 */}
+                <div className="h-2 rounded-t-sm bg-primary" />
 
-              {survey.questions.length === 0 ? (
-                <div className="flex h-40 items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground">
-                  点击左侧题型添加第一道题
-                </div>
-              ) : (
-                survey.questions.map((q, idx) => (
-                  <button
-                    key={q.id}
-                    onClick={() => setSelectedId(q.id)}
-                    className={cn(
-                      "w-full rounded-lg border bg-background p-4 text-left transition-all",
-                      selectedId === q.id
-                        ? "border-primary ring-1 ring-primary"
-                        : "hover:border-muted-foreground/40"
-                    )}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1">
-                        <span className="mr-2 text-xs text-muted-foreground">
-                          {idx + 1}.
-                        </span>
-                        <span className="text-sm font-medium">{q.text}</span>
-                        {q.required && (
-                          <span className="ml-1 text-xs text-red-500">*</span>
-                        )}
-                      </div>
-                      <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-                        {QUESTION_TYPES.find((t) => t.type === q.type)?.label}
-                      </span>
+                {/* 标题区 */}
+                <div className="border-b border-dashed border-border px-8 py-6">
+                  <div className="text-xl font-bold tracking-tight">
+                    {title || "未命名问卷"}
+                  </div>
+                  {description && (
+                    <div className="mt-1.5 text-sm text-muted-foreground">
+                      {description}
                     </div>
-                    {(q.type === "SINGLE_CHOICE" ||
-                      q.type === "MULTIPLE_CHOICE") &&
-                      q.options && (
-                        <div className="mt-2 space-y-1">
-                          {q.options.map((opt, i) => (
-                            <div
-                              key={i}
-                              className="flex items-center gap-2 text-xs text-muted-foreground"
-                            >
-                              <div
-                                className={cn(
-                                  "h-3 w-3 shrink-0 border",
-                                  q.type === "SINGLE_CHOICE"
-                                    ? "rounded-full"
-                                    : "rounded-sm"
-                                )}
-                              />
-                              {opt}
-                            </div>
-                          ))}
+                  )}
+                </div>
+
+                {/* 题目列表 */}
+                <div className="divide-y divide-dashed divide-border">
+                  {survey.questions.length === 0 ? (
+                    <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
+                      点击左侧题型添加第一道题
+                    </div>
+                  ) : (
+                    survey.questions.map((q, idx) => (
+                      <button
+                        key={q.id}
+                        onClick={() => setSelectedId(q.id)}
+                        className={cn(
+                          "relative w-full px-8 py-5 text-left transition-colors",
+                          selectedId === q.id
+                            ? "bg-primary/5"
+                            : "hover:bg-muted/50"
+                        )}
+                      >
+                        {selectedId === q.id && (
+                          <div className="absolute left-0 top-0 h-full w-1 rounded-l-sm bg-primary" />
+                        )}
+                        <div className="relative flex items-start justify-between gap-2">
+                          <div className="flex-1">
+                            <span className="mr-2 text-xs text-muted-foreground">
+                              {idx + 1}.
+                            </span>
+                            <span className="text-sm font-medium">{q.text}</span>
+                            {q.required && (
+                              <span className="ml-1 text-xs text-red-500">*</span>
+                            )}
+                          </div>
+                          <span className="shrink-0 rounded bg-black/5 px-1.5 py-0.5 text-xs text-muted-foreground">
+                            {QUESTION_TYPES.find((t) => t.type === q.type)?.label}
+                          </span>
                         </div>
-                      )}
-                    {q.type === "RATING" && (
-                      <div className="mt-2 flex gap-1">
-                        {[1, 2, 3, 4, 5].map((s) => (
-                          <Star
-                            key={s}
-                            className="h-4 w-4 text-muted-foreground"
-                          />
-                        ))}
-                      </div>
-                    )}
-                    {q.type === "TEXT" && (
-                      <div className="mt-2 h-8 rounded border border-dashed bg-muted/50" />
-                    )}
-                  </button>
-                ))
-              )}
+                        {(q.type === "SINGLE_CHOICE" ||
+                          q.type === "MULTIPLE_CHOICE") &&
+                          q.options && (
+                            <div className="mt-2.5 space-y-1.5 pl-5">
+                              {q.options.map((opt, i) => (
+                                <div
+                                  key={i}
+                                  className="flex items-center gap-2 text-xs text-muted-foreground"
+                                >
+                                  <div
+                                    className={cn(
+                                      "h-3 w-3 shrink-0 border border-black/30",
+                                      q.type === "SINGLE_CHOICE"
+                                        ? "rounded-full"
+                                        : "rounded-sm"
+                                    )}
+                                  />
+                                  {opt}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        {q.type === "RATING" && (
+                          <div className="mt-2.5 flex gap-1 pl-5">
+                            {[1, 2, 3, 4, 5].map((s) => (
+                              <Star
+                                key={s}
+                                className="h-4 w-4 text-muted-foreground"
+                              />
+                            ))}
+                          </div>
+                        )}
+                        {q.type === "TEXT" && (
+                          <div className="mt-2.5 ml-5 h-7 border-b border-border" />
+                        )}
+                      </button>
+                    ))
+                  )}
+                </div>
+
+                {/* 底部留白 */}
+                <div className="h-8" />
+              </div>
             </div>
           </div>
         </div>
 
         {/* 右栏：属性编辑 */}
-        <aside className="absolute right-4 top-4 z-10 flex h-[calc(100%-2rem)] w-80 flex-col rounded-xl border bg-background shadow-xl">
+        <aside className="absolute top-4 right-4 z-10 flex h-[calc(100%-2rem)] w-80 flex-col rounded-xl border bg-background shadow-xl">
           {selectedQuestion ? (
             <QuestionEditor
               key={selectedQuestion.id}
