@@ -41,7 +41,8 @@ export function Sidebar({ user }: { user: SidebarUser }) {
       <nav className="flex-1 space-y-1 p-3">
         {navItems.map((item) => {
           const Icon = item.icon
-          const active = pathname === item.href || pathname.startsWith(item.href + "/")
+          const active =
+            pathname === item.href || pathname.startsWith(item.href + "/")
           return (
             <Link
               key={item.href}
@@ -65,8 +66,12 @@ export function Sidebar({ user }: { user: SidebarUser }) {
         <div className="mb-2 flex items-center gap-2 rounded-md px-3 py-2">
           <User className="h-4 w-4 text-muted-foreground" />
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">{user.name || "用户"}</p>
-            <p className="truncate text-xs text-muted-foreground">{user.email}</p>
+            <p className="truncate text-sm font-medium">
+              {user.name || "用户"}
+            </p>
+            <p className="truncate text-xs text-muted-foreground">
+              {user.email}
+            </p>
           </div>
         </div>
         <button
