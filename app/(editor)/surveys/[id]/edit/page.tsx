@@ -283,20 +283,27 @@ export default function EditSurveyPage() {
                         )}
                       >
                         {selectedId === q.id && (
-                          <div className="absolute left-0 top-0 h-full w-1 rounded-l-sm bg-primary" />
+                          <div className="absolute top-0 left-0 h-full w-1 rounded-l-sm bg-primary" />
                         )}
                         <div className="relative flex items-start justify-between gap-2">
                           <div className="flex-1">
                             <span className="mr-2 text-xs text-muted-foreground">
                               {idx + 1}.
                             </span>
-                            <span className="text-sm font-medium">{q.text}</span>
+                            <span className="text-sm font-medium">
+                              {q.text}
+                            </span>
                             {q.required && (
-                              <span className="ml-1 text-xs text-red-500">*</span>
+                              <span className="ml-1 text-xs text-red-500">
+                                *
+                              </span>
                             )}
                           </div>
-                          <span className="shrink-0 rounded bg-black/5 px-1.5 py-0.5 text-xs text-muted-foreground">
-                            {QUESTION_TYPES.find((t) => t.type === q.type)?.label}
+                          <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                            {
+                              QUESTION_TYPES.find((t) => t.type === q.type)
+                                ?.label
+                            }
                           </span>
                         </div>
                         {(q.type === "SINGLE_CHOICE" ||
@@ -310,7 +317,7 @@ export default function EditSurveyPage() {
                                 >
                                   <div
                                     className={cn(
-                                      "h-3 w-3 shrink-0 border border-black/30",
+                                      "h-3 w-3 shrink-0 border border-border",
                                       q.type === "SINGLE_CHOICE"
                                         ? "rounded-full"
                                         : "rounded-sm"
@@ -471,7 +478,7 @@ function QuestionEditor({
           >
             <span
               className={cn(
-                "absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform",
+                "absolute top-0.5 h-4 w-4 rounded-full bg-background shadow transition-transform",
                 required ? "translate-x-4" : "translate-x-0.5"
               )}
             />
