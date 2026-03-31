@@ -9,7 +9,15 @@ const updateQuestionSchema = z.object({
     .enum(["SINGLE_CHOICE", "MULTIPLE_CHOICE", "TEXT", "RATING"])
     .optional(),
   required: z.boolean().optional(),
-  config: z.record(z.unknown()).optional().transform((v) => v as import('@/prisma/generated/prisma/client').Prisma.InputJsonValue | undefined),
+  config: z
+    .record(z.unknown())
+    .optional()
+    .transform(
+      (v) =>
+        v as
+          | import("@/prisma/generated/prisma/client").Prisma.InputJsonValue
+          | undefined
+    ),
   order: z.number().int().optional(),
 })
 

@@ -39,7 +39,9 @@ export async function GET(
       type: q.type,
       config: q.config,
       answers: responses.flatMap((r) =>
-        r.answers.filter((a) => a.questionId === q.id).map((a) => ({ value: a.value }))
+        r.answers
+          .filter((a) => a.questionId === q.id)
+          .map((a) => ({ value: a.value }))
       ),
     })),
   })

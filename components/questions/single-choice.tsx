@@ -23,10 +23,13 @@ export const singleChoiceDef: QuestionDef<SingleChoiceQuestion> = {
       ],
     },
   }),
-  Canvas: ({ question, selected }) => (
+  Canvas: ({ question }) => (
     <div className="space-y-1.5">
       {question.config.options.map((opt) => (
-        <div key={opt.id} className="flex items-center gap-2 text-sm text-muted-foreground">
+        <div
+          key={opt.id}
+          className="flex items-center gap-2 text-sm text-muted-foreground"
+        >
           <div className="h-3.5 w-3.5 shrink-0 rounded-full border border-border" />
           {opt.label}
         </div>
@@ -49,7 +52,10 @@ export const singleChoiceDef: QuestionDef<SingleChoiceQuestion> = {
       onChange({
         ...question,
         config: {
-          options: [...options, { id: nanoid(), label: `选项${options.length + 1}` }],
+          options: [
+            ...options,
+            { id: nanoid(), label: `选项${options.length + 1}` },
+          ],
         },
       })
     }
@@ -83,7 +89,12 @@ export const singleChoiceDef: QuestionDef<SingleChoiceQuestion> = {
             </Button>
           </div>
         ))}
-        <Button variant="outline" size="sm" onClick={addOption} className="w-full">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={addOption}
+          className="w-full"
+        >
           <PlusCircle className="mr-1.5 h-3.5 w-3.5" />
           添加选项
         </Button>

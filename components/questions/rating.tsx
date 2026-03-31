@@ -27,7 +27,9 @@ export const ratingDef: QuestionDef<RatingQuestion> = {
         <Star key={i} className="h-4 w-4 text-muted-foreground" />
       ))}
       {question.config.minLabel && (
-        <span className="ml-2 text-xs text-muted-foreground">{question.config.minLabel}</span>
+        <span className="ml-2 text-xs text-muted-foreground">
+          {question.config.minLabel}
+        </span>
       )}
     </div>
   ),
@@ -43,7 +45,9 @@ export const ratingDef: QuestionDef<RatingQuestion> = {
               <button
                 key={n}
                 type="button"
-                onClick={() => onChange({ ...question, config: { ...config, max: n } })}
+                onClick={() =>
+                  onChange({ ...question, config: { ...config, max: n } })
+                }
                 className={[
                   "flex-1 rounded border py-1 text-sm transition-colors",
                   config.max === n
@@ -61,7 +65,10 @@ export const ratingDef: QuestionDef<RatingQuestion> = {
           <Input
             value={config.minLabel ?? ""}
             onChange={(e) =>
-              onChange({ ...question, config: { ...config, minLabel: e.target.value } })
+              onChange({
+                ...question,
+                config: { ...config, minLabel: e.target.value },
+              })
             }
             placeholder="如：非常不满意"
             className="h-8 text-sm"
@@ -72,7 +79,10 @@ export const ratingDef: QuestionDef<RatingQuestion> = {
           <Input
             value={config.maxLabel ?? ""}
             onChange={(e) =>
-              onChange({ ...question, config: { ...config, maxLabel: e.target.value } })
+              onChange({
+                ...question,
+                config: { ...config, maxLabel: e.target.value },
+              })
             }
             placeholder="如：非常满意"
             className="h-8 text-sm"

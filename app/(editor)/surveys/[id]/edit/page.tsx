@@ -17,8 +17,14 @@ import type { Question } from "@/lib/questions/types"
 
 export default function EditSurveyPage() {
   const { id } = useParams<{ id: string }>()
-  const { survey, selectedId, setSurvey, selectQuestion, updateQuestion, deleteQuestion } =
-    useEditorStore()
+  const {
+    survey,
+    selectedId,
+    setSurvey,
+    selectQuestion,
+    updateQuestion,
+    deleteQuestion,
+  } = useEditorStore()
 
   useEffect(() => {
     fetch(`/api/surveys/${id}`)
@@ -29,14 +35,16 @@ export default function EditSurveyPage() {
           title: data.title,
           description: data.description,
           published: data.published,
-          questions: (data.questions ?? []).map((q: Record<string, unknown>) => ({
-            id: q.id,
-            type: q.type,
-            title: q.title,
-            required: q.required,
-            order: q.order,
-            config: q.config ?? {},
-          })) as Question[],
+          questions: (data.questions ?? []).map(
+            (q: Record<string, unknown>) => ({
+              id: q.id,
+              type: q.type,
+              title: q.title,
+              required: q.required,
+              order: q.order,
+              config: q.config ?? {},
+            })
+          ) as Question[],
         })
       })
   }, [id, setSurvey])
@@ -78,7 +86,8 @@ export default function EditSurveyPage() {
     )
   }
 
-  const selectedQuestion = survey.questions.find((q) => q.id === selectedId) ?? null
+  const selectedQuestion =
+    survey.questions.find((q) => q.id === selectedId) ?? null
 
   return (
     <div className="flex h-full flex-col">
@@ -102,20 +111,29 @@ export default function EditSurveyPage() {
                   <div className="absolute top-0 left-0 h-full w-1 rounded-l-lg bg-primary" />
                 )}
                 <div className="flex items-start justify-between gap-1">
-                  <span className="text-xs text-muted-foreground">{idx + 1}.</span>
-                  <span className="flex-1 truncate text-sm font-medium">{q.title}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {idx + 1}.
+                  </span>
+                  <span className="flex-1 truncate text-sm font-medium">
+                    {q.title}
+                  </span>
                   <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
                     {def.label}
                   </span>
                 </div>
                 <div className="mt-1.5 pl-5">
-                  <def.Canvas question={q as never} selected={selectedId === q.id} />
+                  <def.Canvas
+                    question={q as never}
+                    selected={selectedId === q.id}
+                  />
                 </div>
               </button>
             )
           })}
           {survey.questions.length === 0 && (
-            <p className="text-center text-sm text-muted-foreground py-8">从右侧添加题目</p>
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              从右侧添加题目
+            </p>
           )}
         </aside>
 
@@ -126,7 +144,10 @@ export default function EditSurveyPage() {
               <Input
                 value={selectedQuestion.title}
                 onChange={(e) =>
-                  handleUpdateQuestion({ ...selectedQuestion, title: e.target.value })
+                  handleUpdateQuestion({
+                    ...selectedQuestion,
+                    title: e.target.value,
+                  })
                 }
                 className="mb-4 border-none bg-transparent text-lg font-semibold shadow-none focus-visible:ring-0"
                 placeholder="题目标题"
@@ -135,10 +156,7 @@ export default function EditSurveyPage() {
                 {(() => {
                   const def = getQuestionDef(selectedQuestion.type)
                   return (
-                    <def.Canvas
-                      question={selectedQuestion as never}
-                      selected
-                    />
+                    <def.Canvas question={selectedQuestion as never} selected />
                   )
                 })()}
               </div>
@@ -172,7 +190,10 @@ export default function EditSurveyPage() {
                   <Switch
                     checked={selectedQuestion.required}
                     onCheckedChange={(checked) =>
-                      handleUpdateQuestion({ ...selectedQuestion, required: checked })
+                      handleUpdateQuestion({
+                        ...selectedQuestion,
+                        required: checked,
+                      })
                     }
                   />
                 </div>

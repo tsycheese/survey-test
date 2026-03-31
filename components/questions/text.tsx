@@ -38,7 +38,10 @@ export const textDef: QuestionDef<TextQuestion> = {
           <Input
             value={config.placeholder ?? ""}
             onChange={(e) =>
-              onChange({ ...question, config: { ...config, placeholder: e.target.value } })
+              onChange({
+                ...question,
+                config: { ...config, placeholder: e.target.value },
+              })
             }
             placeholder="请输入..."
             className="h-8 text-sm"
@@ -51,7 +54,10 @@ export const textDef: QuestionDef<TextQuestion> = {
             role="switch"
             aria-checked={config.multiline}
             onClick={() =>
-              onChange({ ...question, config: { ...config, multiline: !config.multiline } })
+              onChange({
+                ...question,
+                config: { ...config, multiline: !config.multiline },
+              })
             }
             className={[
               "relative h-5 w-9 rounded-full transition-colors",

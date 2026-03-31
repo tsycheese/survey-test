@@ -20,7 +20,8 @@ export const useEditorStore = create<EditorStore>((set) => ({
   selectedId: null,
   dirty: false,
 
-  setSurvey: (survey) => set({ survey, selectedId: survey.questions[0]?.id ?? null, dirty: false }),
+  setSurvey: (survey) =>
+    set({ survey, selectedId: survey.questions[0]?.id ?? null, dirty: false }),
 
   selectQuestion: (id) => set({ selectedId: id }),
 
@@ -40,7 +41,9 @@ export const useEditorStore = create<EditorStore>((set) => ({
       return {
         survey: {
           ...s.survey,
-          questions: s.survey.questions.map((q) => (q.id === question.id ? question : q)),
+          questions: s.survey.questions.map((q) =>
+            q.id === question.id ? question : q
+          ),
         },
         dirty: true,
       }
@@ -62,7 +65,10 @@ export const useEditorStore = create<EditorStore>((set) => ({
   updateSurveyInfo: (title, description) =>
     set((s) => {
       if (!s.survey) return s
-      return { survey: { ...s.survey, title, description: description || null }, dirty: true }
+      return {
+        survey: { ...s.survey, title, description: description || null },
+        dirty: true,
+      }
     }),
 
   markSaved: () => set({ dirty: false }),

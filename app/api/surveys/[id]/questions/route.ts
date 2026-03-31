@@ -7,7 +7,15 @@ const questionSchema = z.object({
   title: z.string().min(1, "题目不能为空"),
   type: z.enum(["SINGLE_CHOICE", "MULTIPLE_CHOICE", "TEXT", "RATING"]),
   required: z.boolean().default(false),
-  config: z.record(z.unknown()).optional().transform((v) => v as import('@/prisma/generated/prisma/client').Prisma.InputJsonValue | undefined),
+  config: z
+    .record(z.unknown())
+    .optional()
+    .transform(
+      (v) =>
+        v as
+          | import("@/prisma/generated/prisma/client").Prisma.InputJsonValue
+          | undefined
+    ),
 })
 
 export async function POST(

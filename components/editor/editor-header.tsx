@@ -38,18 +38,22 @@ export function EditorHeader({ surveyId }: { surveyId: string }) {
   return (
     <header className="flex h-14 shrink-0 items-center justify-between border-b bg-background px-4">
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => router.push("/surveys")}>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => router.push("/surveys")}
+        >
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <Input
           value={survey.title}
-          onChange={(e) => updateSurveyInfo(e.target.value, survey.description ?? "")}
+          onChange={(e) =>
+            updateSurveyInfo(e.target.value, survey.description ?? "")
+          }
           className="w-64 border-none bg-transparent text-base font-semibold shadow-none outline-none placeholder:text-muted-foreground focus-visible:ring-0"
           placeholder="未命名问卷"
         />
-        {dirty && (
-          <span className="text-xs text-muted-foreground">未保存</span>
-        )}
+        {dirty && <span className="text-xs text-muted-foreground">未保存</span>}
       </div>
       <div className="flex items-center gap-2">
         <Button onClick={handleSave} disabled={saving || !dirty} size="sm">
