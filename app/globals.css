@@ -126,4 +126,28 @@
   html {
     @apply font-sans;
     }
+
+  /* 极简细线滚动条 */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+    margin-block: 4px;
+    margin-inline-end: 2px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: oklch(0 0 0 / 35%);
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: oklch(0 0 0 / 55%);
+  }
+  .dark ::-webkit-scrollbar-thumb {
+    background: oklch(1 0 0 / 35%);
+  }
+  .dark ::-webkit-scrollbar-thumb:hover {
+    background: oklch(1 0 0 / 55%);
+  }
 }
