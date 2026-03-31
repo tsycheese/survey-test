@@ -1,7 +1,9 @@
 import { Geist, Geist_Mono } from "next/font/google"
+import { SessionProvider } from "next-auth/react"
 
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
+import { ToasterProvider } from "@/components/toaster"
 import { cn } from "@/lib/utils"
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-sans" })
@@ -28,7 +30,12 @@ export default function RootLayout({
       )}
     >
       <body>
-        <ThemeProvider>{children}</ThemeProvider>
+        <SessionProvider>
+          <ThemeProvider>
+            {children}
+            <ToasterProvider />
+          </ThemeProvider>
+        </SessionProvider>
       </body>
     </html>
   )
