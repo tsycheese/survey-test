@@ -4,8 +4,8 @@ import { useState } from "react"
 import Link from "next/link"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
-import { z } from "zod"
-import { Eye, EyeOff, Check, X } from "lucide-react"
+import { Check, X } from "lucide-react"
+import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -25,32 +25,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-
-const passwordSchema = z
-  .string()
-  .min(8, "密码至少需要 8 个字符")
-  .regex(/[A-Z]/, "密码必须包含至少一个大写字母")
-  .regex(/[a-z]/, "密码必须包含至少一个小写字母")
-  .regex(/[0-9]/, "密码必须包含至少一个数字")
-
-const registerSchema = z
-  .object({
-    username: z
-      .string()
-      .min(3, "用户名至少需要 3 个字符")
-      .max(20, "用户名不能超过 20 个字符")
-      .regex(/^[a-zA-Z0-9_]+$/, "用户名只能包含字母、数字和下划线"),
-    email: z.string().email("请输入有效的邮箱地址"),
-    password: passwordSchema,
-    confirmPassword: z.string(),
-    agreeTerms: z.boolean().refine((val) => val === true, "必须同意服务条款"),
-  })
-  .refine((data) => data.password === data.confirmPassword, {
-    message: "两次输入的密码不一致",
-    path: ["confirmPassword"],
-  })
-
-type RegisterFormValues = z.infer<typeof registerSchema>
+import { registerSchema, type RegisterInput } from "@/lib/validations/auth"
 
 function PasswordStrength({ password }: { password: string }) {
   const checks = [
@@ -102,32 +77,50 @@ function PasswordStrength({ password }: { password: string }) {
 }
 
 export function RegisterForm() {
-  const [showPassword, setShowPassword] = useState(false)
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-  const [passwordValue, setPasswordValue] = useState("")
+  const [isPending, setIsPending] = useState(false)
 
-  const form = useForm<RegisterFormValues>({
+  const form = useForm<RegisterInput>({
     resolver: zodResolver(registerSchema),
     defaultValues: {
       username: "",
       email: "",
-      password: "",
-      confirmPassword: "",
+      password: "Test1234",
+      confirmPassword: "Test1234",
       agreeTerms: false,
     },
   })
 
-  async function onSubmit(values: RegisterFormValues) {
-    setIsLoading(true)
+  async function onSubmit(values: RegisterInput) {
+    setIsPending(true)
     try {
-      // TODO: 实现注册逻辑
-      console.log("注册数据:", values)
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-    } catch (error) {
-      console.error("注册失败:", error)
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(values),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error)
+        return
+      }
+      const loginRes = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: values.email,
+          password: values.password,
+        }),
+      })
+      const loginData = await loginRes.json()
+      if (!loginRes.ok) {
+        toast.error(loginData.error)
+        return
+      }
+      window.location.href = "/"
+    } catch {
+      toast.error("注册失败，请稍后重试")
     } finally {
-      setIsLoading(false)
+      setIsPending(false)
     }
   }
 
@@ -152,7 +145,7 @@ export function RegisterForm() {
                       autoCapitalize="none"
                       autoComplete="username"
                       autoCorrect="off"
-                      disabled={isLoading}
+                      disabled={isPending}
                       {...field}
                     />
                   </FormControl>
@@ -173,7 +166,7 @@ export function RegisterForm() {
                       autoCapitalize="none"
                       autoComplete="email"
                       autoCorrect="off"
-                      disabled={isLoading}
+                      disabled={isPending}
                       {...field}
                     />
                   </FormControl>
@@ -191,39 +184,16 @@ export function RegisterForm() {
                     <div className="relative">
                       <Input
                         placeholder="••••••••"
-                        type={showPassword ? "text" : "password"}
+                        type="password"
                         autoCapitalize="none"
                         autoComplete="new-password"
                         autoCorrect="off"
-                        disabled={isLoading}
+                        disabled={isPending}
                         {...field}
-                        onChange={(e) => {
-                          field.onChange(e)
-                          setPasswordValue(e.target.value)
-                        }}
                       />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="absolute top-0 right-0 h-full px-3 py-2 hover:bg-transparent"
-                        onClick={() => setShowPassword(!showPassword)}
-                        disabled={isLoading}
-                      >
-                        {showPassword ? (
-                          <EyeOff className="h-4 w-4 text-muted-foreground" />
-                        ) : (
-                          <Eye className="h-4 w-4 text-muted-foreground" />
-                        )}
-                        <span className="sr-only">
-                          {showPassword ? "隐藏密码" : "显示密码"}
-                        </span>
-                      </Button>
                     </div>
                   </FormControl>
-                  {passwordValue && (
-                    <PasswordStrength password={passwordValue} />
-                  )}
+                  {field.value && <PasswordStrength password={field.value} />}
                   <FormMessage />
                 </FormItem>
               )}
@@ -238,32 +208,13 @@ export function RegisterForm() {
                     <div className="relative">
                       <Input
                         placeholder="••••••••"
-                        type={showConfirmPassword ? "text" : "password"}
+                        type="password"
                         autoCapitalize="none"
                         autoComplete="new-password"
                         autoCorrect="off"
-                        disabled={isLoading}
+                        disabled={isPending}
                         {...field}
                       />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="absolute top-0 right-0 h-full px-3 py-2 hover:bg-transparent"
-                        onClick={() =>
-                          setShowConfirmPassword(!showConfirmPassword)
-                        }
-                        disabled={isLoading}
-                      >
-                        {showConfirmPassword ? (
-                          <EyeOff className="h-4 w-4 text-muted-foreground" />
-                        ) : (
-                          <Eye className="h-4 w-4 text-muted-foreground" />
-                        )}
-                        <span className="sr-only">
-                          {showConfirmPassword ? "隐藏密码" : "显示密码"}
-                        </span>
-                      </Button>
                     </div>
                   </FormControl>
                   <FormMessage />
@@ -276,15 +227,15 @@ export function RegisterForm() {
               render={({ field }) => (
                 <FormItem>
                   <FormControl>
-                    <label className="flex cursor-pointer items-center space-x-2 text-sm">
+                    <div className="flex items-center space-x-2">
                       <input
                         type="checkbox"
                         className="h-4 w-4 rounded border-gray-300"
                         checked={field.value}
                         onChange={field.onChange}
-                        disabled={isLoading}
+                        disabled={isPending}
                       />
-                      <span className="text-muted-foreground">
+                      <label className="text-sm text-muted-foreground">
                         我同意{" "}
                         <Link
                           href="/terms"
@@ -299,15 +250,15 @@ export function RegisterForm() {
                         >
                           隐私政策
                         </Link>
-                      </span>
-                    </label>
+                      </label>
+                    </div>
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
-            <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? "注册中..." : "注册"}
+            <Button type="submit" className="w-full" disabled={isPending}>
+              {isPending ? "注册中..." : "注册"}
             </Button>
           </form>
         </Form>
@@ -324,10 +275,24 @@ export function RegisterForm() {
           </div>
         </div>
         <div className="grid w-full grid-cols-2 gap-2">
-          <Button variant="outline" className="w-full" disabled={isLoading}>
+          <Button
+            variant="outline"
+            className="w-full"
+            disabled={isPending}
+            onClick={() => {
+              toast.info("Google 注册暂未开启")
+            }}
+          >
             Google
           </Button>
-          <Button variant="outline" className="w-full" disabled={isLoading}>
+          <Button
+            variant="outline"
+            className="w-full"
+            disabled={isPending}
+            onClick={() => {
+              toast.info("GitHub 注册暂未开启")
+            }}
+          >
             GitHub
           </Button>
         </div>

@@ -2,10 +2,11 @@
 
 import { useState } from "react"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
-import { z } from "zod"
-import { Eye, EyeOff } from "lucide-react"
+
+import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -25,36 +26,39 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-
-const loginSchema = z.object({
-  email: z.string().email("请输入有效的邮箱地址"),
-  password: z.string().min(6, "密码至少需要 6 个字符"),
-})
-
-type LoginFormValues = z.infer<typeof loginSchema>
+import { loginSchema, type LoginInput } from "@/lib/validations/auth"
 
 export function LoginForm() {
-  const [showPassword, setShowPassword] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
+  const searchParams = useSearchParams()
+  const callbackUrl = searchParams.get("callbackUrl") || "/"
+  const [isPending, setIsPending] = useState(false)
 
-  const form = useForm<LoginFormValues>({
+  const form = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
       email: "",
-      password: "",
+      password: "Test1234",
     },
   })
 
-  async function onSubmit(values: LoginFormValues) {
-    setIsLoading(true)
+  async function onSubmit(values: LoginInput) {
+    setIsPending(true)
     try {
-      // TODO: 实现登录逻辑
-      console.log("登录数据:", values)
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-    } catch (error) {
-      console.error("登录失败:", error)
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(values),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error)
+        return
+      }
+      window.location.href = callbackUrl
+    } catch {
+      toast.error("登录失败，请稍后重试")
     } finally {
-      setIsLoading(false)
+      setIsPending(false)
     }
   }
 
@@ -80,7 +84,7 @@ export function LoginForm() {
                       autoCapitalize="none"
                       autoComplete="email"
                       autoCorrect="off"
-                      disabled={isLoading}
+                      disabled={isPending}
                       {...field}
                     />
                   </FormControl>
@@ -98,54 +102,38 @@ export function LoginForm() {
                     <div className="relative">
                       <Input
                         placeholder="••••••••"
-                        type={showPassword ? "text" : "password"}
+                        type="password"
                         autoCapitalize="none"
                         autoComplete="current-password"
                         autoCorrect="off"
-                        disabled={isLoading}
+                        disabled={isPending}
                         {...field}
                       />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="absolute top-0 right-0 h-full px-3 py-2 hover:bg-transparent"
-                        onClick={() => setShowPassword(!showPassword)}
-                        disabled={isLoading}
-                      >
-                        {showPassword ? (
-                          <EyeOff className="h-4 w-4 text-muted-foreground" />
-                        ) : (
-                          <Eye className="h-4 w-4 text-muted-foreground" />
-                        )}
-                        <span className="sr-only">
-                          {showPassword ? "隐藏密码" : "显示密码"}
-                        </span>
-                      </Button>
                     </div>
                   </FormControl>
                   <FormMessage />
+                  <p className="text-[0.8rem] text-muted-foreground">
+                    默认密码：Test1234
+                  </p>
                 </FormItem>
               )}
             />
-            <div className="flex items-center justify-between">
-              <label className="flex cursor-pointer items-center space-x-2 text-sm">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 rounded border-gray-300"
-                  disabled={isLoading}
-                />
-                <span className="text-muted-foreground">记住我</span>
-              </label>
-              <Link
-                href="/forgot-password"
-                className="text-sm text-primary hover:underline"
-              >
-                忘记密码？
-              </Link>
-            </div>
-            <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? "登录中..." : "登录"}
+            <label className="flex cursor-pointer items-center space-x-2 text-sm">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-gray-300"
+                disabled={isPending}
+              />
+              <span className="text-muted-foreground">记住我</span>
+            </label>
+            <Link
+              href="/forgot-password"
+              className="text-sm text-primary hover:underline"
+            >
+              忘记密码？
+            </Link>
+            <Button type="submit" className="w-full" disabled={isPending}>
+              {isPending ? "登录中..." : "登录"}
             </Button>
           </form>
         </Form>
@@ -162,10 +150,26 @@ export function LoginForm() {
           </div>
         </div>
         <div className="grid w-full grid-cols-2 gap-2">
-          <Button variant="outline" className="w-full" disabled={isLoading}>
+          <Button
+            variant="outline"
+            className="w-full"
+            disabled={isPending}
+            onClick={() => {
+              // TODO: 配置 Google OAuth 后启用
+              toast.info("Google 登录暂未开启")
+            }}
+          >
             Google
           </Button>
-          <Button variant="outline" className="w-full" disabled={isLoading}>
+          <Button
+            variant="outline"
+            className="w-full"
+            disabled={isPending}
+            onClick={() => {
+              // TODO: 配置 GitHub OAuth 后启用
+              toast.info("GitHub 登录暂未开启")
+            }}
+          >
             GitHub
           </Button>
         </div>
