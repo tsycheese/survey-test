@@ -4,10 +4,10 @@ import { prisma } from "@/prisma"
 import { z } from "zod"
 
 const questionSchema = z.object({
-  text: z.string().min(1, "题目不能为空"),
+  title: z.string().min(1, "题目不能为空"),
   type: z.enum(["SINGLE_CHOICE", "MULTIPLE_CHOICE", "TEXT", "RATING"]),
   required: z.boolean().default(false),
-  options: z.array(z.string()).optional(),
+  config: z.record(z.unknown()).optional().transform((v) => v as import('@/prisma/generated/prisma/client').Prisma.InputJsonValue | undefined),
 })
 
 export async function POST(
@@ -41,10 +41,10 @@ export async function POST(
   const question = await prisma.question.create({
     data: {
       surveyId: id,
-      text: parsed.data.text,
+      title: parsed.data.title,
       type: parsed.data.type,
       required: parsed.data.required,
-      options: parsed.data.options ?? [],
+      config: parsed.data.config ?? {},
       order: count,
     },
   })

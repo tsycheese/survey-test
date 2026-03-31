@@ -4,12 +4,12 @@ import { prisma } from "@/prisma"
 import { z } from "zod"
 
 const updateQuestionSchema = z.object({
-  text: z.string().min(1).optional(),
+  title: z.string().min(1).optional(),
   type: z
     .enum(["SINGLE_CHOICE", "MULTIPLE_CHOICE", "TEXT", "RATING"])
     .optional(),
   required: z.boolean().optional(),
-  options: z.array(z.string()).optional(),
+  config: z.record(z.unknown()).optional().transform((v) => v as import('@/prisma/generated/prisma/client').Prisma.InputJsonValue | undefined),
   order: z.number().int().optional(),
 })
 

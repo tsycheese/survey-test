@@ -16,13 +16,23 @@ import {
 
 type QuestionType = "SINGLE_CHOICE" | "MULTIPLE_CHOICE" | "TEXT" | "RATING"
 
+type QuestionConfig = {
+  options?: { id: string; label: string }[]
+  placeholder?: string
+  multiline?: boolean
+  min?: number
+  max?: number
+  minLabel?: string
+  maxLabel?: string
+}
+
 type Question = {
   id: string
-  text: string
+  title: string
   type: QuestionType
   order: number
   required: boolean
-  options: string[] | null
+  config: QuestionConfig | null
 }
 
 type Survey = {
@@ -67,11 +77,11 @@ export default function PublicSurveyPage() {
       if (!q.required) continue
       const ans = answers[q.id]
       if (ans === undefined || ans === null || ans === "") {
-        toast.error(`「${q.text}」为必填题`)
+        toast.error(`「${q.title}」为必填题`)
         return
       }
       if (Array.isArray(ans) && ans.length === 0) {
-        toast.error(`「${q.text}」为必填题`)
+        toast.error(`「${q.title}」为必填题`)
         return
       }
     }
@@ -128,7 +138,7 @@ export default function PublicSurveyPage() {
             <Card key={q.id}>
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">
-                  {index + 1}. {q.text}
+                  {index + 1}. {q.title}
                   {q.required && (
                     <span className="ml-1 text-destructive">*</span>
                   )}
@@ -165,7 +175,8 @@ function QuestionInput({
   value: unknown
   onChange: (v: unknown) => void
 }) {
-  const { type, options } = question
+  const { type } = question
+  const options = question.config?.options ?? []
 
   if (type === "TEXT") {
     return (
@@ -202,19 +213,19 @@ function QuestionInput({
   if (type === "SINGLE_CHOICE") {
     return (
       <div className="space-y-2">
-        {(options || []).map((opt) => (
+        {options.map((opt) => (
           <label
-            key={opt}
+            key={opt.id}
             className="flex cursor-pointer items-center gap-2 text-sm"
           >
             <input
               type="radio"
               name={question.id}
-              value={opt}
-              checked={value === opt}
-              onChange={() => onChange(opt)}
+              value={opt.label}
+              checked={value === opt.label}
+              onChange={() => onChange(opt.label)}
             />
-            {opt}
+            {opt.label}
           </label>
         ))}
       </div>
@@ -225,23 +236,23 @@ function QuestionInput({
   const selected = Array.isArray(value) ? (value as string[]) : []
   return (
     <div className="space-y-2">
-      {(options || []).map((opt) => (
+      {options.map((opt) => (
         <label
-          key={opt}
+          key={opt.id}
           className="flex cursor-pointer items-center gap-2 text-sm"
         >
           <input
             type="checkbox"
-            checked={selected.includes(opt)}
+            checked={selected.includes(opt.label)}
             onChange={(e) => {
               if (e.target.checked) {
-                onChange([...selected, opt])
+                onChange([...selected, opt.label])
               } else {
-                onChange(selected.filter((s) => s !== opt))
+                onChange(selected.filter((s) => s !== opt.label))
               }
             }}
           />
-          {opt}
+          {opt.label}
         </label>
       ))}
     </div>

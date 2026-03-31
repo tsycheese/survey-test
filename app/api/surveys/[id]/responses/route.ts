@@ -19,11 +19,28 @@ export async function GET(
     return NextResponse.json({ error: "问卷不存在" }, { status: 404 })
   }
 
+  const questions = await prisma.question.findMany({
+    where: { surveyId: id },
+    orderBy: { order: "asc" },
+  })
+
   const responses = await prisma.response.findMany({
     where: { surveyId: id },
     include: { answers: true },
     orderBy: { createdAt: "desc" },
   })
 
-  return NextResponse.json(responses)
+  return NextResponse.json({
+    survey: { title: survey.title, description: survey.description },
+    totalResponses: responses.length,
+    questions: questions.map((q) => ({
+      id: q.id,
+      title: q.title,
+      type: q.type,
+      config: q.config,
+      answers: responses.flatMap((r) =>
+        r.answers.filter((a) => a.questionId === q.id).map((a) => ({ value: a.value }))
+      ),
+    })),
+  })
 }

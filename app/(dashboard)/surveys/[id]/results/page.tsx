@@ -9,11 +9,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
 type QuestionType = "SINGLE_CHOICE" | "MULTIPLE_CHOICE" | "TEXT" | "RATING"
 
+type QuestionConfig = {
+  options?: { id: string; label: string }[]
+  min?: number
+  max?: number
+}
+
 type QuestionStat = {
   id: string
-  text: string
+  title: string
   type: QuestionType
-  options: string[] | null
+  config: QuestionConfig | null
   answers: { value: unknown }[]
 }
 
@@ -80,7 +86,7 @@ export default function ResultsPage() {
           <Card key={q.id}>
             <CardHeader>
               <CardTitle className="text-base">
-                {index + 1}. {q.text}
+                {index + 1}. {q.title}
                 <span className="ml-2 text-xs font-normal text-muted-foreground">
                   {TYPE_LABELS[q.type]}
                 </span>
@@ -103,7 +109,8 @@ function QuestionStats({
   question: QuestionStat
   total: number
 }) {
-  const { type, answers, options } = question
+  const { type, answers } = question
+  const options = question.config?.options ?? []
 
   if (type === "TEXT") {
     const texts = answers.map((a) => String(a.value)).filter(Boolean)
@@ -153,7 +160,7 @@ function QuestionStats({
   }
 
   // SINGLE_CHOICE / MULTIPLE_CHOICE
-  const allOptions = options || []
+  const optionLabels = options.map((o) => o.label)
   const counts: Record<string, number> = {}
   answers.forEach((a) => {
     const val = a.value
@@ -166,12 +173,12 @@ function QuestionStats({
     }
   })
 
-  if (allOptions.length === 0 && Object.keys(counts).length === 0) {
+  if (optionLabels.length === 0 && Object.keys(counts).length === 0) {
     return <p className="text-sm text-muted-foreground">暂无回答</p>
   }
 
   const displayOptions =
-    allOptions.length > 0 ? allOptions : Object.keys(counts)
+    optionLabels.length > 0 ? optionLabels : Object.keys(counts)
 
   return (
     <div className="space-y-2">
