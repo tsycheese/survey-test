@@ -3,21 +3,17 @@
 import { useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { toast } from "sonner"
-import {
-  ArrowLeft,
-  Save,
-  Trash2,
-  PlusCircle,
-  Star,
-} from "lucide-react"
+import { ArrowLeft, Save, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 import { useEditorStore } from "@/lib/editor-store"
-import { getQuestionDef, createQuestion, QUESTION_DEFS } from "@/lib/questions/registry"
+import {
+  getQuestionDef,
+  createQuestion,
+  QUESTION_DEFS,
+} from "@/lib/questions/registry"
 import type { Question, QuestionType } from "@/lib/questions/types"
-import { nanoid } from "nanoid"
 
 export default function EditSurveyPage() {
   const { id } = useParams<{ id: string }>()
@@ -63,7 +59,10 @@ export default function EditSurveyPage() {
     const res = await fetch(`/api/surveys/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: survey.title, description: survey.description }),
+      body: JSON.stringify({
+        title: survey.title,
+        description: survey.description,
+      }),
     })
     if (res.ok) {
       markSaved()
@@ -113,7 +112,8 @@ export default function EditSurveyPage() {
     )
   }
 
-  const selectedQuestion = survey.questions.find((q) => q.id === selectedId) ?? null
+  const selectedQuestion =
+    survey.questions.find((q) => q.id === selectedId) ?? null
 
   return (
     <div className="flex h-svh flex-col overflow-hidden">
@@ -132,7 +132,9 @@ export default function EditSurveyPage() {
           <input
             className="w-64 border-none bg-transparent text-base font-semibold outline-none placeholder:text-muted-foreground"
             value={survey.title}
-            onChange={(e) => updateSurveyInfo(e.target.value, survey.description ?? "")}
+            onChange={(e) =>
+              updateSurveyInfo(e.target.value, survey.description ?? "")
+            }
             placeholder="未命名问卷"
           />
           {dirty && (
@@ -148,11 +150,7 @@ export default function EditSurveyPage() {
           >
             {survey.published ? "已发布" : "草稿"}
           </span>
-          <Button
-            size="sm"
-            onClick={handleSaveTitle}
-            disabled={!dirty}
-          >
+          <Button size="sm" onClick={handleSaveTitle} disabled={!dirty}>
             <Save className="mr-1 h-3.5 w-3.5" />
             保存
           </Button>
@@ -167,24 +165,28 @@ export default function EditSurveyPage() {
             添加题目
           </div>
           <div className="flex-1 space-y-1 overflow-y-auto p-2">
-            {QUESTION_DEFS.map(({ type, label, icon: Icon, defaultQuestion }) => (
-              <button
-                key={type}
-                onClick={() => handleAddQuestion(type as QuestionType)}
-                className="flex w-full items-start gap-3 rounded-lg p-3 text-left transition-colors hover:bg-muted"
-              >
-                <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                <div>
-                  <div className="text-sm font-medium">{label}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {defaultQuestion(0).type === "SINGLE_CHOICE" && "从多个选项中选一个"}
-                    {defaultQuestion(0).type === "MULTIPLE_CHOICE" && "可选择多个答案"}
-                    {defaultQuestion(0).type === "TEXT" && "自由文本输入"}
-                    {defaultQuestion(0).type === "RATING" && "1-N 分评分"}
+            {QUESTION_DEFS.map(
+              ({ type, label, icon: Icon, defaultQuestion }) => (
+                <button
+                  key={type}
+                  onClick={() => handleAddQuestion(type as QuestionType)}
+                  className="flex w-full items-start gap-3 rounded-lg p-3 text-left transition-colors hover:bg-muted"
+                >
+                  <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                  <div>
+                    <div className="text-sm font-medium">{label}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {defaultQuestion(0).type === "SINGLE_CHOICE" &&
+                        "从多个选项中选一个"}
+                      {defaultQuestion(0).type === "MULTIPLE_CHOICE" &&
+                        "可选择多个答案"}
+                      {defaultQuestion(0).type === "TEXT" && "自由文本输入"}
+                      {defaultQuestion(0).type === "RATING" && "1-N 分评分"}
+                    </div>
                   </div>
-                </div>
-              </button>
-            ))}
+                </button>
+              )
+            )}
           </div>
         </aside>
 
@@ -240,7 +242,9 @@ export default function EditSurveyPage() {
                               {q.title}
                             </span>
                             {q.required && (
-                              <span className="ml-1 text-xs text-red-500">*</span>
+                              <span className="ml-1 text-xs text-red-500">
+                                *
+                              </span>
                             )}
                           </div>
                           <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
@@ -342,7 +346,9 @@ function QuestionEditor({
             className="mt-1 w-full resize-none rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary"
             rows={3}
             value={question.title}
-            onChange={(e) => handleChange({ ...question, title: e.target.value })}
+            onChange={(e) =>
+              handleChange({ ...question, title: e.target.value })
+            }
           />
         </div>
 
@@ -352,7 +358,9 @@ function QuestionEditor({
           <button
             role="switch"
             aria-checked={question.required}
-            onClick={() => handleChange({ ...question, required: !question.required })}
+            onClick={() =>
+              handleChange({ ...question, required: !question.required })
+            }
             className={cn(
               "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors",
               question.required ? "bg-primary" : "bg-input"
