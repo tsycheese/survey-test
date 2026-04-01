@@ -360,9 +360,6 @@ export default function EditSurveyPage() {
                                 )}
                               </div>
                             </div>
-                            <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-                              {def.label}
-                            </span>
                           </div>
                           <div className="relative mt-3 pl-8">
                             <def.Canvas
