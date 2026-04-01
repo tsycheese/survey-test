@@ -283,25 +283,44 @@ export default function EditSurveyPage() {
                           )}
                         >
                           <div className="relative flex items-start justify-between gap-2">
-                            <div className="flex items-start">
-                              <span className="mt-2 mr-2 text-xs text-muted-foreground">
+                            <div className="flex flex-1 items-start">
+                              <span className="mt-1 mr-2 text-sm font-medium text-muted-foreground">
                                 {idx + 1}.
                               </span>
-                              <div className="flex-1">
+                              <div className="flex-1 overflow-hidden">
                                 {editingQuestionId === q.id ? (
-                                  <Input
+                                  <textarea
                                     autoFocus
-                                    className="h-auto rounded-sm border-2 border-primary bg-transparent px-2 py-1 text-sm font-medium shadow-none focus-visible:ring-0"
+                                    rows={1}
+                                    className="block w-full resize-none overflow-hidden rounded-sm border-2 border-primary bg-transparent px-2 py-1 text-sm leading-6 font-medium shadow-none ring-0 outline-none focus-visible:ring-0"
+                                    style={{
+                                      minHeight: "36px",
+                                    }} // 24px (leading-6) + 4px (border-2) + 8px (py-1)
                                     value={q.title}
-                                    onChange={(e) =>
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") {
+                                        e.preventDefault()
+                                        setEditingQuestionId(null)
+                                      }
+                                    }}
+                                    onChange={(e) => {
+                                      const target =
+                                        e.target as HTMLTextAreaElement
+                                      target.style.height = "auto"
+                                      target.style.height = `${Math.max(target.scrollHeight, 36)}px`
                                       updateQuestion({
                                         ...q,
-                                        title: e.target.value,
+                                        title: target.value,
                                       })
-                                    }
+                                    }}
+                                    onFocus={(e) => {
+                                      const target =
+                                        e.target as HTMLTextAreaElement
+                                      target.style.height = "auto"
+                                      target.style.height = `${Math.max(target.scrollHeight, 36)}px`
+                                    }}
                                     onBlur={() => {
                                       setEditingQuestionId(null)
-                                      // 触发异步保存
                                       fetch(
                                         `/api/surveys/${id}/questions/${q.id}`,
                                         {
@@ -326,13 +345,14 @@ export default function EditSurveyPage() {
                                       selectQuestion(q.id)
                                       setEditingQuestionId(q.id)
                                     }}
-                                    className="group/title relative cursor-text rounded-sm border-2 border-transparent px-2 py-1 hover:border-dashed hover:border-border"
+                                    className="group/title relative block w-full cursor-text rounded-sm border-2 border-transparent px-2 py-1 text-sm leading-6 font-medium break-all hover:border-dashed hover:border-border"
+                                    style={{
+                                      minHeight: "36px",
+                                    }} // 24px (leading-6) + 4px (border-2) + 8px (py-1)
                                   >
-                                    <span className="text-sm font-medium">
-                                      {q.title}
-                                    </span>
+                                    {q.title || "请输入题目标题"}
                                     {q.required && (
-                                      <span className="ml-1 text-xs text-red-500">
+                                      <span className="ml-1 text-red-500">
                                         *
                                       </span>
                                     )}
