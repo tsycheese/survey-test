@@ -34,6 +34,7 @@ export default function EditSurveyPage() {
   } = useEditorStore()
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [isEditingDesc, setIsEditingDesc] = useState(false)
+  const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null)
 
   useEffect(() => {
     fetch(`/api/surveys/${id}`)
@@ -207,7 +208,7 @@ export default function EditSurveyPage() {
                 {isEditingTitle ? (
                   <Input
                     autoFocus
-                    className="h-auto border-2 border-primary bg-transparent px-3 py-2 text-xl font-bold tracking-tight shadow-none rounded-sm focus-visible:ring-0"
+                    className="h-auto rounded-sm border-2 border-primary bg-transparent px-3 py-2 text-xl font-bold tracking-tight shadow-none focus-visible:ring-0"
                     style={{ fontSize: "1.25rem", lineHeight: "1.75rem" }}
                     value={survey.title}
                     onChange={(e) =>
@@ -220,7 +221,7 @@ export default function EditSurveyPage() {
                     onClick={() => setIsEditingTitle(true)}
                     className="group relative cursor-text rounded-sm border-2 border-transparent px-3 py-2 hover:border-dashed hover:border-border"
                   >
-                    <div className="text-xl font-bold tracking-tight leading-7">
+                    <div className="text-xl leading-7 font-bold tracking-tight">
                       {survey.title || "未命名问卷"}
                     </div>
                   </div>
@@ -230,7 +231,7 @@ export default function EditSurveyPage() {
                   {isEditingDesc ? (
                     <Textarea
                       autoFocus
-                      className="min-h-[80px] border-2 border-primary bg-transparent px-3 py-2 text-sm text-muted-foreground shadow-none rounded-sm focus-visible:ring-0"
+                      className="min-h-[80px] rounded-sm border-2 border-primary bg-transparent px-3 py-2 text-sm text-muted-foreground shadow-none focus-visible:ring-0"
                       placeholder="添加问卷说明..."
                       value={survey.description ?? ""}
                       onChange={(e) =>
@@ -283,27 +284,74 @@ export default function EditSurveyPage() {
                           )}
                         >
                           <div className="relative flex items-start justify-between gap-2">
-                            <div className="flex-1">
-                              <span className="mr-2 text-xs text-muted-foreground">
-                                {idx + 1}.
-                              </span>
-                              <span className="text-sm font-medium">
-                                {q.title}
-                              </span>
-                              {q.required && (
-                                <span className="ml-1 text-xs text-red-500">
-                                  *
+                              <div className="flex items-start">
+                                <span className="mr-2 mt-2 text-xs text-muted-foreground">
+                                  {idx + 1}.
                                 </span>
-                              )}
-                            </div>
+                                <div className="flex-1">
+                                  {editingQuestionId === q.id ? (
+                                    <Input
+                                      autoFocus
+                                      className="h-auto rounded-sm border-2 border-primary bg-transparent px-2 py-1 text-sm font-medium shadow-none focus-visible:ring-0"
+                                      value={q.title}
+                                      onChange={(e) =>
+                                        updateQuestion({
+                                          ...q,
+                                          title: e.target.value,
+                                        })
+                                      }
+                                      onBlur={() => {
+                                        setEditingQuestionId(null)
+                                        // 触发异步保存
+                                        fetch(
+                                          `/api/surveys/${id}/questions/${q.id}`,
+                                          {
+                                            method: "PUT",
+                                            headers: {
+                                              "Content-Type": "application/json",
+                                            },
+                                            body: JSON.stringify({
+                                              title: q.title,
+                                              required: q.required,
+                                              config: q.config,
+                                            }),
+                                          }
+                                        )
+                                      }}
+                                      onClick={(e) => e.stopPropagation()}
+                                    />
+                                  ) : (
+                                    <div
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        selectQuestion(q.id)
+                                        setEditingQuestionId(q.id)
+                                      }}
+                                      className="group/title relative cursor-text rounded-sm border-2 border-transparent px-2 py-1 hover:border-dashed hover:border-border"
+                                    >
+                                      <span className="text-sm font-medium">
+                                        {q.title}
+                                      </span>
+                                      {q.required && (
+                                        <span className="ml-1 text-xs text-red-500">
+                                          *
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
                             <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
                               {def.label}
                             </span>
                           </div>
-                          <div className="relative mt-3 pl-6">
+                          <div className="relative mt-3 pl-8">
                             <def.Canvas
                               question={q as never}
                               selected={selectedId === q.id}
+                              onUpdate={(updated) =>
+                                updateQuestion(updated as Question)
+                              }
                             />
                           </div>
                         </div>

@@ -62,7 +62,11 @@ export type QuestionDef<Q extends Question = Question> = {
   label: string
   icon: React.ElementType
   defaultQuestion: (order: number) => Q
-  Canvas: React.FC<{ question: Q; selected: boolean }>
+  Canvas: React.FC<{
+    question: Q
+    selected: boolean
+    onUpdate?: (question: Q) => void
+  }>
   Editor: React.FC<{
     question: Q
     onChange: (question: Q) => void
