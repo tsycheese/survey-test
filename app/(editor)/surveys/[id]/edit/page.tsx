@@ -1,11 +1,13 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { ArrowLeft, Save, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { useEditorStore } from "@/lib/editor-store"
 import {
@@ -30,6 +32,8 @@ export default function EditSurveyPage() {
     updateSurveyInfo,
     markSaved,
   } = useEditorStore()
+  const [isEditingTitle, setIsEditingTitle] = useState(false)
+  const [isEditingDesc, setIsEditingDesc] = useState(false)
 
   useEffect(() => {
     fetch(`/api/surveys/${id}`)
@@ -199,15 +203,52 @@ export default function EditSurveyPage() {
               <div className="h-2 rounded-t-sm bg-primary" />
 
               {/* 标题区 */}
-              <div className="border-b border-dashed border-border px-8 py-6">
-                <div className="text-xl font-bold tracking-tight">
-                  {survey.title || "未命名问卷"}
-                </div>
-                {survey.description && (
-                  <div className="mt-1.5 text-sm text-muted-foreground">
-                    {survey.description}
+              <div className="border-b border-dashed border-border p-5">
+                {isEditingTitle ? (
+                  <Input
+                    autoFocus
+                    className="h-auto border-2 border-primary bg-transparent px-3 py-2 text-xl font-bold tracking-tight shadow-none rounded-sm focus-visible:ring-0"
+                    style={{ fontSize: "1.25rem", lineHeight: "1.75rem" }}
+                    value={survey.title}
+                    onChange={(e) =>
+                      updateSurveyInfo(e.target.value, survey.description ?? "")
+                    }
+                    onBlur={() => setIsEditingTitle(false)}
+                  />
+                ) : (
+                  <div
+                    onClick={() => setIsEditingTitle(true)}
+                    className="group relative cursor-text rounded-sm border-2 border-transparent px-3 py-2 hover:border-dashed hover:border-border"
+                  >
+                    <div className="text-xl font-bold tracking-tight leading-7">
+                      {survey.title || "未命名问卷"}
+                    </div>
                   </div>
                 )}
+
+                <div className="mt-2">
+                  {isEditingDesc ? (
+                    <Textarea
+                      autoFocus
+                      className="min-h-[80px] border-2 border-primary bg-transparent px-3 py-2 text-sm text-muted-foreground shadow-none rounded-sm focus-visible:ring-0"
+                      placeholder="添加问卷说明..."
+                      value={survey.description ?? ""}
+                      onChange={(e) =>
+                        updateSurveyInfo(survey.title, e.target.value)
+                      }
+                      onBlur={() => setIsEditingDesc(false)}
+                    />
+                  ) : (
+                    <div
+                      onClick={() => setIsEditingDesc(true)}
+                      className="group relative cursor-text rounded-sm border-2 border-transparent px-3 py-2 hover:border-dashed hover:border-border"
+                    >
+                      <div className="text-sm text-muted-foreground">
+                        {survey.description || "添加问卷说明..."}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* 题目列表 */}
@@ -224,38 +265,47 @@ export default function EditSurveyPage() {
                         key={q.id}
                         onClick={() => selectQuestion(q.id)}
                         className={cn(
-                          "relative w-full px-8 py-5 text-left transition-colors",
+                          "relative w-full p-2 text-left transition-colors",
                           selectedId === q.id
                             ? "bg-primary/5"
-                            : "hover:bg-muted/50"
+                            : "hover:bg-muted/5"
                         )}
                       >
                         {selectedId === q.id && (
                           <div className="absolute top-0 left-0 h-full w-1 rounded-l-sm bg-primary" />
                         )}
-                        <div className="relative flex items-start justify-between gap-2">
-                          <div className="flex-1">
-                            <span className="mr-2 text-xs text-muted-foreground">
-                              {idx + 1}.
-                            </span>
-                            <span className="text-sm font-medium">
-                              {q.title}
-                            </span>
-                            {q.required && (
-                              <span className="ml-1 text-xs text-red-500">
-                                *
+                        <div
+                          className={cn(
+                            "rounded-sm border-2 border-transparent px-3 py-3 transition-colors",
+                            selectedId === q.id
+                              ? "border-dashed border-primary/30"
+                              : "hover:border-dashed hover:border-border"
+                          )}
+                        >
+                          <div className="relative flex items-start justify-between gap-2">
+                            <div className="flex-1">
+                              <span className="mr-2 text-xs text-muted-foreground">
+                                {idx + 1}.
                               </span>
-                            )}
+                              <span className="text-sm font-medium">
+                                {q.title}
+                              </span>
+                              {q.required && (
+                                <span className="ml-1 text-xs text-red-500">
+                                  *
+                                </span>
+                              )}
+                            </div>
+                            <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                              {def.label}
+                            </span>
                           </div>
-                          <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-                            {def.label}
-                          </span>
-                        </div>
-                        <div className="relative mt-2.5 pl-5">
-                          <def.Canvas
-                            question={q as never}
-                            selected={selectedId === q.id}
-                          />
+                          <div className="relative mt-3 pl-6">
+                            <def.Canvas
+                              question={q as never}
+                              selected={selectedId === q.id}
+                            />
+                          </div>
                         </div>
                       </button>
                     )

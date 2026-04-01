@@ -81,7 +81,8 @@ export const multipleChoiceDef: QuestionDef<MultipleChoiceQuestion> = {
             <Input
               value={opt.label}
               onChange={(e) => updateOption(opt.id, e.target.value)}
-              className="h-8 text-sm"
+              className="h-8 border-none bg-transparent px-0 text-sm focus-visible:ring-0"
+              placeholder="选项内容"
             />
             <Button
               variant="ghost"
