@@ -10,6 +10,7 @@ export type BaseQuestion = {
 
 export type SingleChoiceConfig = {
   options: { id: string; label: string }[]
+  columns?: number
 }
 
 export type MultipleChoiceConfig = {
