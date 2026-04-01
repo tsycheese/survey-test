@@ -160,7 +160,7 @@ export default function EditSurveyPage() {
       {/* 主体区域 */}
       <div className="relative flex-1 overflow-hidden">
         {/* 左栏：题型面板（悬浮） */}
-        <aside className="absolute top-4 left-4 z-10 flex h-[calc(100%-2rem)] w-56 flex-col rounded-xl border bg-background shadow-xl">
+        <aside className="absolute top-4 left-4 z-10 flex h-[calc(100%-2rem)] w-80 flex-col rounded-xl border bg-background shadow-xl">
           <div className="border-b px-4 py-3 text-xs font-medium text-muted-foreground">
             添加题目
           </div>
@@ -191,8 +191,8 @@ export default function EditSurveyPage() {
         </aside>
 
         {/* 中间：问卷画布 */}
-        <div className="h-full overflow-y-auto px-[calc(14rem+2.5rem)] py-6">
-          <div className="mx-auto max-w-2xl">
+        <div className="h-full overflow-y-auto px-[calc(20rem+2.5rem)] py-6">
+          <div className="mx-auto max-w-[1000px]">
             {/* 问卷纸张 */}
             <div className="rounded-sm bg-background shadow-[0_4px_24px_rgba(0,0,0,0.10)] ring-1 ring-border">
               {/* 顶部色条 */}
