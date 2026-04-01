@@ -279,10 +279,7 @@ export default function EditSurveyPage() {
                         )}
                         <div
                           className={cn(
-                            "rounded-sm border-2 border-transparent px-3 py-3 transition-colors",
-                            selectedId === q.id
-                              ? "border-dashed border-primary/30"
-                              : "hover:border-dashed hover:border-border"
+                            "rounded-sm border-2 border-transparent px-3 py-3 transition-colors"
                           )}
                         >
                           <div className="relative flex items-start justify-between gap-2">
