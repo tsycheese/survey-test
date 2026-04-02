@@ -78,10 +78,15 @@ export type QuestionDef<Q extends Question = Question> = {
     question: Q
     selected: boolean
     order: number
+    showNumber?: boolean
     onUpdate?: (question: Q) => void
     onTitleClick?: () => void
     onTitleChange?: (title: string) => void
   }>
+}
+
+export type SurveySettings = {
+  showQuestionNumber?: boolean
 }
 
 export type Survey = {
@@ -90,4 +95,5 @@ export type Survey = {
   description: string | null
   published: boolean
   questions: Question[]
+  settings?: SurveySettings
 }

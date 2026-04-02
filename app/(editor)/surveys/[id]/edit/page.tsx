@@ -15,7 +15,12 @@ import {
   createQuestion,
   QUESTION_DEFS,
 } from "@/lib/questions/registry"
-import type { Question, QuestionType } from "@/lib/questions/types"
+import type {
+  Question,
+  QuestionType,
+  SurveySettings,
+} from "@/lib/questions/types"
+import { SurveySettingsPanel } from "@/components/editor/survey-settings-panel"
 
 export default function EditSurveyPage() {
   const { id } = useParams<{ id: string }>()
@@ -32,8 +37,15 @@ export default function EditSurveyPage() {
     updateSurveyInfo,
     markSaved,
   } = useEditorStore()
+  const [activeTab, setActiveTab] = useState<"survey" | "question">("survey")
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [isEditingDesc, setIsEditingDesc] = useState(false)
+
+  // 选中题目时自动切换到题目面板
+  const handleSelectQuestion = (id: string) => {
+    selectQuestion(id)
+    setActiveTab("question")
+  }
 
   useEffect(() => {
     fetch(`/api/surveys/${id}`)
@@ -44,6 +56,7 @@ export default function EditSurveyPage() {
           title: data.title,
           description: data.description,
           published: data.published,
+          settings: data.settings,
           questions: (data.questions ?? []).map(
             (q: Record<string, unknown>) => ({
               id: q.id,
@@ -71,6 +84,27 @@ export default function EditSurveyPage() {
     if (res.ok) {
       markSaved()
       toast.success("已保存")
+    } else {
+      toast.error("保存失败")
+    }
+  }
+
+  async function handleUpdateSurveySettings(settings: SurveySettings) {
+    if (!survey) return
+    const newSettings = { ...survey.settings, ...settings }
+    setSurvey({ ...survey, settings: newSettings })
+    const res = await fetch(`/api/surveys/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: survey.title,
+        description: survey.description,
+        settings: newSettings,
+      }),
+    })
+    if (res.ok) {
+      markSaved()
+      toast.success("设置已更新")
     } else {
       toast.error("保存失败")
     }
@@ -263,9 +297,9 @@ export default function EditSurveyPage() {
                     return (
                       <button
                         key={q.id}
-                        onClick={() => selectQuestion(q.id)}
+                        onClick={() => handleSelectQuestion(q.id)}
                         className={cn(
-                          "relative w-full p-2 text-left transition-colors",
+                          "relative w-full px-12 py-2 text-left transition-colors",
                           selectedId === q.id
                             ? "bg-primary/5"
                             : "hover:bg-muted/5"
@@ -278,6 +312,9 @@ export default function EditSurveyPage() {
                           question={q as never}
                           selected={selectedId === q.id}
                           order={idx + 1}
+                          showNumber={
+                            survey.settings?.showQuestionNumber ?? true
+                          }
                           onUpdate={(updated) =>
                             updateQuestion(updated as Question)
                           }
@@ -299,19 +336,57 @@ export default function EditSurveyPage() {
 
         {/* 右栏：属性编辑（悬浮） */}
         <aside className="absolute top-4 right-4 z-10 flex h-[calc(100%-2rem)] w-80 flex-col rounded-xl border bg-background shadow-xl">
-          {selectedQuestion ? (
-            <QuestionEditor
-              key={selectedQuestion.id}
-              surveyId={id}
-              question={selectedQuestion}
-              onUpdate={updateQuestion}
-              onDelete={() => handleDeleteQuestion(selectedQuestion.id)}
-            />
-          ) : (
-            <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-              选中题目后可编辑属性
+          {/* 分段控制器 */}
+          <div className="flex border-b px-3 pt-3">
+            <div className="flex w-full rounded-lg border bg-muted p-1">
+              <button
+                className={cn(
+                  "flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                  activeTab === "survey"
+                    ? "bg-background text-foreground shadow"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+                onClick={() => setActiveTab("survey")}
+              >
+                整卷
+              </button>
+              <button
+                className={cn(
+                  "flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                  activeTab === "question"
+                    ? "bg-background text-foreground shadow"
+                    : "text-muted-foreground hover:text-foreground",
+                  !selectedQuestion && "pointer-events-none opacity-50"
+                )}
+                onClick={() => selectedQuestion && setActiveTab("question")}
+                disabled={!selectedQuestion}
+              >
+                题目
+              </button>
             </div>
-          )}
+          </div>
+
+          {/* 面板内容 */}
+          <div className="flex-1 overflow-y-auto">
+            {activeTab === "survey" ? (
+              <SurveySettingsPanel
+                settings={survey?.settings}
+                onUpdateSettings={handleUpdateSurveySettings}
+              />
+            ) : selectedQuestion ? (
+              <QuestionEditor
+                key={selectedQuestion.id}
+                surveyId={id}
+                question={selectedQuestion}
+                onUpdate={updateQuestion}
+                onDelete={() => handleDeleteQuestion(selectedQuestion.id)}
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                选中题目后可编辑属性
+              </div>
+            )}
+          </div>
         </aside>
       </div>
     </div>

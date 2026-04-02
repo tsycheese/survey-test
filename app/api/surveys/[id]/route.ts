@@ -6,6 +6,7 @@ import { z } from "zod"
 const updateSurveySchema = z.object({
   title: z.string().min(1).max(100).optional(),
   description: z.string().max(500).optional(),
+  settings: z.record(z.boolean()).optional(),
 })
 
 export async function GET(
@@ -30,7 +31,10 @@ export async function GET(
     return NextResponse.json({ error: "问卷不存在" }, { status: 404 })
   }
 
-  return NextResponse.json(survey)
+  return NextResponse.json({
+    ...survey,
+    settings: survey.settings ?? { showQuestionNumber: true },
+  })
 }
 
 export async function PUT(

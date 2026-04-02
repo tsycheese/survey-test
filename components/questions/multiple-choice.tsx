@@ -18,11 +18,13 @@ import { Label } from "@/components/ui/label"
 function QuestionCard({
   question,
   order,
+  showNumber = true,
   onUpdate,
   onTitleChange,
 }: {
   question: MultipleChoiceQuestion
   order: number
+  showNumber?: boolean
   onUpdate?: (question: MultipleChoiceQuestion) => void
   onTitleChange?: (title: string) => void
 }) {
@@ -62,9 +64,11 @@ function QuestionCard({
 
       <div className="relative flex items-start justify-between gap-2 pt-2">
         <div className="flex flex-1 items-start">
-          <span className="mt-1 mr-2 text-sm font-medium text-muted-foreground">
-            {order}.
-          </span>
+          {showNumber && (
+            <span className="mt-1 mr-2 text-sm font-medium text-muted-foreground">
+              {order}.
+            </span>
+          )}
           <div className="flex-1 overflow-hidden">
             {editingTitle ? (
               <textarea
