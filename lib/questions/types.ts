@@ -74,6 +74,14 @@ export type QuestionDef<Q extends Question = Question> = {
     question: Q
     onChange: (question: Q) => void
   }>
+  QuestionCard: React.FC<{
+    question: Q
+    selected: boolean
+    order: number
+    onUpdate?: (question: Q) => void
+    onTitleClick?: () => void
+    onTitleChange?: (title: string) => void
+  }>
 }
 
 export type Survey = {

@@ -34,9 +34,6 @@ export default function EditSurveyPage() {
   } = useEditorStore()
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [isEditingDesc, setIsEditingDesc] = useState(false)
-  const [editingQuestionId, setEditingQuestionId] = useState<string | null>(
-    null
-  )
 
   useEffect(() => {
     fetch(`/api/surveys/${id}`)
@@ -277,100 +274,17 @@ export default function EditSurveyPage() {
                         {selectedId === q.id && (
                           <div className="absolute top-0 left-0 h-full w-1 rounded-l-sm bg-primary" />
                         )}
-                        <div
-                          className={cn(
-                            "rounded-sm border-2 border-transparent px-3 py-3 transition-colors"
-                          )}
-                        >
-                          <div className="relative flex items-start justify-between gap-2">
-                            <div className="flex flex-1 items-start">
-                              <span className="mt-1 mr-2 text-sm font-medium text-muted-foreground">
-                                {idx + 1}.
-                              </span>
-                              <div className="flex-1 overflow-hidden">
-                                {editingQuestionId === q.id ? (
-                                  <textarea
-                                    autoFocus
-                                    rows={1}
-                                    className="block w-full resize-none overflow-hidden rounded-sm border-2 border-primary bg-transparent px-2 py-1 text-sm leading-6 font-medium shadow-none ring-0 outline-none focus-visible:ring-0"
-                                    style={{
-                                      minHeight: "36px",
-                                    }} // 24px (leading-6) + 4px (border-2) + 8px (py-1)
-                                    value={q.title}
-                                    onKeyDown={(e) => {
-                                      if (e.key === "Enter") {
-                                        e.preventDefault()
-                                        setEditingQuestionId(null)
-                                      }
-                                    }}
-                                    onChange={(e) => {
-                                      const target =
-                                        e.target as HTMLTextAreaElement
-                                      target.style.height = "auto"
-                                      target.style.height = `${Math.max(target.scrollHeight, 36)}px`
-                                      updateQuestion({
-                                        ...q,
-                                        title: target.value,
-                                      })
-                                    }}
-                                    onFocus={(e) => {
-                                      const target =
-                                        e.target as HTMLTextAreaElement
-                                      target.style.height = "auto"
-                                      target.style.height = `${Math.max(target.scrollHeight, 36)}px`
-                                    }}
-                                    onBlur={() => {
-                                      setEditingQuestionId(null)
-                                      fetch(
-                                        `/api/surveys/${id}/questions/${q.id}`,
-                                        {
-                                          method: "PUT",
-                                          headers: {
-                                            "Content-Type": "application/json",
-                                          },
-                                          body: JSON.stringify({
-                                            title: q.title,
-                                            required: q.required,
-                                            config: q.config,
-                                          }),
-                                        }
-                                      )
-                                    }}
-                                    onClick={(e) => e.stopPropagation()}
-                                  />
-                                ) : (
-                                  <div
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      selectQuestion(q.id)
-                                      setEditingQuestionId(q.id)
-                                    }}
-                                    className="group/title relative block w-full cursor-text rounded-sm border-2 border-transparent px-2 py-1 text-sm leading-6 font-medium break-all hover:border-dashed hover:border-border"
-                                    style={{
-                                      minHeight: "36px",
-                                    }} // 24px (leading-6) + 4px (border-2) + 8px (py-1)
-                                  >
-                                    {q.title || "请输入题目标题"}
-                                    {q.required && (
-                                      <span className="ml-1 text-red-500">
-                                        *
-                                      </span>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                          <div className="relative mt-3 pl-8">
-                            <def.Canvas
-                              question={q as never}
-                              selected={selectedId === q.id}
-                              onUpdate={(updated) =>
-                                updateQuestion(updated as Question)
-                              }
-                            />
-                          </div>
-                        </div>
+                        <def.QuestionCard
+                          question={q as never}
+                          selected={selectedId === q.id}
+                          order={idx + 1}
+                          onUpdate={(updated) =>
+                            updateQuestion(updated as Question)
+                          }
+                          onTitleChange={(title) =>
+                            updateQuestion({ ...q, title })
+                          }
+                        />
                       </button>
                     )
                   })

@@ -15,6 +15,155 @@ import {
 } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 
+function QuestionCard({
+  question,
+  order,
+  onUpdate,
+  onTitleChange,
+}: {
+  question: MultipleChoiceQuestion
+  order: number
+  onUpdate?: (question: MultipleChoiceQuestion) => void
+  onTitleChange?: (title: string) => void
+}) {
+  const [editingTitle, setEditingTitle] = useState(false)
+  const { options, columns = 1 } = question.config
+  const [editingOptId, setEditingOptId] = useState<string | null>(null)
+
+  const handleOptClick = (optId: string) => {
+    setEditingOptId(optId)
+  }
+
+  const handleOptUpdate = (optId: string, label: string) => {
+    if (!onUpdate) return
+    const updatedOptions = options.map((o) =>
+      o.id === optId ? { ...o, label } : o
+    )
+    onUpdate({
+      ...question,
+      config: {
+        ...question.config,
+        options: updatedOptions,
+      },
+    })
+  }
+
+  const handleTitleChange = (title: string) => {
+    if (onTitleChange) {
+      onTitleChange(title)
+    }
+  }
+
+  return (
+    <div className="relative px-3 py-3">
+      <div className="absolute -top-2.5 left-3 z-10 rounded bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground">
+        多选题
+      </div>
+
+      <div className="relative flex items-start justify-between gap-2">
+        <div className="flex flex-1 items-start">
+          <span className="mt-1 mr-2 text-sm font-medium text-muted-foreground">
+            {order}.
+          </span>
+          <div className="flex-1 overflow-hidden">
+            {editingTitle ? (
+              <textarea
+                autoFocus
+                rows={1}
+                className="block w-full resize-none overflow-hidden rounded-sm border-2 border-primary bg-transparent px-2 py-1 text-sm leading-6 font-medium shadow-none ring-0 outline-none focus-visible:ring-0"
+                style={{ minHeight: "36px" }}
+                value={question.title}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault()
+                    setEditingTitle(false)
+                  }
+                }}
+                onChange={(e) => {
+                  const target = e.target as HTMLTextAreaElement
+                  target.style.height = "auto"
+                  target.style.height = `${Math.max(target.scrollHeight, 36)}px`
+                  handleTitleChange(target.value)
+                }}
+                onBlur={() => setEditingTitle(false)}
+                onClick={(e) => e.stopPropagation()}
+              />
+            ) : (
+              <div
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setEditingTitle(true)
+                }}
+                className="group/title relative block w-full cursor-text rounded-sm border-2 border-transparent px-2 py-1 text-sm leading-6 font-medium break-all hover:border-dashed hover:border-border"
+                style={{ minHeight: "36px" }}
+              >
+                {question.title || "请输入题目标题"}
+                {question.required && (
+                  <span className="ml-1 text-red-500">*</span>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="relative mt-3">
+        <div
+          className="grid gap-2"
+          style={{
+            gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+          }}
+        >
+          {options.map((opt) => (
+            <div
+              key={opt.id}
+              className={cn(
+                "relative flex items-center gap-3 rounded-lg border bg-card p-3 text-sm transition-all duration-200",
+                editingOptId === opt.id &&
+                  "border-primary shadow-sm ring-1 ring-primary",
+                editingOptId !== opt.id && "hover:shadow-sm"
+              )}
+              onClick={() => handleOptClick(opt.id)}
+            >
+              {/* 固定边框容器，避免边框变化导致抖动 */}
+              <div className="pointer-events-none absolute inset-0 z-10 rounded-lg border-2 border-transparent" />
+
+              {/* 方形复选框 - 仅作为视觉标识 */}
+              <div className="flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border border-primary/50" />
+
+              {editingOptId === opt.id ? (
+                <input
+                  autoFocus
+                  type="text"
+                  className="flex-1 bg-transparent text-sm font-medium outline-none"
+                  value={opt.label}
+                  onChange={(e) => handleOptUpdate(opt.id, e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  onBlur={() => setEditingOptId(null)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault()
+                      setEditingOptId(null)
+                    }
+                  }}
+                />
+              ) : (
+                <span className="truncate font-medium">{opt.label}</span>
+              )}
+
+              {editingOptId === opt.id && (
+                <div className="absolute -top-7 left-0 z-20 flex items-center gap-2 rounded border bg-background px-2 py-1 text-xs text-muted-foreground shadow-sm">
+                  <span>编辑选项</span>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export const multipleChoiceDef: QuestionDef<MultipleChoiceQuestion> = {
   type: "MULTIPLE_CHOICE",
   label: "多选题",
@@ -38,7 +187,6 @@ export const multipleChoiceDef: QuestionDef<MultipleChoiceQuestion> = {
     const [editingOptId, setEditingOptId] = useState<string | null>(null)
 
     const handleOptClick = (optId: string) => {
-      // 编辑模式：直接进入选项编辑
       setEditingOptId(optId)
     }
 
@@ -81,7 +229,7 @@ export const multipleChoiceDef: QuestionDef<MultipleChoiceQuestion> = {
               {/* 固定边框容器，避免边框变化导致抖动 */}
               <div className="pointer-events-none absolute inset-0 z-10 rounded-lg border-2 border-transparent" />
 
-              {/* 方形复选框 - 仅作为视觉标识，不表示选中状态 */}
+              {/* 方形复选框 - 仅作为视觉标识 */}
               <div className="flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border border-primary/50" />
 
               {editingOptId === opt.id ? (
@@ -214,4 +362,5 @@ export const multipleChoiceDef: QuestionDef<MultipleChoiceQuestion> = {
       </div>
     )
   },
+  QuestionCard,
 }

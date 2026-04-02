@@ -1,8 +1,86 @@
 import { AlignLeft } from "lucide-react"
 import { nanoid } from "nanoid"
+import { useState } from "react"
 import type { QuestionDef, TextQuestion } from "@/lib/questions/types"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+
+function QuestionCard({
+  question,
+  order,
+  onTitleChange,
+}: {
+  question: TextQuestion
+  order: number
+  onTitleChange?: (title: string) => void
+}) {
+  const [editingTitle, setEditingTitle] = useState(false)
+
+  const handleTitleChange = (title: string) => {
+    if (onTitleChange) {
+      onTitleChange(title)
+    }
+  }
+
+  return (
+    <div className="relative px-3 py-3">
+      <div className="relative flex items-start justify-between gap-2">
+        <div className="flex flex-1 items-start">
+          <span className="mt-1 mr-2 text-sm font-medium text-muted-foreground">
+            {order}.
+          </span>
+          <div className="flex-1 overflow-hidden">
+            {editingTitle ? (
+              <textarea
+                autoFocus
+                rows={1}
+                className="block w-full resize-none overflow-hidden rounded-sm border-2 border-primary bg-transparent px-2 py-1 text-sm leading-6 font-medium shadow-none ring-0 outline-none focus-visible:ring-0"
+                style={{ minHeight: "36px" }}
+                value={question.title}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault()
+                    setEditingTitle(false)
+                  }
+                }}
+                onChange={(e) => {
+                  const target = e.target as HTMLTextAreaElement
+                  target.style.height = "auto"
+                  target.style.height = `${Math.max(target.scrollHeight, 36)}px`
+                  handleTitleChange(target.value)
+                }}
+                onBlur={() => setEditingTitle(false)}
+                onClick={(e) => e.stopPropagation()}
+              />
+            ) : (
+              <div
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setEditingTitle(true)
+                }}
+                className="group/title relative block w-full cursor-text rounded-sm border-2 border-transparent px-2 py-1 text-sm leading-6 font-medium break-all hover:border-dashed hover:border-border"
+                style={{ minHeight: "36px" }}
+              >
+                {question.title || "请输入题目标题"}
+                {question.required && (
+                  <span className="ml-1 text-red-500">*</span>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="relative mt-3">
+        {question.config.multiline ? (
+          <div className="h-16 rounded border border-dashed border-border bg-muted/30" />
+        ) : (
+          <div className="h-8 rounded border border-dashed border-border bg-muted/30" />
+        )}
+      </div>
+    </div>
+  )
+}
 
 export const textDef: QuestionDef<TextQuestion> = {
   type: "TEXT",
@@ -75,4 +153,5 @@ export const textDef: QuestionDef<TextQuestion> = {
       </div>
     )
   },
+  QuestionCard,
 }
