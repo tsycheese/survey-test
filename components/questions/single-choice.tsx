@@ -1,5 +1,7 @@
 import { CircleDot } from "lucide-react"
 import { nanoid } from "nanoid"
+import { useState } from "react"
+import { cn } from "@/lib/utils"
 import type { QuestionDef, SingleChoiceQuestion } from "@/lib/questions/types"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -31,8 +33,26 @@ export const singleChoiceDef: QuestionDef<SingleChoiceQuestion> = {
       columns: 1,
     },
   }),
-  Canvas: ({ question }) => {
+  Canvas: ({ question, onUpdate, selected }) => {
     const { options, columns = 1 } = question.config
+    const [editingOptId, setEditingOptId] = useState<string | null>(null)
+
+    const handleOptClick = (optId: string) => {
+      setEditingOptId(optId)
+    }
+
+    const handleOptUpdate = (optId: string, label: string) => {
+      const updatedOptions = options.map((o) =>
+        o.id === optId ? { ...o, label } : o
+      )
+      onUpdate({
+        ...question,
+        config: {
+          ...question.config,
+          options: updatedOptions,
+        },
+      })
+    }
 
     return (
       <div
@@ -44,10 +64,44 @@ export const singleChoiceDef: QuestionDef<SingleChoiceQuestion> = {
         {options.map((opt) => (
           <div
             key={opt.id}
-            className="flex items-center gap-3 rounded-lg border bg-card p-3 text-sm transition-shadow hover:shadow-sm"
+            className={cn(
+              "relative flex items-center gap-3 rounded-lg border bg-card p-3 text-sm transition-all duration-200",
+              editingOptId === opt.id && selected && "border-primary",
+              editingOptId === opt.id && !selected && "border-primary",
+              editingOptId === opt.id && "shadow-sm ring-1 ring-primary",
+              !editingOptId && "hover:shadow-sm",
+              !editingOptId && selected && "bg-primary/5"
+            )}
+            onClick={() => handleOptClick(opt.id)}
           >
+            {/* 固定边框容器，避免边框变化导致抖动 */}
+            <div className="pointer-events-none absolute inset-0 z-10 rounded-lg border-2 border-transparent" />
+
             <div className="h-4 w-4 shrink-0 rounded-full border border-primary/50" />
-            <span className="truncate font-medium">{opt.label}</span>
+            {editingOptId === opt.id ? (
+              <input
+                autoFocus
+                type="text"
+                className="flex-1 bg-transparent text-sm font-medium outline-none"
+                value={opt.label}
+                onChange={(e) => handleOptUpdate(opt.id, e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                onBlur={() => setEditingOptId(null)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault()
+                    setEditingOptId(null)
+                  }
+                }}
+              />
+            ) : (
+              <span className="truncate font-medium">{opt.label}</span>
+            )}
+            {editingOptId === opt.id && (
+              <div className="absolute -top-7 left-0 z-20 flex items-center gap-2 rounded border bg-background px-2 py-1 text-xs text-muted-foreground shadow-sm">
+                <span>编辑选项</span>
+              </div>
+            )}
           </div>
         ))}
       </div>
