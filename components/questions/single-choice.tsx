@@ -42,6 +42,7 @@ export const singleChoiceDef: QuestionDef<SingleChoiceQuestion> = {
     }
 
     const handleOptUpdate = (optId: string, label: string) => {
+      if (!onUpdate) return
       const updatedOptions = options.map((o) =>
         o.id === optId ? { ...o, label } : o
       )
