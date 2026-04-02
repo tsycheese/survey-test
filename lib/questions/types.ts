@@ -16,6 +16,8 @@ export type SingleChoiceConfig = {
 export type MultipleChoiceConfig = {
   options: { id: string; label: string }[]
   maxSelect?: number
+  minSelect?: number
+  columns?: number
 }
 
 export type TextConfig = {
