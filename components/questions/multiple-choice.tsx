@@ -55,12 +55,12 @@ function QuestionCard({
   }
 
   return (
-    <div className="relative px-3 py-3">
-      <div className="absolute -top-2.5 left-3 z-10 rounded bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground">
+    <div className="relative px-3 py-4">
+      <div className="absolute -top-2 left-6 z-10 rounded-t-none rounded-b bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground">
         多选题
       </div>
 
-      <div className="relative flex items-start justify-between gap-2">
+      <div className="relative flex items-start justify-between gap-2 pt-2">
         <div className="flex flex-1 items-start">
           <span className="mt-1 mr-2 text-sm font-medium text-muted-foreground">
             {order}.
