@@ -224,7 +224,7 @@ export const singleChoiceDef: QuestionDef<SingleChoiceQuestion> = {
       </div>
     )
   },
-  Editor: ({ question, onChange }) => {
+  Editor: ({ question, onChange, onSave }) => {
     const { options, columns = 1 } = question.config
 
     function updateOption(id: string, label: string) {
@@ -238,7 +238,7 @@ export const singleChoiceDef: QuestionDef<SingleChoiceQuestion> = {
     }
 
     function addOption() {
-      onChange({
+      onSave?.({
         ...question,
         config: {
           ...question.config,
@@ -267,12 +267,14 @@ export const singleChoiceDef: QuestionDef<SingleChoiceQuestion> = {
           <Label className="text-xs text-muted-foreground">每行选项数</Label>
           <Select
             value={columns.toString()}
-            onValueChange={(value) =>
-              onChange({
+            onValueChange={(value) => {
+              const updated = {
                 ...question,
                 config: { ...question.config, columns: parseInt(value) },
-              })
-            }
+              }
+              onChange(updated)
+              onSave?.(updated)
+            }}
           >
             <SelectTrigger className="h-8">
               <SelectValue />
@@ -296,6 +298,16 @@ export const singleChoiceDef: QuestionDef<SingleChoiceQuestion> = {
                 <Input
                   value={opt.label}
                   onChange={(e) => updateOption(opt.id, e.target.value)}
+                  onBlur={() => {
+                    const updated = {
+                      ...question,
+                      config: {
+                        ...question.config,
+                        options: [...options],
+                      },
+                    }
+                    onSave?.(updated)
+                  }}
                   className="h-8 border-none bg-transparent px-0 text-sm focus-visible:ring-0 dark:bg-transparent"
                   placeholder="选项内容"
                 />

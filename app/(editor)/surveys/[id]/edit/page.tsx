@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { ArrowLeft, GripVertical, Trash2 } from "lucide-react"
@@ -469,6 +469,7 @@ export default function EditSurveyPage() {
                 surveyId={id}
                 question={selectedQuestion}
                 onUpdate={updateQuestion}
+                onSave={(updated) => handleUpdateQuestion(updated)}
                 onDelete={() => handleDeleteQuestion(selectedQuestion.id)}
               />
             ) : (
@@ -487,26 +488,30 @@ function QuestionEditor({
   surveyId,
   question,
   onUpdate,
+  onSave,
   onDelete,
 }: {
   surveyId: string
   question: Question
   onUpdate: (q: Question) => void
+  onSave: (q: Question) => void
   onDelete: () => void
 }) {
   const def = getQuestionDef(question.type)
+  const hasChangesRef = useRef(false)
 
-  async function handleChange(updated: Question) {
+  function handleUpdate(updated: Question) {
+    hasChangesRef.current = true
     onUpdate(updated)
-    await fetch(`/api/surveys/${surveyId}/questions/${question.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title: updated.title,
-        required: updated.required,
-        config: updated.config,
-      }),
-    })
+  }
+
+  function handleSave(updated?: Question) {
+    if (updated) {
+      onSave(updated)
+    } else if (hasChangesRef.current) {
+      onSave(question)
+      hasChangesRef.current = false
+    }
   }
 
   return (
@@ -540,8 +545,9 @@ function QuestionEditor({
             rows={3}
             value={question.title}
             onChange={(e) =>
-              handleChange({ ...question, title: e.target.value })
+              handleUpdate({ ...question, title: e.target.value })
             }
+            onBlur={() => handleSave({ ...question })}
           />
         </div>
 
@@ -552,7 +558,7 @@ function QuestionEditor({
             role="switch"
             aria-checked={question.required}
             onClick={() =>
-              handleChange({ ...question, required: !question.required })
+              handleSave({ ...question, required: !question.required })
             }
             className={cn(
               "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors",
@@ -571,7 +577,8 @@ function QuestionEditor({
         {/* 题型专属编辑器 */}
         <def.Editor
           question={question as never}
-          onChange={(updated) => handleChange(updated as Question)}
+          onChange={(updated) => handleUpdate(updated as Question)}
+          onSave={handleSave}
         />
       </div>
     </div>

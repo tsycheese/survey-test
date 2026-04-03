@@ -73,6 +73,7 @@ export type QuestionDef<Q extends Question = Question> = {
   Editor: React.FC<{
     question: Q
     onChange: (question: Q) => void
+    onSave?: (question: Q) => void
   }>
   QuestionCard: React.FC<{
     question: Q

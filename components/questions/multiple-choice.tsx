@@ -239,7 +239,7 @@ export const multipleChoiceDef: QuestionDef<MultipleChoiceQuestion> = {
       </div>
     )
   },
-  Editor: ({ question, onChange }) => {
+  Editor: ({ question, onChange, onSave }) => {
     const { options, columns = 1 } = question.config
 
     function updateOption(id: string, label: string) {
@@ -253,7 +253,7 @@ export const multipleChoiceDef: QuestionDef<MultipleChoiceQuestion> = {
     }
 
     function addOption() {
-      onChange({
+      onSave?.({
         ...question,
         config: {
           ...question.config,
@@ -282,12 +282,14 @@ export const multipleChoiceDef: QuestionDef<MultipleChoiceQuestion> = {
           <Label className="text-xs text-muted-foreground">每行选项数</Label>
           <Select
             value={columns.toString()}
-            onValueChange={(value) =>
-              onChange({
+            onValueChange={(value) => {
+              const updated = {
                 ...question,
                 config: { ...question.config, columns: parseInt(value) },
-              })
-            }
+              }
+              onChange(updated)
+              onSave?.(updated)
+            }}
           >
             <SelectTrigger className="h-8">
               <SelectValue />
@@ -311,6 +313,16 @@ export const multipleChoiceDef: QuestionDef<MultipleChoiceQuestion> = {
                 <Input
                   value={opt.label}
                   onChange={(e) => updateOption(opt.id, e.target.value)}
+                  onBlur={() => {
+                    const updated = {
+                      ...question,
+                      config: {
+                        ...question.config,
+                        options: [...options],
+                      },
+                    }
+                    onSave?.(updated)
+                  }}
                   className="h-8 border-none bg-transparent px-0 text-sm focus-visible:ring-0 dark:bg-transparent"
                   placeholder="选项内容"
                 />
