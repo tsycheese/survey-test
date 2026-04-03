@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { ArrowLeft, Save, Trash2 } from "lucide-react"
+import { ArrowLeft, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -28,7 +28,6 @@ export default function EditSurveyPage() {
   const {
     survey,
     selectedId,
-    dirty,
     setSurvey,
     selectQuestion,
     addQuestion,
@@ -71,21 +70,17 @@ export default function EditSurveyPage() {
       })
   }, [id, setSurvey])
 
-  async function handleSaveTitle() {
-    if (!survey) return
+  async function handleSaveTitle(title: string, description: string) {
     const res = await fetch(`/api/surveys/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        title: survey.title,
-        description: survey.description,
+        title,
+        description: description || null,
       }),
     })
     if (res.ok) {
       markSaved()
-      toast.success("已保存")
-    } else {
-      toast.error("保存失败")
     }
   }
 
@@ -104,9 +99,6 @@ export default function EditSurveyPage() {
     })
     if (res.ok) {
       markSaved()
-      toast.success("设置已更新")
-    } else {
-      toast.error("保存失败")
     }
   }
 
@@ -142,6 +134,19 @@ export default function EditSurveyPage() {
     }
   }
 
+  async function handleUpdateQuestion(updated: Question) {
+    updateQuestion(updated)
+    await fetch(`/api/surveys/${id}/questions/${updated.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: updated.title,
+        required: updated.required,
+        config: updated.config,
+      }),
+    })
+  }
+
   if (!survey) {
     return (
       <div className="flex h-svh items-center justify-center text-muted-foreground">
@@ -173,11 +178,14 @@ export default function EditSurveyPage() {
             onChange={(e) =>
               updateSurveyInfo(e.target.value, survey.description ?? "")
             }
+            onBlur={(e) => {
+              const newTitle = e.target.value
+              if (newTitle !== survey.title) {
+                handleSaveTitle(newTitle, survey.description ?? "")
+              }
+            }}
             placeholder="未命名问卷"
           />
-          {dirty && (
-            <span className="text-xs text-muted-foreground">未保存</span>
-          )}
         </div>
         <div className="flex items-center gap-3">
           <span
@@ -188,10 +196,6 @@ export default function EditSurveyPage() {
           >
             {survey.published ? "已发布" : "草稿"}
           </span>
-          <Button size="sm" onClick={handleSaveTitle} disabled={!dirty}>
-            <Save className="mr-1 h-3.5 w-3.5" />
-            保存
-          </Button>
         </div>
       </header>
 
@@ -270,7 +274,13 @@ export default function EditSurveyPage() {
                       onChange={(e) =>
                         updateSurveyInfo(survey.title, e.target.value)
                       }
-                      onBlur={() => setIsEditingDesc(false)}
+                      onBlur={(e) => {
+                        const newDesc = e.target.value
+                        if (newDesc !== survey.description) {
+                          handleSaveTitle(survey.title, newDesc)
+                        }
+                        setIsEditingDesc(false)
+                      }}
                     />
                   ) : (
                     <div
@@ -315,11 +325,17 @@ export default function EditSurveyPage() {
                           showNumber={
                             survey.settings?.showQuestionNumber ?? true
                           }
-                          onUpdate={(updated) =>
-                            updateQuestion(updated as Question)
-                          }
+                          onUpdate={handleUpdateQuestion}
                           onTitleChange={(title) =>
                             updateQuestion({ ...q, title })
+                          }
+                          onTitleBlur={(title) => {
+                            if (title !== q.title) {
+                              handleUpdateQuestion({ ...q, title })
+                            }
+                          }}
+                          onOptionChange={(updated) =>
+                            updateQuestion(updated as Question)
                           }
                         />
                       </button>

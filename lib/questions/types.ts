@@ -82,6 +82,8 @@ export type QuestionDef<Q extends Question = Question> = {
     onUpdate?: (question: Q) => void
     onTitleClick?: () => void
     onTitleChange?: (title: string) => void
+    onTitleBlur?: (title: string) => void
+    onOptionChange?: (question: Q) => void
   }>
 }
 

@@ -8,6 +8,7 @@ interface QuestionTitleProps {
   title: string
   required?: boolean
   onChange?: (title: string) => void
+  onBlur?: (title: string) => void
 }
 
 export function QuestionTitle({
@@ -16,11 +17,17 @@ export function QuestionTitle({
   title,
   required,
   onChange,
+  onBlur,
 }: QuestionTitleProps) {
   const [editing, setEditing] = useState(false)
 
   const handleChange = (value: string) => {
     onChange?.(value)
+  }
+
+  const handleBlur = (value: string) => {
+    setEditing(false)
+    onBlur?.(value)
   }
 
   return (
@@ -51,7 +58,7 @@ export function QuestionTitle({
                 target.style.height = `${Math.max(target.scrollHeight, 36)}px`
                 handleChange(target.value)
               }}
-              onBlur={() => setEditing(false)}
+              onBlur={(e) => handleBlur(e.target.value)}
               onClick={(e) => e.stopPropagation()}
             />
           ) : (

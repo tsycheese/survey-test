@@ -22,12 +22,16 @@ function QuestionCard({
   showNumber = true,
   onUpdate,
   onTitleChange,
+  onTitleBlur,
+  onOptionChange,
 }: {
   question: SingleChoiceQuestion
   order: number
   showNumber?: boolean
   onUpdate?: (question: SingleChoiceQuestion) => void
   onTitleChange?: (title: string) => void
+  onTitleBlur?: (title: string) => void
+  onOptionChange?: (question: SingleChoiceQuestion) => void
 }) {
   const { options, columns = 1 } = question.config
   const [editingOptId, setEditingOptId] = useState<string | null>(null)
@@ -36,18 +40,26 @@ function QuestionCard({
     setEditingOptId(optId)
   }
 
-  const handleOptUpdate = (optId: string, label: string) => {
-    if (!onUpdate) return
+  const handleOptUpdate = (
+    optId: string,
+    label: string,
+    shouldSave = false
+  ) => {
     const updatedOptions = options.map((o) =>
       o.id === optId ? { ...o, label } : o
     )
-    onUpdate({
+    const updatedQuestion = {
       ...question,
       config: {
         ...question.config,
         options: updatedOptions,
       },
-    })
+    }
+    if (shouldSave && onUpdate) {
+      onUpdate(updatedQuestion)
+    } else if (onOptionChange) {
+      onOptionChange(updatedQuestion)
+    }
   }
 
   return (
@@ -58,6 +70,7 @@ function QuestionCard({
         title={question.title}
         required={question.required}
         onChange={onTitleChange}
+        onBlur={onTitleBlur}
       />
 
       <div className="relative mt-3">
@@ -88,12 +101,18 @@ function QuestionCard({
                   type="text"
                   className="flex-1 bg-transparent text-sm font-medium outline-none"
                   value={opt.label}
-                  onChange={(e) => handleOptUpdate(opt.id, e.target.value)}
+                  onChange={(e) =>
+                    handleOptUpdate(opt.id, e.target.value, false)
+                  }
                   onClick={(e) => e.stopPropagation()}
-                  onBlur={() => setEditingOptId(null)}
+                  onBlur={(e) => {
+                    handleOptUpdate(opt.id, e.target.value, true)
+                    setEditingOptId(null)
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault()
+                      handleOptUpdate(opt.id, e.currentTarget.value, true)
                       setEditingOptId(null)
                     }
                   }}

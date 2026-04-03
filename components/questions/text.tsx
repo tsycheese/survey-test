@@ -76,7 +76,13 @@ export const textDef: QuestionDef<TextQuestion> = {
       </div>
     )
   },
-  QuestionCard: ({ question, order, showNumber = true, onTitleChange }) => (
+  QuestionCard: ({
+    question,
+    order,
+    showNumber = true,
+    onTitleChange,
+    onTitleBlur,
+  }) => (
     <div className="relative px-3 py-3">
       <QuestionTitle
         order={order}
@@ -84,6 +90,7 @@ export const textDef: QuestionDef<TextQuestion> = {
         title={question.title}
         required={question.required}
         onChange={onTitleChange}
+        onBlur={onTitleBlur}
       />
       <div className="mt-3">
         {question.config.multiline ? (

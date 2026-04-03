@@ -92,7 +92,13 @@ export const ratingDef: QuestionDef<RatingQuestion> = {
       </div>
     )
   },
-  QuestionCard: ({ question, order, showNumber = true, onTitleChange }) => (
+  QuestionCard: ({
+    question,
+    order,
+    showNumber = true,
+    onTitleChange,
+    onTitleBlur,
+  }) => (
     <div className="relative px-3 py-3">
       <QuestionTitle
         order={order}
@@ -100,6 +106,7 @@ export const ratingDef: QuestionDef<RatingQuestion> = {
         title={question.title}
         required={question.required}
         onChange={onTitleChange}
+        onBlur={onTitleBlur}
       />
       <div className="mt-3 flex items-center gap-1">
         {Array.from({ length: question.config.max }, (_, i) => (
