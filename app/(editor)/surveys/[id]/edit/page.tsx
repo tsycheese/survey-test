@@ -70,7 +70,7 @@ export default function EditSurveyPage() {
       })
   }, [id, setSurvey])
 
-  async function handleSaveTitle(title: string, description: string) {
+  async function handleSaveTitleDesc(title: string, description: string) {
     const res = await fetch(`/api/surveys/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -180,9 +180,7 @@ export default function EditSurveyPage() {
             }
             onBlur={(e) => {
               const newTitle = e.target.value
-              if (newTitle !== survey.title) {
-                handleSaveTitle(newTitle, survey.description ?? "")
-              }
+              handleSaveTitleDesc(newTitle, survey.description ?? "")
             }}
             placeholder="未命名问卷"
           />
@@ -251,7 +249,11 @@ export default function EditSurveyPage() {
                     onChange={(e) =>
                       updateSurveyInfo(e.target.value, survey.description ?? "")
                     }
-                    onBlur={() => setIsEditingTitle(false)}
+                    onBlur={(e) => {
+                      const newTitle = e.target.value
+                      handleSaveTitleDesc(newTitle, survey.description ?? "")
+                      setIsEditingTitle(false)
+                    }}
                   />
                 ) : (
                   <div
@@ -276,9 +278,7 @@ export default function EditSurveyPage() {
                       }
                       onBlur={(e) => {
                         const newDesc = e.target.value
-                        if (newDesc !== survey.description) {
-                          handleSaveTitle(survey.title, newDesc)
-                        }
+                        handleSaveTitleDesc(survey.title, newDesc)
                         setIsEditingDesc(false)
                       }}
                     />
@@ -330,9 +330,7 @@ export default function EditSurveyPage() {
                             updateQuestion({ ...q, title })
                           }
                           onTitleBlur={(title) => {
-                            if (title !== q.title) {
-                              handleUpdateQuestion({ ...q, title })
-                            }
+                            handleUpdateQuestion({ ...q, title })
                           }}
                           onOptionChange={(updated) =>
                             updateQuestion(updated as Question)
