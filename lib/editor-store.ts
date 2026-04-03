@@ -11,6 +11,7 @@ type EditorStore = {
   addQuestion: (question: Question) => void
   updateQuestion: (question: Question) => void
   deleteQuestion: (id: string) => void
+  reorderQuestions: (fromIndex: number, toIndex: number) => void
   updateSurveyInfo: (title: string, description: string) => void
   markSaved: () => void
 }
@@ -58,6 +59,22 @@ export const useEditorStore = create<EditorStore>((set) => ({
       return {
         survey: { ...s.survey, questions },
         selectedId,
+        dirty: true,
+      }
+    }),
+
+  reorderQuestions: (fromIndex, toIndex) =>
+    set((s) => {
+      if (!s.survey) return s
+      const questions = [...s.survey.questions]
+      const [removed] = questions.splice(fromIndex, 1)
+      questions.splice(toIndex, 0, removed)
+      // 更新所有题目的 order
+      questions.forEach((q, idx) => {
+        q.order = idx
+      })
+      return {
+        survey: { ...s.survey, questions },
         dirty: true,
       }
     }),

@@ -3,7 +3,21 @@
 import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { ArrowLeft, Trash2 } from "lucide-react"
+import { ArrowLeft, GripVertical, Trash2 } from "lucide-react"
+import {
+  DndContext,
+  DragEndEvent,
+  DragOverlay,
+  DragStartEvent,
+  pointerWithin,
+} from "@dnd-kit/core"
+import {
+  SortableContext,
+  arrayMove,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -18,6 +32,7 @@ import {
 import type {
   Question,
   QuestionType,
+  Survey,
   SurveySettings,
 } from "@/lib/questions/types"
 import { SurveySettingsPanel } from "@/components/editor/survey-settings-panel"
@@ -33,17 +48,59 @@ export default function EditSurveyPage() {
     addQuestion,
     updateQuestion,
     deleteQuestion,
+    reorderQuestions,
     updateSurveyInfo,
     markSaved,
   } = useEditorStore()
   const [activeTab, setActiveTab] = useState<"survey" | "question">("survey")
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [isEditingDesc, setIsEditingDesc] = useState(false)
+  const [draggingId, setDraggingId] = useState<string | null>(null)
 
   // 选中题目时自动切换到题目面板
   const handleSelectQuestion = (id: string) => {
     selectQuestion(id)
     setActiveTab("question")
+  }
+
+  // 拖拽开始
+  const handleDragStart = (event: DragStartEvent) => {
+    setDraggingId(event.active.id as string)
+  }
+
+  // 拖拽结束
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event
+    setDraggingId(null)
+
+    if (!over || !survey) return
+
+    const fromIndex = survey.questions.findIndex((q) => q.id === active.id)
+    const toIndex = survey.questions.findIndex((q) => q.id === over.id)
+
+    if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0) return
+
+    // 更新本地状态
+    reorderQuestions(fromIndex, toIndex)
+
+    // 调用 API 保存新顺序
+    const newQuestions = arrayMove(survey.questions, fromIndex, toIndex).map(
+      (q, idx) => ({ ...q, order: idx })
+    )
+    try {
+      const res = await fetch(`/api/surveys/${id}/questions/reorder`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          questions: newQuestions.map((q) => ({ id: q.id, order: q.order })),
+        }),
+      })
+      if (!res.ok) {
+        toast.error("更新题目顺序失败")
+      }
+    } catch {
+      toast.error("更新题目顺序失败")
+    }
   }
 
   useEffect(() => {
@@ -296,35 +353,29 @@ export default function EditSurveyPage() {
               </div>
 
               {/* 题目列表 */}
-              <div className="divide-y divide-dashed divide-border">
-                {survey.questions.length === 0 ? (
-                  <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
-                    点击左侧题型添加第一道题
-                  </div>
-                ) : (
-                  survey.questions.map((q, idx) => {
-                    const def = getQuestionDef(q.type)
-                    return (
-                      <button
-                        key={q.id}
-                        onClick={() => handleSelectQuestion(q.id)}
-                        className={cn(
-                          "relative w-full px-12 py-2 text-left transition-colors",
-                          selectedId === q.id
-                            ? "bg-primary/5"
-                            : "hover:bg-muted/5"
-                        )}
-                      >
-                        {selectedId === q.id && (
-                          <div className="absolute top-0 left-0 h-full w-1 rounded-l-sm bg-primary" />
-                        )}
-                        <def.QuestionCard
-                          question={q as never}
-                          selected={selectedId === q.id}
-                          order={idx + 1}
-                          showNumber={
-                            survey.settings?.showQuestionNumber ?? true
-                          }
+              <DndContext
+                onDragStart={handleDragStart}
+                onDragEnd={handleDragEnd}
+                collisionDetection={pointerWithin}
+              >
+                <SortableContext
+                  items={survey.questions.map((q) => q.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <div className="divide-y divide-dashed divide-border">
+                    {survey.questions.length === 0 ? (
+                      <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
+                        点击左侧题型添加第一道题
+                      </div>
+                    ) : (
+                      survey.questions.map((q, idx) => (
+                        <SortableQuestionCard
+                          key={q.id}
+                          question={q}
+                          idx={idx}
+                          selectedId={selectedId}
+                          survey={survey}
+                          onSelect={handleSelectQuestion}
                           onUpdate={handleUpdateQuestion}
                           onTitleChange={(title) =>
                             updateQuestion({ ...q, title })
@@ -336,11 +387,22 @@ export default function EditSurveyPage() {
                             updateQuestion(updated as Question)
                           }
                         />
-                      </button>
-                    )
-                  })
-                )}
-              </div>
+                      ))
+                    )}
+                  </div>
+                </SortableContext>
+
+                {/* 拖拽预览 */}
+                <DragOverlay>
+                  {draggingId ? (
+                    <div className="rounded-lg border bg-background p-4 shadow-lg">
+                      <div className="text-sm text-muted-foreground">
+                        拖拽中...
+                      </div>
+                    </div>
+                  ) : null}
+                </DragOverlay>
+              </DndContext>
 
               {/* 底部留白 */}
               <div className="h-8" />
@@ -498,6 +560,92 @@ function QuestionEditor({
           onChange={(updated) => handleChange(updated as Question)}
         />
       </div>
+    </div>
+  )
+}
+
+// 可拖拽的题目卡片组件
+function SortableQuestionCard({
+  question,
+  idx,
+  selectedId,
+  survey,
+  onSelect,
+  onUpdate,
+  onTitleChange,
+  onTitleBlur,
+  onOptionChange,
+}: {
+  question: Question
+  idx: number
+  selectedId: string | null
+  survey: Survey | null
+  onSelect: (id: string) => void
+  onUpdate: (q: Question) => void
+  onTitleChange: (title: string) => void
+  onTitleBlur: (title: string) => void
+  onOptionChange: (q: Question) => void
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: question.id })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
+
+  const def = getQuestionDef(question.type)
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        "group relative flex w-full items-start transition-colors",
+        selectedId === question.id ? "bg-primary/5" : "hover:bg-muted/5"
+      )}
+    >
+      {/* 拖拽手柄 */}
+      <div
+        {...attributes}
+        {...listeners}
+        className={cn(
+          "absolute top-3 left-2 z-20 flex h-6 w-6 cursor-grab items-center justify-center rounded opacity-0 transition-opacity hover:bg-muted",
+          "group-hover:opacity-100"
+        )}
+      >
+        <GripVertical className="h-4 w-4 text-muted-foreground" />
+      </div>
+
+      {/* 选中指示条 */}
+      {selectedId === question.id && (
+        <div className="absolute top-0 left-0 h-full w-1 rounded-l-sm bg-primary" />
+      )}
+
+      {/* 点击区域 */}
+      <button
+        type="button"
+        onClick={() => onSelect(question.id)}
+        className="flex-1 px-12 py-2 text-left"
+      >
+        <def.QuestionCard
+          question={question as never}
+          selected={selectedId === question.id}
+          order={idx + 1}
+          showNumber={survey?.settings?.showQuestionNumber ?? true}
+          onUpdate={onUpdate}
+          onTitleChange={onTitleChange}
+          onTitleBlur={onTitleBlur}
+          onOptionChange={onOptionChange}
+        />
+      </button>
     </div>
   )
 }
