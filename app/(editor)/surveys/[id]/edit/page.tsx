@@ -427,7 +427,7 @@ export default function EditSurveyPage() {
         {/* 右栏：属性编辑（悬浮） */}
         <aside className="absolute top-4 right-4 z-10 flex h-[calc(100%-2rem)] w-80 flex-col rounded-xl border bg-background shadow-xl">
           {/* 分段控制器 */}
-          <div className="flex border-b px-3 pt-3">
+          <div className="flex border-b px-3 pt-3 pb-3">
             <div className="flex w-full rounded-lg border bg-muted p-1">
               <button
                 className={cn(
