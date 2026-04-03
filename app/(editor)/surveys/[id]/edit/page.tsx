@@ -394,13 +394,27 @@ export default function EditSurveyPage() {
 
                 {/* 拖拽预览 */}
                 <DragOverlay>
-                  {draggingId ? (
-                    <div className="rounded-lg border bg-background p-4 shadow-lg">
-                      <div className="text-sm text-muted-foreground">
-                        拖拽中...
-                      </div>
-                    </div>
-                  ) : null}
+                  {draggingId &&
+                    (() => {
+                      const draggingQuestion = survey?.questions.find(
+                        (q) => q.id === draggingId
+                      )
+                      if (!draggingQuestion) return null
+                      const def = getQuestionDef(draggingQuestion.type)
+                      return (
+                        <div className="flex flex-col gap-1.5 rounded-lg border bg-background px-12 py-2.5 shadow-lg">
+                          <div className="flex items-center gap-2">
+                            <def.icon className="h-3.5 w-3.5 text-muted-foreground" />
+                            <span className="text-xs font-medium text-muted-foreground">
+                              {def.label}
+                            </span>
+                          </div>
+                          <div className="text-sm leading-relaxed font-medium">
+                            {draggingQuestion.title || "未命名题目"}
+                          </div>
+                        </div>
+                      )
+                    })()}
                 </DragOverlay>
               </DndContext>
 
