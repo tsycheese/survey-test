@@ -36,6 +36,7 @@ import type {
   SurveySettings,
 } from "@/lib/questions/types"
 import { SurveySettingsPanel } from "@/components/editor/survey-settings-panel"
+import { AIChatDialog } from "@/components/ai/ai-chat-dialog"
 
 export default function EditSurveyPage() {
   const { id } = useParams<{ id: string }>()
@@ -180,6 +181,33 @@ export default function EditSurveyPage() {
     }
   }
 
+  async function handleAddAIQuestions(questions: Question[]) {
+    if (!survey) return
+
+    try {
+      // 批量添加题目
+      for (const q of questions) {
+        const res = await fetch(`/api/surveys/${id}/questions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: q.title,
+            type: q.type,
+            required: q.required,
+            config: q.config,
+          }),
+        })
+        if (res.ok) {
+          const created = await res.json()
+          addQuestion({ ...q, id: created.id })
+        }
+      }
+      toast.success(`已添加 ${questions.length} 道题目`)
+    } catch {
+      toast.error("添加失败")
+    }
+  }
+
   async function handleDeleteQuestion(qid: string) {
     const res = await fetch(`/api/surveys/${id}/questions/${qid}`, {
       method: "DELETE",
@@ -258,8 +286,11 @@ export default function EditSurveyPage() {
       <div className="relative flex-1 overflow-hidden">
         {/* 左栏：题型面板（悬浮） */}
         <aside className="absolute top-4 left-4 z-10 flex h-[calc(100%-2rem)] w-80 flex-col rounded-xl border bg-background shadow-xl">
-          <div className="border-b px-4 py-3 text-xs font-medium text-muted-foreground">
-            添加题目
+          <div className="flex items-center justify-between border-b px-4 py-3">
+            <span className="text-xs font-medium text-muted-foreground">
+              添加题目
+            </span>
+            <AIChatDialog onConfirm={handleAddAIQuestions} />
           </div>
           <div className="flex-1 space-y-1 overflow-y-auto p-2">
             {QUESTION_DEFS.map(
@@ -466,7 +497,6 @@ export default function EditSurveyPage() {
             ) : selectedQuestion ? (
               <QuestionEditor
                 key={selectedQuestion.id}
-                surveyId={id}
                 question={selectedQuestion}
                 onUpdate={updateQuestion}
                 onSave={(updated) => handleUpdateQuestion(updated)}
@@ -485,13 +515,11 @@ export default function EditSurveyPage() {
 }
 
 function QuestionEditor({
-  surveyId,
   question,
   onUpdate,
   onSave,
   onDelete,
 }: {
-  surveyId: string
   question: Question
   onUpdate: (q: Question) => void
   onSave: (q: Question) => void
