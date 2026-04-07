@@ -9,7 +9,9 @@ import {
   DragEndEvent,
   DragOverlay,
   DragStartEvent,
+  DragOverEvent,
   pointerWithin,
+  useDraggable,
 } from "@dnd-kit/core"
 import {
   SortableContext,
@@ -59,6 +61,8 @@ export default function EditSurveyPage() {
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [isEditingDesc, setIsEditingDesc] = useState(false)
   const [draggingId, setDraggingId] = useState<string | null>(null)
+  const [draggingType, setDraggingType] = useState<QuestionType | null>(null)
+  const [insertIndex, setInsertIndex] = useState<number | null>(null)
 
   // 选中题目时自动切换到题目面板
   const handleSelectQuestion = (id: string) => {
@@ -66,19 +70,69 @@ export default function EditSurveyPage() {
     setActiveTab("question")
   }
 
-  // 拖拽开始
+  // 拖拽开始（支持已有题目重排和新题目添加）
   const handleDragStart = (event: DragStartEvent) => {
-    setDraggingId(event.active.id as string)
+    const { active } = event
+    // 检查拖拽的是新题型还是已有题目
+    if (String(active.id).startsWith("new-")) {
+      setDraggingType(String(active.id).replace("new-", "") as QuestionType)
+      setDraggingId(null)
+    } else {
+      setDraggingId(active.id as string)
+      setDraggingType(null)
+    }
+  }
+
+  // 拖拽经过题目列表，计算插入位置
+  const handleDragOver = (event: DragOverEvent) => {
+    const { over } = event
+    if (!over || !survey) {
+      setInsertIndex(null)
+      return
+    }
+
+    // 如果是新题目拖拽
+    if (draggingType) {
+      const overIndex = survey.questions.findIndex((q) => q.id === over.id)
+      if (overIndex >= 0) {
+        setInsertIndex(overIndex)
+      } else {
+        setInsertIndex(null)
+      }
+      return
+    }
+
+    // 已有题目重排
+    const overIndex = survey.questions.findIndex((q) => q.id === over.id)
+    if (overIndex >= 0) {
+      setInsertIndex(overIndex)
+    } else {
+      setInsertIndex(null)
+    }
   }
 
   // 拖拽结束
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event
     setDraggingId(null)
+    setDraggingType(null)
+    setInsertIndex(null)
 
-    if (!over || !survey) return
+    if (!over) return
 
-    const fromIndex = survey.questions.findIndex((q) => q.id === active.id)
+    // 新题目拖拽：添加到指定位置
+    if (draggingType && survey) {
+      const overIndex = survey.questions.findIndex((q) => q.id === over.id)
+      if (overIndex >= 0) {
+        await handleAddQuestionAtPosition(draggingType, overIndex)
+      }
+      return
+    }
+
+    // 已有题目重排
+    if (!draggingId || !survey) return
+
+    const fromIndex = survey.questions.findIndex((q) => q.id === draggingId)
     const toIndex = survey.questions.findIndex((q) => q.id === over.id)
 
     if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0) return
@@ -178,6 +232,44 @@ export default function EditSurveyPage() {
     if (res.ok) {
       const created = await res.json()
       addQuestion({ ...question, id: created.id })
+    } else {
+      toast.error("添加失败")
+    }
+  }
+
+  async function handleAddQuestionAtPosition(
+    type: QuestionType,
+    index: number
+  ) {
+    if (!survey) return
+    const question = createQuestion(type, index)
+    const res = await fetch(`/api/surveys/${id}/questions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: question.title,
+        type: question.type,
+        required: question.required,
+        config: question.config,
+      }),
+    })
+    if (res.ok) {
+      const created = await res.json()
+      const newQuestion = { ...question, id: created.id }
+      // 在指定位置插入题目
+      addQuestion(newQuestion)
+      // 由于 addQuestion 是添加到末尾，需要手动调整顺序
+      const newQuestions = [...survey.questions]
+      newQuestions.splice(index, 0, newQuestion)
+      // 更新所有题目的 order
+      newQuestions.forEach((q, idx) => {
+        q.order = idx
+      })
+      setSurvey({ ...survey, questions: newQuestions })
+      // 选中新题目并切换到题目面板
+      selectQuestion(newQuestion.id)
+      setActiveTab("question")
+      toast.success("题目已添加")
     } else {
       toast.error("添加失败")
     }
@@ -286,130 +378,135 @@ export default function EditSurveyPage() {
 
       {/* 主体区域 */}
       <div className="relative flex-1 overflow-hidden">
-        {/* 左栏：题型面板（悬浮） */}
-        <aside className="absolute top-4 left-4 z-10 flex h-[calc(100%-2rem)] w-80 flex-col rounded-xl border bg-background shadow-xl">
-          <div className="flex items-center justify-between border-b px-4 py-3">
-            <span className="text-xs font-medium text-muted-foreground">
-              添加题目
-            </span>
-            <AIChatDialog onConfirm={handleAddAIQuestions} />
-          </div>
-          <div className="flex-1 overflow-y-auto p-2">
-            {(
-              Object.entries(QUESTION_CATEGORIES) as Array<
-                [
-                  QuestionCategory,
-                  (typeof QUESTION_CATEGORIES)[QuestionCategory],
-                ]
-              >
-            ).map(([categoryKey, category]) => {
-              const categoryDefs = QUESTION_DEFS.filter(
-                (def) => def.category === categoryKey
-              )
-              if (categoryDefs.length === 0) return null
-
-              return (
-                <div
-                  key={categoryKey}
-                  className="mb-3 rounded-lg border bg-card last:mb-0"
+        {/* DndContext 包裹左侧栏和画布 */}
+        <DndContext
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDragEnd={handleDragEnd}
+          collisionDetection={pointerWithin}
+        >
+          {/* 左栏：题型面板（悬浮） */}
+          <aside className="absolute top-4 left-4 z-10 flex h-[calc(100%-2rem)] w-80 flex-col rounded-xl border bg-background shadow-xl">
+            <div className="flex items-center justify-between border-b px-4 py-3">
+              <span className="text-xs font-medium text-muted-foreground">
+                添加题目
+              </span>
+              <AIChatDialog onConfirm={handleAddAIQuestions} />
+            </div>
+            <div className="flex-1 overflow-y-auto p-2">
+              {(
+                Object.entries(QUESTION_CATEGORIES) as Array<
+                  [
+                    QuestionCategory,
+                    (typeof QUESTION_CATEGORIES)[QuestionCategory],
+                  ]
                 >
-                  <div className="flex items-center gap-2 border-b bg-muted/50 px-3 py-2">
-                    <span className="text-base">{category.icon}</span>
-                    <span className="text-xs font-medium">
-                      {category.label}
-                    </span>
-                  </div>
-                  <div className="space-y-0.5 p-2">
-                    {categoryDefs.map(({ type, label, icon: Icon }) => (
-                      <button
-                        key={type}
-                        onClick={() => handleAddQuestion(type as QuestionType)}
-                        className="flex w-full items-center gap-2.5 rounded-md p-2 text-left transition-colors hover:bg-muted"
-                      >
-                        <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
-                        <span className="text-sm text-muted-foreground">
-                          {label}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </aside>
+              ).map(([categoryKey, category]) => {
+                const categoryDefs = QUESTION_DEFS.filter(
+                  (def) => def.category === categoryKey
+                )
+                if (categoryDefs.length === 0) return null
 
-        {/* 中间：问卷画布 */}
-        <div className="h-full overflow-y-auto px-[calc(20rem+2.5rem)] py-6">
-          <div className="mx-auto max-w-[1000px]">
-            {/* 问卷纸张 */}
-            <div className="rounded-sm bg-background shadow-[0_4px_24px_rgba(0,0,0,0.10)] ring-1 ring-border">
-              {/* 顶部色条 */}
-              <div className="h-2 rounded-t-sm bg-primary" />
-
-              {/* 标题区 */}
-              <div className="border-b border-dashed border-border p-5">
-                {isEditingTitle ? (
-                  <Input
-                    autoFocus
-                    className="h-auto rounded-sm border-2 border-primary bg-transparent px-3 py-2 text-xl font-bold tracking-tight shadow-none focus-visible:ring-0"
-                    style={{ fontSize: "1.25rem", lineHeight: "1.75rem" }}
-                    value={survey.title}
-                    onChange={(e) =>
-                      updateSurveyInfo(e.target.value, survey.description ?? "")
-                    }
-                    onBlur={(e) => {
-                      const newTitle = e.target.value
-                      handleSaveTitleDesc(newTitle, survey.description ?? "")
-                      setIsEditingTitle(false)
-                    }}
-                  />
-                ) : (
+                return (
                   <div
-                    onClick={() => setIsEditingTitle(true)}
-                    className="group relative cursor-text rounded-sm border-2 border-transparent px-3 py-2 hover:border-dashed hover:border-border"
+                    key={categoryKey}
+                    className="mb-3 rounded-lg border bg-card last:mb-0"
                   >
-                    <div className="text-xl leading-7 font-bold tracking-tight">
-                      {survey.title || "未命名问卷"}
+                    <div className="flex items-center gap-2 border-b bg-muted/50 px-3 py-2">
+                      <span className="text-base">{category.icon}</span>
+                      <span className="text-xs font-medium">
+                        {category.label}
+                      </span>
+                    </div>
+                    <div className="space-y-0.5 p-2">
+                      {categoryDefs.map(({ type, label, icon: Icon }) => (
+                        <div key={type}>
+                          <DraggableQuestionType
+                            type={type as QuestionType}
+                            label={label}
+                            icon={Icon}
+                            onClick={() =>
+                              handleAddQuestion(type as QuestionType)
+                            }
+                          />
+                        </div>
+                      ))}
                     </div>
                   </div>
-                )}
+                )
+              })}
+            </div>
+          </aside>
 
-                <div className="mt-2">
-                  {isEditingDesc ? (
-                    <Textarea
+          {/* 中间：问卷画布 */}
+          <div className="h-full overflow-y-auto px-[calc(20rem+2.5rem)] py-6">
+            <div className="mx-auto max-w-[1000px]">
+              {/* 问卷纸张 */}
+              <div className="rounded-sm bg-background shadow-[0_4px_24px_rgba(0,0,0,0.10)] ring-1 ring-border">
+                {/* 顶部色条 */}
+                <div className="h-2 rounded-t-sm bg-primary" />
+
+                {/* 标题区 */}
+                <div className="border-b border-dashed border-border p-5">
+                  {isEditingTitle ? (
+                    <Input
                       autoFocus
-                      className="min-h-[80px] rounded-sm border-2 border-primary bg-transparent px-3 py-2 text-sm text-muted-foreground shadow-none focus-visible:ring-0"
-                      placeholder="添加问卷说明..."
-                      value={survey.description ?? ""}
+                      className="h-auto rounded-sm border-2 border-primary bg-transparent px-3 py-2 text-xl font-bold tracking-tight shadow-none focus-visible:ring-0"
+                      style={{ fontSize: "1.25rem", lineHeight: "1.75rem" }}
+                      value={survey.title}
                       onChange={(e) =>
-                        updateSurveyInfo(survey.title, e.target.value)
+                        updateSurveyInfo(
+                          e.target.value,
+                          survey.description ?? ""
+                        )
                       }
                       onBlur={(e) => {
-                        const newDesc = e.target.value
-                        handleSaveTitleDesc(survey.title, newDesc)
-                        setIsEditingDesc(false)
+                        const newTitle = e.target.value
+                        handleSaveTitleDesc(newTitle, survey.description ?? "")
+                        setIsEditingTitle(false)
                       }}
                     />
                   ) : (
                     <div
-                      onClick={() => setIsEditingDesc(true)}
+                      onClick={() => setIsEditingTitle(true)}
                       className="group relative cursor-text rounded-sm border-2 border-transparent px-3 py-2 hover:border-dashed hover:border-border"
                     >
-                      <div className="text-sm text-muted-foreground">
-                        {survey.description || "添加问卷说明..."}
+                      <div className="text-xl leading-7 font-bold tracking-tight">
+                        {survey.title || "未命名问卷"}
                       </div>
                     </div>
                   )}
-                </div>
-              </div>
 
-              {/* 题目列表 */}
-              <DndContext
-                onDragStart={handleDragStart}
-                onDragEnd={handleDragEnd}
-                collisionDetection={pointerWithin}
-              >
+                  <div className="mt-2">
+                    {isEditingDesc ? (
+                      <Textarea
+                        autoFocus
+                        className="min-h-[80px] rounded-sm border-2 border-primary bg-transparent px-3 py-2 text-sm text-muted-foreground shadow-none focus-visible:ring-0"
+                        placeholder="添加问卷说明..."
+                        value={survey.description ?? ""}
+                        onChange={(e) =>
+                          updateSurveyInfo(survey.title, e.target.value)
+                        }
+                        onBlur={(e) => {
+                          const newDesc = e.target.value
+                          handleSaveTitleDesc(survey.title, newDesc)
+                          setIsEditingDesc(false)
+                        }}
+                      />
+                    ) : (
+                      <div
+                        onClick={() => setIsEditingDesc(true)}
+                        className="group relative cursor-text rounded-sm border-2 border-transparent px-3 py-2 hover:border-dashed hover:border-border"
+                      >
+                        <div className="text-sm text-muted-foreground">
+                          {survey.description || "添加问卷说明..."}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 题目列表 */}
                 <SortableContext
                   items={survey.questions.map((q) => q.id)}
                   strategy={verticalListSortingStrategy}
@@ -421,31 +518,53 @@ export default function EditSurveyPage() {
                       </div>
                     ) : (
                       survey.questions.map((q, idx) => (
-                        <SortableQuestionCard
-                          key={q.id}
-                          question={q}
-                          idx={idx}
-                          selectedId={selectedId}
-                          survey={survey}
-                          onSelect={handleSelectQuestion}
-                          onUpdate={handleUpdateQuestion}
-                          onTitleChange={(title) =>
-                            updateQuestion({ ...q, title })
-                          }
-                          onTitleBlur={(title) => {
-                            handleUpdateQuestion({ ...q, title })
-                          }}
-                          onOptionChange={(updated) =>
-                            updateQuestion(updated as Question)
-                          }
-                        />
+                        <div key={q.id} className="relative">
+                          {/* 插入位置指示线 */}
+                          {insertIndex === idx && draggingType && (
+                            <div className="absolute -top-px right-0 left-0 z-10 h-0.5 bg-primary shadow-[0_0_8px_2px_rgba(59,130,246,0.5)]" />
+                          )}
+                          <SortableQuestionCard
+                            question={q}
+                            idx={idx}
+                            selectedId={selectedId}
+                            survey={survey}
+                            onSelect={handleSelectQuestion}
+                            onUpdate={handleUpdateQuestion}
+                            onTitleChange={(title) =>
+                              updateQuestion({ ...q, title })
+                            }
+                            onTitleBlur={(title) => {
+                              handleUpdateQuestion({ ...q, title })
+                            }}
+                            onOptionChange={(updated) =>
+                              updateQuestion(updated as Question)
+                            }
+                          />
+                        </div>
                       ))
                     )}
+                    {/* 末尾插入指示线 */}
+                    {insertIndex === survey.questions.length &&
+                      draggingType && (
+                        <div className="h-0.5 bg-primary shadow-[0_0_8px_2px_rgba(59,130,246,0.5)]" />
+                      )}
                   </div>
                 </SortableContext>
 
                 {/* 拖拽预览 */}
-                <DragOverlay>
+                <DragOverlay dropAnimation={null}>
+                  {draggingType &&
+                    (() => {
+                      const def = getQuestionDef(draggingType)
+                      return (
+                        <div className="flex items-center gap-2.5 rounded-md border bg-background px-3 py-2 shadow-lg">
+                          <def.icon className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm text-muted-foreground">
+                            {def.label}
+                          </span>
+                        </div>
+                      )
+                    })()}
                   {draggingId &&
                     (() => {
                       const draggingQuestion = survey?.questions.find(
@@ -468,13 +587,13 @@ export default function EditSurveyPage() {
                       )
                     })()}
                 </DragOverlay>
-              </DndContext>
 
-              {/* 底部留白 */}
-              <div className="h-8" />
+                {/* 底部留白 */}
+                <div className="h-8" />
+              </div>
             </div>
           </div>
-        </div>
+        </DndContext>
 
         {/* 右栏：属性编辑（悬浮） */}
         <aside className="absolute top-4 right-4 z-10 flex h-[calc(100%-2rem)] w-80 flex-col rounded-xl border bg-background shadow-xl">
@@ -716,6 +835,36 @@ function SortableQuestionCard({
           onOptionChange={onOptionChange}
         />
       </button>
+    </div>
+  )
+}
+
+// 左侧栏可拖拽的题型按钮组件
+function DraggableQuestionType({
+  type,
+  label,
+  icon: Icon,
+  onClick,
+}: {
+  type: QuestionType
+  label: string
+  icon: React.ElementType
+  onClick: () => void
+}) {
+  const { attributes, listeners, setNodeRef } = useDraggable({
+    id: `new-${type}`,
+  })
+
+  return (
+    <div
+      ref={setNodeRef}
+      className="flex w-full cursor-grab items-center gap-2.5 rounded-md p-2 text-left transition-colors hover:bg-muted active:cursor-grabbing"
+      {...listeners}
+      {...attributes}
+      onClick={onClick}
+    >
+      <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+      <span className="text-sm text-muted-foreground">{label}</span>
     </div>
   )
 }
