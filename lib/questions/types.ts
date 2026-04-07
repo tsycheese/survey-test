@@ -8,6 +8,7 @@ export type BaseQuestion = {
   order: number
 }
 
+// ============ 选择类 ============
 export type SingleChoiceConfig = {
   options: { id: string; label: string }[]
   columns?: number
@@ -20,11 +21,42 @@ export type MultipleChoiceConfig = {
   columns?: number
 }
 
+export type DropdownConfig = {
+  options: { id: string; label: string }[]
+  placeholder?: string
+}
+
+export type RankingConfig = {
+  options: { id: string; label: string }[]
+}
+
+export type MatrixSingleConfig = {
+  rows: { id: string; label: string }[]
+  columns: { id: string; label: string }[]
+}
+
+// ============ 文本输入类 ============
 export type TextConfig = {
   placeholder?: string
   multiline?: boolean
 }
 
+export type TextareaConfig = {
+  placeholder?: string
+  maxLength?: number
+  rows?: number
+}
+
+export type NumberConfig = {
+  placeholder?: string
+  min?: number
+  max?: number
+  step?: number
+  prefix?: string
+  suffix?: string
+}
+
+// ============ 量表评分类 ============
 export type RatingConfig = {
   min: number
   max: number
@@ -32,6 +64,63 @@ export type RatingConfig = {
   maxLabel?: string
 }
 
+export type NPSConfig = {
+  min?: number
+  max?: number
+  lowLabel?: string
+  highLabel?: string
+}
+
+export type CESConfig = {
+  min?: number
+  max?: number
+  lowLabel?: string
+  highLabel?: string
+}
+
+export type MatrixScaleConfig = {
+  rows: { id: string; label: string }[]
+  scale: { id: string; label: string }[]
+}
+
+// ============ 个人信息类 ============
+export type NameConfig = {
+  placeholder?: string
+  firstName?: boolean
+  lastName?: boolean
+}
+
+export type GenderConfig = {
+  options?: { id: string; label: string }[]
+}
+
+export type BirthdayConfig = {
+  format?: "YYYY-MM-DD" | "MM-DD" | "YYYY"
+  minDate?: string
+  maxDate?: string
+}
+
+// ============ 联系方式类 ============
+export type PhoneConfig = {
+  placeholder?: string
+  countryCode?: boolean
+}
+
+export type EmailConfig = {
+  placeholder?: string
+}
+
+export type DateConfig = {
+  format?: string
+  minDate?: string
+  maxDate?: string
+}
+
+export type TimeConfig = {
+  format?: "HH:mm" | "HH:mm:ss"
+}
+
+// ============ 题目类型联合 ============
 export type SingleChoiceQuestion = BaseQuestion & {
   type: "SINGLE_CHOICE"
   config: SingleChoiceConfig
@@ -42,9 +131,34 @@ export type MultipleChoiceQuestion = BaseQuestion & {
   config: MultipleChoiceConfig
 }
 
+export type DropdownQuestion = BaseQuestion & {
+  type: "DROPDOWN"
+  config: DropdownConfig
+}
+
+export type RankingQuestion = BaseQuestion & {
+  type: "RANKING"
+  config: RankingConfig
+}
+
+export type MatrixSingleQuestion = BaseQuestion & {
+  type: "MATRIX_SINGLE"
+  config: MatrixSingleConfig
+}
+
 export type TextQuestion = BaseQuestion & {
   type: "TEXT"
   config: TextConfig
+}
+
+export type TextareaQuestion = BaseQuestion & {
+  type: "TEXTAREA"
+  config: TextareaConfig
+}
+
+export type NumberQuestion = BaseQuestion & {
+  type: "NUMBER"
+  config: NumberConfig
 }
 
 export type RatingQuestion = BaseQuestion & {
@@ -52,16 +166,104 @@ export type RatingQuestion = BaseQuestion & {
   config: RatingConfig
 }
 
+export type NPSQuestion = BaseQuestion & {
+  type: "NPS"
+  config: NPSConfig
+}
+
+export type CESQuestion = BaseQuestion & {
+  type: "CES"
+  config: CESConfig
+}
+
+export type MatrixScaleQuestion = BaseQuestion & {
+  type: "MATRIX_SCALE"
+  config: MatrixScaleConfig
+}
+
+export type NameQuestion = BaseQuestion & {
+  type: "NAME"
+  config: NameConfig
+}
+
+export type GenderQuestion = BaseQuestion & {
+  type: "GENDER"
+  config: GenderConfig
+}
+
+export type BirthdayQuestion = BaseQuestion & {
+  type: "BIRTHDAY"
+  config: BirthdayConfig
+}
+
+export type PhoneQuestion = BaseQuestion & {
+  type: "PHONE"
+  config: PhoneConfig
+}
+
+export type EmailQuestion = BaseQuestion & {
+  type: "EMAIL"
+  config: EmailConfig
+}
+
+export type DateQuestion = BaseQuestion & {
+  type: "DATE"
+  config: DateConfig
+}
+
+export type TimeQuestion = BaseQuestion & {
+  type: "TIME"
+  config: TimeConfig
+}
+
+// ============ 所有题目类型联合 ============
 export type Question =
   | SingleChoiceQuestion
   | MultipleChoiceQuestion
+  | DropdownQuestion
+  | RankingQuestion
+  | MatrixSingleQuestion
   | TextQuestion
+  | TextareaQuestion
+  | NumberQuestion
   | RatingQuestion
+  | NPSQuestion
+  | CESQuestion
+  | MatrixScaleQuestion
+  | NameQuestion
+  | GenderQuestion
+  | BirthdayQuestion
+  | PhoneQuestion
+  | EmailQuestion
+  | DateQuestion
+  | TimeQuestion
 
 export type QuestionType = Question["type"]
 
+// ============ 题型分类 ============
+export type QuestionCategory =
+  | "choice"
+  | "text"
+  | "scale"
+  | "info"
+  | "contact"
+  | "datetime"
+
+export const QUESTION_CATEGORIES: Record<
+  QuestionCategory,
+  { label: string; icon: string }
+> = {
+  choice: { label: "选择类", icon: "☑️" },
+  text: { label: "文本输入", icon: "✍️" },
+  scale: { label: "量表评分", icon: "📊" },
+  info: { label: "个人信息", icon: "👤" },
+  contact: { label: "联系方式", icon: "📞" },
+  datetime: { label: "时间日期", icon: "📅" },
+}
+
 export type QuestionDef<Q extends Question = Question> = {
   type: Q["type"]
+  category: QuestionCategory
   label: string
   icon: React.ElementType
   defaultQuestion: (order: number) => Q

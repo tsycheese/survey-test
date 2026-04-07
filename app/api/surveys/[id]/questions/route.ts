@@ -5,7 +5,20 @@ import { z } from "zod"
 
 const questionSchema = z.object({
   title: z.string().min(1, "题目不能为空"),
-  type: z.enum(["SINGLE_CHOICE", "MULTIPLE_CHOICE", "TEXT", "RATING"]),
+  type: z.enum([
+    "SINGLE_CHOICE",
+    "MULTIPLE_CHOICE",
+    "TEXT",
+    "RATING",
+    "DROPDOWN",
+    "TEXTAREA",
+    "NUMBER",
+    "NPS",
+    "CES",
+    "PHONE",
+    "EMAIL",
+    "DATE",
+  ]),
   required: z.boolean().default(false),
   config: z
     .record(z.unknown())

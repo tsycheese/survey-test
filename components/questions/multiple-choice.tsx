@@ -142,6 +142,7 @@ function QuestionCard({
 
 export const multipleChoiceDef: QuestionDef<MultipleChoiceQuestion> = {
   type: "MULTIPLE_CHOICE",
+  category: "choice",
   label: "多选题",
   icon: CheckSquare,
   defaultQuestion: (order) => ({

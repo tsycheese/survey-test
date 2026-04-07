@@ -7,6 +7,7 @@ import { QuestionTitle } from "@/components/questions/question-title"
 
 export const textDef: QuestionDef<TextQuestion> = {
   type: "TEXT",
+  category: "text",
   label: "文本填空",
   icon: AlignLeft,
   defaultQuestion: (order) => ({

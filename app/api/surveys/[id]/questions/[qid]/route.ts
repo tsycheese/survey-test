@@ -6,7 +6,20 @@ import { z } from "zod"
 const updateQuestionSchema = z.object({
   title: z.string().min(1).optional(),
   type: z
-    .enum(["SINGLE_CHOICE", "MULTIPLE_CHOICE", "TEXT", "RATING"])
+    .enum([
+      "SINGLE_CHOICE",
+      "MULTIPLE_CHOICE",
+      "TEXT",
+      "RATING",
+      "DROPDOWN",
+      "TEXTAREA",
+      "NUMBER",
+      "NPS",
+      "CES",
+      "PHONE",
+      "EMAIL",
+      "DATE",
+    ])
     .optional(),
   required: z.boolean().optional(),
   config: z

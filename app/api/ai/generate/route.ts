@@ -48,7 +48,20 @@ function validateAndTransformQuestion(raw: unknown, index: number) {
   const type = (q.type || "TEXT").toUpperCase()
 
   // 校验题目类型
-  const validTypes = ["SINGLE_CHOICE", "MULTIPLE_CHOICE", "TEXT", "RATING"]
+  const validTypes = [
+    "SINGLE_CHOICE",
+    "MULTIPLE_CHOICE",
+    "TEXT",
+    "RATING",
+    "DROPDOWN",
+    "TEXTAREA",
+    "NUMBER",
+    "NPS",
+    "CES",
+    "PHONE",
+    "EMAIL",
+    "DATE",
+  ]
   if (!validTypes.includes(type)) {
     throw new Error(
       `第 ${index + 1} 道题目类型无效：${type}，有效类型为：${validTypes.join(", ")}`
@@ -64,7 +77,7 @@ function validateAndTransformQuestion(raw: unknown, index: number) {
   // 转换 options 格式
   let options: Array<{ id: string; label: string }> = []
   if (Array.isArray(q.options)) {
-    options = q.options.map((opt, i) =>
+    options = q.options.map((opt) =>
       typeof opt === "string"
         ? { id: nanoid(), label: opt }
         : { id: opt.id || nanoid(), label: opt.label || String(opt) }

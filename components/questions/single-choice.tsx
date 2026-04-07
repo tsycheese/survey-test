@@ -135,6 +135,7 @@ function QuestionCard({
 
 export const singleChoiceDef: QuestionDef<SingleChoiceQuestion> = {
   type: "SINGLE_CHOICE",
+  category: "choice",
   label: "单选题",
   icon: CircleDot,
   defaultQuestion: (order) => ({
