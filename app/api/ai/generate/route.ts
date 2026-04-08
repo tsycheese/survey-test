@@ -61,6 +61,15 @@ function validateAndTransformQuestion(raw: unknown, index: number) {
     "PHONE",
     "EMAIL",
     "DATE",
+    "RANKING",
+    "GENDER",
+    "NAME",
+    "BIRTHDAY",
+    "TIME",
+    "MATRIX_SINGLE",
+    "MATRIX_SCALE",
+    "IMAGE_SINGLE_CHOICE",
+    "IMAGE_MULTIPLE_CHOICE",
   ]
   if (!validTypes.includes(type)) {
     throw new Error(

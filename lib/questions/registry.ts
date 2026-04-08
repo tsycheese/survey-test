@@ -17,6 +17,8 @@ import { birthdayDef } from "@/components/questions/birthday"
 import { timeDef } from "@/components/questions/time"
 import { matrixSingleDef } from "@/components/questions/matrix-single"
 import { matrixScaleDef } from "@/components/questions/matrix-scale"
+import { imageSingleChoiceDef } from "@/components/questions/image-single-choice"
+import { imageMultipleChoiceDef } from "@/components/questions/image-multiple-choice"
 import type { Question, QuestionDef, QuestionType } from "@/lib/questions/types"
 
 export const QUESTION_REGISTRY: Record<QuestionType, QuestionDef> = {
@@ -40,6 +42,9 @@ export const QUESTION_REGISTRY: Record<QuestionType, QuestionDef> = {
   TIME: timeDef as QuestionDef,
   MATRIX_SINGLE: matrixSingleDef as QuestionDef,
   MATRIX_SCALE: matrixScaleDef as QuestionDef,
+  // 图片题型
+  IMAGE_SINGLE_CHOICE: imageSingleChoiceDef as QuestionDef,
+  IMAGE_MULTIPLE_CHOICE: imageMultipleChoiceDef as QuestionDef,
 } as const
 
 export const QUESTION_DEFS = Object.values(QUESTION_REGISTRY).filter(Boolean)

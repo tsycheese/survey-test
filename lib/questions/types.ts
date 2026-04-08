@@ -120,6 +120,35 @@ export type TimeConfig = {
   format?: "HH:mm" | "HH:mm:ss"
 }
 
+// ============ 图片选择类 ============
+export type ImageOption = {
+  id: string
+  imageUrl: string
+  publicId?: string // Cloudinary public_id，用于删除
+  title?: string
+  label?: string
+  width?: number
+  height?: number
+}
+
+export type ImageSingleChoiceConfig = {
+  options: ImageOption[]
+  columns?: number
+  showLabels?: boolean
+  showTitles?: boolean
+  aspectRatio?: string
+}
+
+export type ImageMultipleChoiceConfig = {
+  options: ImageOption[]
+  columns?: number
+  showLabels?: boolean
+  showTitles?: boolean
+  aspectRatio?: string
+  maxSelect?: number
+  minSelect?: number
+}
+
 // ============ 题目类型联合 ============
 export type SingleChoiceQuestion = BaseQuestion & {
   type: "SINGLE_CHOICE"
@@ -216,6 +245,16 @@ export type TimeQuestion = BaseQuestion & {
   config: TimeConfig
 }
 
+export type ImageSingleChoiceQuestion = BaseQuestion & {
+  type: "IMAGE_SINGLE_CHOICE"
+  config: ImageSingleChoiceConfig
+}
+
+export type ImageMultipleChoiceQuestion = BaseQuestion & {
+  type: "IMAGE_MULTIPLE_CHOICE"
+  config: ImageMultipleChoiceConfig
+}
+
 // ============ 所有题目类型联合 ============
 export type Question =
   | SingleChoiceQuestion
@@ -237,6 +276,8 @@ export type Question =
   | EmailQuestion
   | DateQuestion
   | TimeQuestion
+  | ImageSingleChoiceQuestion
+  | ImageMultipleChoiceQuestion
 
 export type QuestionType = Question["type"]
 
@@ -249,6 +290,7 @@ export type QuestionCategory =
   | "datetime"
   | "info"
   | "contact"
+  | "image"
 
 export const QUESTION_CATEGORIES: Record<
   QuestionCategory,
@@ -261,6 +303,7 @@ export const QUESTION_CATEGORIES: Record<
   datetime: { label: "时间日期", icon: "📅" },
   info: { label: "个人信息", icon: "👤" },
   contact: { label: "联系方式", icon: "📞" },
+  image: { label: "图片题型", icon: "🖼️" },
 }
 
 export type QuestionDef<Q extends Question = Question> = {

@@ -47,6 +47,8 @@ enum QuestionType {
   GENDER
   BIRTHDAY
   TIME
+  IMAGE_SINGLE_CHOICE
+  IMAGE_MULTIPLE_CHOICE
 }
 
 model Response {

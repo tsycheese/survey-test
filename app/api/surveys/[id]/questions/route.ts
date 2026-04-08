@@ -25,6 +25,8 @@ const questionSchema = z.object({
     "TIME",
     "MATRIX_SINGLE",
     "MATRIX_SCALE",
+    "IMAGE_SINGLE_CHOICE",
+    "IMAGE_MULTIPLE_CHOICE",
   ]),
   required: z.boolean().default(false),
   config: z
