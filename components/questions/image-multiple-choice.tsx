@@ -460,7 +460,7 @@ function QuestionCard({
 export const imageMultipleChoiceDef: QuestionDef<ImageMultipleChoiceQuestion> =
   {
     type: "IMAGE_MULTIPLE_CHOICE",
-    category: "image",
+    category: "choice",
     label: "图片多选",
     icon: Images,
     defaultQuestion: (order) => ({
@@ -476,7 +476,7 @@ export const imageMultipleChoiceDef: QuestionDef<ImageMultipleChoiceQuestion> =
           { id: nanoid(), imageUrl: "", title: "", label: "" },
           { id: nanoid(), imageUrl: "", title: "", label: "" },
         ],
-        columns: 2,
+        columns: 4,
         showLabels: true,
         showTitles: true,
         aspectRatio: "3:4",

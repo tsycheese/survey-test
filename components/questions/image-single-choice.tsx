@@ -429,7 +429,7 @@ function QuestionCard({
 
 export const imageSingleChoiceDef: QuestionDef<ImageSingleChoiceQuestion> = {
   type: "IMAGE_SINGLE_CHOICE",
-  category: "image",
+  category: "choice",
   label: "图片单选",
   icon: Image,
   defaultQuestion: (order) => ({
@@ -445,7 +445,7 @@ export const imageSingleChoiceDef: QuestionDef<ImageSingleChoiceQuestion> = {
         { id: nanoid(), imageUrl: "", title: "", label: "" },
         { id: nanoid(), imageUrl: "", title: "", label: "" },
       ],
-      columns: 2,
+      columns: 4,
       showLabels: true,
       showTitles: true,
       aspectRatio: "3:4",

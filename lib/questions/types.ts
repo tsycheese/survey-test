@@ -290,7 +290,6 @@ export type QuestionCategory =
   | "datetime"
   | "info"
   | "contact"
-  | "image"
 
 export const QUESTION_CATEGORIES: Record<
   QuestionCategory,
@@ -303,7 +302,6 @@ export const QUESTION_CATEGORIES: Record<
   datetime: { label: "时间日期", icon: "📅" },
   info: { label: "个人信息", icon: "👤" },
   contact: { label: "联系方式", icon: "📞" },
-  image: { label: "图片题型", icon: "🖼️" },
 }
 
 export type QuestionDef<Q extends Question = Question> = {
