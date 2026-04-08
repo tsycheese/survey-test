@@ -340,6 +340,7 @@ function QuestionCard({
                 showLabels={showLabels}
                 isSelected={selectedOptionIds.includes(opt.id)}
                 onToggleSelect={() => handleOptionToggle(opt.id)}
+                isEditable={true}
                 onEditTitle={(title) => {
                   const updatedOptions = options.map((o) =>
                     o.id === opt.id ? { ...o, title } : o
@@ -447,7 +448,6 @@ function QuestionCard({
                     onOptionChange(updatedQuestion)
                   }
                 }}
-                isEditable={false}
               />
             </div>
           ))}
