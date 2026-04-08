@@ -4,6 +4,7 @@ import type { QuestionDef, DateTimeQuestion } from "@/lib/questions/types"
 import { QuestionTitle } from "@/components/questions/question-title"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
+import { DatePicker } from "@/components/ui/date-picker"
 import {
   Select,
   SelectContent,
@@ -40,16 +41,12 @@ function QuestionCard({
 
   const showDate = format.includes("YYYY")
   const showTime = format.includes("HH")
-  const showMonth = format.includes("MM") && format !== "YYYY-MM"
-  const showDay = format === "YYYY-MM-DD" || format === "YYYY-MM-DD HH:mm"
+  const showMonth = format.includes("MM")
+  const showDay = format.includes("DD")
+  // 只有年月日或年月日时分格式使用 DatePicker
+  const useDatePicker = showDate && showDay
 
   // 生成选项列表
-  const years = Array.from(
-    { length: 100 },
-    (_, i) => new Date().getFullYear() - 50 + i
-  )
-  const months = Array.from({ length: 12 }, (_, i) => i + 1)
-  const days = Array.from({ length: 31 }, (_, i) => i + 1)
   const hours = Array.from({ length: 24 }, (_, i) => i)
   const minutes = Array.from({ length: 60 }, (_, i) => i)
 
@@ -65,82 +62,125 @@ function QuestionCard({
       />
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        {showDate && (
+        {useDatePicker ? (
+          // 年月日或年月日时分格式使用 DatePicker
           <>
-            <Select>
-              <SelectTrigger className="w-[100px]">
-                <SelectValue placeholder="年" />
-              </SelectTrigger>
-              <SelectContent>
-                {years.map((year) => (
-                  <SelectItem key={year} value={year.toString()}>
-                    {year}年
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {showMonth && (
+            <DatePicker placeholder="选择日期" className="w-[200px]" />
+            {showTime && (
               <>
                 <Select>
                   <SelectTrigger className="w-[80px]">
-                    <SelectValue placeholder="月" />
+                    <SelectValue placeholder="时" />
                   </SelectTrigger>
                   <SelectContent>
-                    {months.map((month) => (
-                      <SelectItem key={month} value={month.toString()}>
-                        {month.toString().padStart(2, "0")}月
+                    {hours.map((hour) => (
+                      <SelectItem key={hour} value={hour.toString()}>
+                        {hour.toString().padStart(2, "0")}时
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                {showDay && (
+                <span className="text-muted-foreground">:</span>
+                <Select>
+                  <SelectTrigger className="w-[80px]">
+                    <SelectValue placeholder="分" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {minutes.map((minute) => (
+                      <SelectItem key={minute} value={minute.toString()}>
+                        {minute.toString().padStart(2, "0")}分
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </>
+            )}
+          </>
+        ) : (
+          <>
+            {showDate && (
+              <>
+                <Select>
+                  <SelectTrigger className="w-[100px]">
+                    <SelectValue placeholder="年" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from(
+                      { length: 100 },
+                      (_, i) => new Date().getFullYear() - 50 + i
+                    ).map((year) => (
+                      <SelectItem key={year} value={year.toString()}>
+                        {year}年
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {showMonth && (
                   <>
                     <Select>
                       <SelectTrigger className="w-[80px]">
-                        <SelectValue placeholder="日" />
+                        <SelectValue placeholder="月" />
                       </SelectTrigger>
                       <SelectContent>
-                        {days.map((day) => (
-                          <SelectItem key={day} value={day.toString()}>
-                            {day.toString().padStart(2, "0")}日
-                          </SelectItem>
-                        ))}
+                        {Array.from({ length: 12 }, (_, i) => i + 1).map(
+                          (month) => (
+                            <SelectItem key={month} value={month.toString()}>
+                              {month.toString().padStart(2, "0")}月
+                            </SelectItem>
+                          )
+                        )}
                       </SelectContent>
                     </Select>
+                    {showDay && (
+                      <Select>
+                        <SelectTrigger className="w-[80px]">
+                          <SelectValue placeholder="日" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Array.from({ length: 31 }, (_, i) => i + 1).map(
+                            (day) => (
+                              <SelectItem key={day} value={day.toString()}>
+                                {day.toString().padStart(2, "0")}日
+                              </SelectItem>
+                            )
+                          )}
+                        </SelectContent>
+                      </Select>
+                    )}
                   </>
                 )}
               </>
             )}
-          </>
-        )}
-        {showTime && (
-          <>
-            {showDate && <span className="text-muted-foreground"> </span>}
-            <Select>
-              <SelectTrigger className="w-[80px]">
-                <SelectValue placeholder="时" />
-              </SelectTrigger>
-              <SelectContent>
-                {hours.map((hour) => (
-                  <SelectItem key={hour} value={hour.toString()}>
-                    {hour.toString().padStart(2, "0")}时
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <span className="text-muted-foreground">:</span>
-            <Select>
-              <SelectTrigger className="w-[80px]">
-                <SelectValue placeholder="分" />
-              </SelectTrigger>
-              <SelectContent>
-                {minutes.map((minute) => (
-                  <SelectItem key={minute} value={minute.toString()}>
-                    {minute.toString().padStart(2, "0")}分
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {showTime && (
+              <>
+                {showDate && <span className="text-muted-foreground"> </span>}
+                <Select>
+                  <SelectTrigger className="w-[80px]">
+                    <SelectValue placeholder="时" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {hours.map((hour) => (
+                      <SelectItem key={hour} value={hour.toString()}>
+                        {hour.toString().padStart(2, "0")}时
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <span className="text-muted-foreground">:</span>
+                <Select>
+                  <SelectTrigger className="w-[80px]">
+                    <SelectValue placeholder="分" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {minutes.map((minute) => (
+                      <SelectItem key={minute} value={minute.toString()}>
+                        {minute.toString().padStart(2, "0")}分
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </>
+            )}
           </>
         )}
       </div>
@@ -170,99 +210,145 @@ export const dateTimeDef: QuestionDef<DateTimeQuestion> = {
 
     const showDate = format.includes("YYYY")
     const showTime = format.includes("HH")
-    const showMonth = format.includes("MM") && format !== "YYYY-MM"
-    const showDay = format === "YYYY-MM-DD" || format === "YYYY-MM-DD HH:mm"
+    const showMonth = format.includes("MM")
+    const showDay = format.includes("DD")
+    // 只有年月日或年月日时分格式使用 DatePicker
+    const useDatePicker = showDate && showDay
 
     // 计算日期范围
     const minYear = minDate ? new Date(minDate).getFullYear() : 1900
     const maxYear = maxDate ? new Date(maxDate).getFullYear() : 2100
-    const years = Array.from(
-      { length: maxYear - minYear + 1 },
-      (_, i) => minYear + i
-    )
-    const months = Array.from({ length: 12 }, (_, i) => i + 1)
-    const days = Array.from({ length: 31 }, (_, i) => i + 1)
+
+    // 生成选项列表
     const hours = Array.from({ length: 24 }, (_, i) => i)
     const minutes = Array.from({ length: 60 }, (_, i) => i)
 
     return (
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        {showDate && (
+        {useDatePicker ? (
+          // 年月日或年月日时分格式使用 DatePicker
           <>
-            <Select>
-              <SelectTrigger className="w-[100px]">
-                <SelectValue placeholder="年" />
-              </SelectTrigger>
-              <SelectContent>
-                {years.map((year) => (
-                  <SelectItem key={year} value={year.toString()}>
-                    {year}年
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {showMonth && (
+            <DatePicker
+              placeholder="选择日期"
+              className="w-[200px]"
+              minDate={minDate ? new Date(minDate) : undefined}
+              maxDate={maxDate ? new Date(maxDate) : undefined}
+            />
+            {showTime && (
               <>
                 <Select>
                   <SelectTrigger className="w-[80px]">
-                    <SelectValue placeholder="月" />
+                    <SelectValue placeholder="时" />
                   </SelectTrigger>
                   <SelectContent>
-                    {months.map((month) => (
-                      <SelectItem key={month} value={month.toString()}>
-                        {month.toString().padStart(2, "0")}月
+                    {hours.map((hour) => (
+                      <SelectItem key={hour} value={hour.toString()}>
+                        {hour.toString().padStart(2, "0")}时
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                {showDay && (
+                <span className="text-muted-foreground">:</span>
+                <Select>
+                  <SelectTrigger className="w-[80px]">
+                    <SelectValue placeholder="分" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {minutes.map((minute) => (
+                      <SelectItem key={minute} value={minute.toString()}>
+                        {minute.toString().padStart(2, "0")}分
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </>
+            )}
+          </>
+        ) : (
+          <>
+            {showDate && (
+              <>
+                <Select>
+                  <SelectTrigger className="w-[100px]">
+                    <SelectValue placeholder="年" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from(
+                      { length: maxYear - minYear + 1 },
+                      (_, i) => minYear + i
+                    ).map((year) => (
+                      <SelectItem key={year} value={year.toString()}>
+                        {year}年
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {showMonth && (
                   <>
                     <Select>
                       <SelectTrigger className="w-[80px]">
-                        <SelectValue placeholder="日" />
+                        <SelectValue placeholder="月" />
                       </SelectTrigger>
                       <SelectContent>
-                        {days.map((day) => (
-                          <SelectItem key={day} value={day.toString()}>
-                            {day.toString().padStart(2, "0")}日
-                          </SelectItem>
-                        ))}
+                        {Array.from({ length: 12 }, (_, i) => i + 1).map(
+                          (month) => (
+                            <SelectItem key={month} value={month.toString()}>
+                              {month.toString().padStart(2, "0")}月
+                            </SelectItem>
+                          )
+                        )}
                       </SelectContent>
                     </Select>
+                    {showDay && (
+                      <Select>
+                        <SelectTrigger className="w-[80px]">
+                          <SelectValue placeholder="日" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Array.from({ length: 31 }, (_, i) => i + 1).map(
+                            (day) => (
+                              <SelectItem key={day} value={day.toString()}>
+                                {day.toString().padStart(2, "0")}日
+                              </SelectItem>
+                            )
+                          )}
+                        </SelectContent>
+                      </Select>
+                    )}
                   </>
                 )}
               </>
             )}
-          </>
-        )}
-        {showTime && (
-          <>
-            {showDate && <span className="text-muted-foreground"> </span>}
-            <Select>
-              <SelectTrigger className="w-[80px]">
-                <SelectValue placeholder="时" />
-              </SelectTrigger>
-              <SelectContent>
-                {hours.map((hour) => (
-                  <SelectItem key={hour} value={hour.toString()}>
-                    {hour.toString().padStart(2, "0")}时
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <span className="text-muted-foreground">:</span>
-            <Select>
-              <SelectTrigger className="w-[80px]">
-                <SelectValue placeholder="分" />
-              </SelectTrigger>
-              <SelectContent>
-                {minutes.map((minute) => (
-                  <SelectItem key={minute} value={minute.toString()}>
-                    {minute.toString().padStart(2, "0")}分
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {showTime && (
+              <>
+                {showDate && <span className="text-muted-foreground"> </span>}
+                <Select>
+                  <SelectTrigger className="w-[80px]">
+                    <SelectValue placeholder="时" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {hours.map((hour) => (
+                      <SelectItem key={hour} value={hour.toString()}>
+                        {hour.toString().padStart(2, "0")}时
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <span className="text-muted-foreground">:</span>
+                <Select>
+                  <SelectTrigger className="w-[80px]">
+                    <SelectValue placeholder="分" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {minutes.map((minute) => (
+                      <SelectItem key={minute} value={minute.toString()}>
+                        {minute.toString().padStart(2, "0")}分
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </>
+            )}
           </>
         )}
       </div>
