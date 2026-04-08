@@ -67,7 +67,7 @@ function QuestionCard({
 
 export const npsDef: QuestionDef<NPSQuestion> = {
   type: "NPS",
-  category: "scale",
+  category: "advanced",
   label: "NPS 评分",
   icon: Gauge,
   defaultQuestion: (order) => ({

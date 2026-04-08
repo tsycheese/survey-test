@@ -7,7 +7,7 @@ import { QuestionTitle } from "@/components/questions/question-title"
 
 export const ratingDef: QuestionDef<RatingQuestion> = {
   type: "RATING",
-  category: "scale",
+  category: "advanced",
   label: "评分题",
   icon: Star,
   defaultQuestion: (order) => ({

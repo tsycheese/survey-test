@@ -244,10 +244,11 @@ export type QuestionType = Question["type"]
 export type QuestionCategory =
   | "choice"
   | "text"
-  | "scale"
+  | "advanced"
+  | "matrix"
+  | "datetime"
   | "info"
   | "contact"
-  | "datetime"
 
 export const QUESTION_CATEGORIES: Record<
   QuestionCategory,
@@ -255,10 +256,11 @@ export const QUESTION_CATEGORIES: Record<
 > = {
   choice: { label: "选择类", icon: "☑️" },
   text: { label: "文本输入", icon: "✍️" },
-  scale: { label: "量表评分", icon: "📊" },
+  advanced: { label: "高级题型", icon: "🚀" },
+  matrix: { label: "矩阵题型", icon: "📐" },
+  datetime: { label: "时间日期", icon: "📅" },
   info: { label: "个人信息", icon: "👤" },
   contact: { label: "联系方式", icon: "📞" },
-  datetime: { label: "时间日期", icon: "📅" },
 }
 
 export type QuestionDef<Q extends Question = Question> = {

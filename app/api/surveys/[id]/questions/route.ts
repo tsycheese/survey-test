@@ -18,6 +18,13 @@ const questionSchema = z.object({
     "PHONE",
     "EMAIL",
     "DATE",
+    "RANKING",
+    "GENDER",
+    "NAME",
+    "BIRTHDAY",
+    "TIME",
+    "MATRIX_SINGLE",
+    "MATRIX_SCALE",
   ]),
   required: z.boolean().default(false),
   config: z

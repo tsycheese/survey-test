@@ -78,7 +78,7 @@ export default function EditSurveyPage() {
       setDraggingType(String(active.id).replace("new-", "") as QuestionType)
       setDraggingId(null)
     } else {
-      setDraggingId(active.id as string)
+      setDraggingId(String(active.id))
       setDraggingType(null)
     }
   }
@@ -819,8 +819,7 @@ function SortableQuestionCard({
       )}
 
       {/* 点击区域 */}
-      <button
-        type="button"
+      <div
         onClick={() => onSelect(question.id)}
         className="flex-1 px-12 py-2 text-left"
       >
@@ -834,7 +833,7 @@ function SortableQuestionCard({
           onTitleBlur={onTitleBlur}
           onOptionChange={onOptionChange}
         />
-      </button>
+      </div>
     </div>
   )
 }

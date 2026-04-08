@@ -36,6 +36,21 @@ export const questionTypeSchema = z.enum([
   "MULTIPLE_CHOICE",
   "TEXT",
   "RATING",
+  "DROPDOWN",
+  "TEXTAREA",
+  "NUMBER",
+  "NPS",
+  "CES",
+  "PHONE",
+  "EMAIL",
+  "DATE",
+  "RANKING",
+  "GENDER",
+  "NAME",
+  "BIRTHDAY",
+  "TIME",
+  "MATRIX_SINGLE",
+  "MATRIX_SCALE",
 ])
 
 // 完整题目 Schema

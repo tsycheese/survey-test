@@ -67,7 +67,7 @@ function QuestionCard({
 
 export const cesDef: QuestionDef<CESQuestion> = {
   type: "CES",
-  category: "scale",
+  category: "advanced",
   label: "费力度 (CES)",
   icon: Target,
   defaultQuestion: (order) => ({
