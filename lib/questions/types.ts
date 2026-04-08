@@ -110,14 +110,10 @@ export type EmailConfig = {
   placeholder?: string
 }
 
-export type DateConfig = {
-  format?: string
+export type DateTimeConfig = {
+  format?: "YYYY-MM-DD HH:mm" | "YYYY-MM-DD" | "YYYY-MM" | "YYYY" | "HH:mm"
   minDate?: string
   maxDate?: string
-}
-
-export type TimeConfig = {
-  format?: "HH:mm" | "HH:mm:ss"
 }
 
 // ============ 图片选择类 ============
@@ -235,14 +231,9 @@ export type EmailQuestion = BaseQuestion & {
   config: EmailConfig
 }
 
-export type DateQuestion = BaseQuestion & {
-  type: "DATE"
-  config: DateConfig
-}
-
-export type TimeQuestion = BaseQuestion & {
-  type: "TIME"
-  config: TimeConfig
+export type DateTimeQuestion = BaseQuestion & {
+  type: "DATETIME"
+  config: DateTimeConfig
 }
 
 export type ImageSingleChoiceQuestion = BaseQuestion & {
@@ -274,8 +265,7 @@ export type Question =
   | BirthdayQuestion
   | PhoneQuestion
   | EmailQuestion
-  | DateQuestion
-  | TimeQuestion
+  | DateTimeQuestion
   | ImageSingleChoiceQuestion
   | ImageMultipleChoiceQuestion
 
@@ -287,7 +277,6 @@ export type QuestionCategory =
   | "text"
   | "advanced"
   | "matrix"
-  | "datetime"
   | "info"
   | "contact"
 
@@ -299,7 +288,6 @@ export const QUESTION_CATEGORIES: Record<
   text: { label: "文本输入", icon: "✍️" },
   advanced: { label: "高级题型", icon: "🚀" },
   matrix: { label: "矩阵题型", icon: "📐" },
-  datetime: { label: "时间日期", icon: "📅" },
   info: { label: "个人信息", icon: "👤" },
   contact: { label: "联系方式", icon: "📞" },
 }

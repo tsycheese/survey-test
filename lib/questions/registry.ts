@@ -9,12 +9,11 @@ import { npsDef } from "@/components/questions/nps"
 import { cesDef } from "@/components/questions/ces"
 import { phoneDef } from "@/components/questions/phone"
 import { emailDef } from "@/components/questions/email"
-import { dateDef } from "@/components/questions/date"
+import { dateTimeDef } from "@/components/questions/datetime"
 import { rankingDef } from "@/components/questions/ranking"
 import { genderDef } from "@/components/questions/gender"
 import { nameDef } from "@/components/questions/name"
 import { birthdayDef } from "@/components/questions/birthday"
-import { timeDef } from "@/components/questions/time"
 import { matrixSingleDef } from "@/components/questions/matrix-single"
 import { matrixScaleDef } from "@/components/questions/matrix-scale"
 import { imageSingleChoiceDef } from "@/components/questions/image-single-choice"
@@ -33,13 +32,12 @@ export const QUESTION_REGISTRY: Record<QuestionType, QuestionDef> = {
   CES: cesDef as QuestionDef,
   PHONE: phoneDef as QuestionDef,
   EMAIL: emailDef as QuestionDef,
-  DATE: dateDef as QuestionDef,
+  DATETIME: dateTimeDef as QuestionDef,
   // 新增题型
   RANKING: rankingDef as QuestionDef,
   GENDER: genderDef as QuestionDef,
   NAME: nameDef as QuestionDef,
   BIRTHDAY: birthdayDef as QuestionDef,
-  TIME: timeDef as QuestionDef,
   MATRIX_SINGLE: matrixSingleDef as QuestionDef,
   MATRIX_SCALE: matrixScaleDef as QuestionDef,
   // 图片题型
