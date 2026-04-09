@@ -3,7 +3,15 @@
 import { useEffect, useRef, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { ArrowLeft, GripVertical, Trash2 } from "lucide-react"
+import {
+  ArrowLeft,
+  GripVertical,
+  Trash2,
+  Play,
+  Monitor,
+  Tablet,
+  Smartphone,
+} from "lucide-react"
 import {
   DndContext,
   DragEndEvent,
@@ -41,6 +49,13 @@ import type {
 import { QUESTION_CATEGORIES } from "@/lib/questions/types"
 import { SurveySettingsPanel } from "@/components/editor/survey-settings-panel"
 import { AIChatDialog } from "@/components/ai/ai-chat-dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog"
 
 export default function EditSurveyPage() {
   const { id } = useParams<{ id: string }>()
@@ -63,6 +78,7 @@ export default function EditSurveyPage() {
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [draggingType, setDraggingType] = useState<QuestionType | null>(null)
   const [insertIndex, setInsertIndex] = useState<number | null>(null)
+  const [isPreviewDialogOpen, setIsPreviewDialogOpen] = useState(false)
 
   // 选中题目时自动切换到题目面板
   const handleSelectQuestion = (id: string) => {
@@ -379,6 +395,15 @@ export default function EditSurveyPage() {
           />
         </div>
         <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsPreviewDialogOpen(true)}
+            disabled={survey.questions.length === 0}
+          >
+            <Play className="mr-1.5 h-3.5 w-3.5" />
+            试答
+          </Button>
           <span
             className={cn(
               "text-xs font-medium",
@@ -678,7 +703,85 @@ export default function EditSurveyPage() {
           </div>
         </aside>
       </div>
+
+      {/* 试答设备选择弹窗 */}
+      <PreviewDialog
+        open={isPreviewDialogOpen}
+        onOpenChange={setIsPreviewDialogOpen}
+        surveyId={survey.id}
+        shareToken={survey.id} // 使用 survey id 作为预览 token
+      />
     </div>
+  )
+}
+
+// 试答设备选择弹窗
+function PreviewDialog({
+  open,
+  onOpenChange,
+  surveyId,
+  shareToken,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  surveyId: string
+  shareToken: string
+}) {
+  const devices = [
+    {
+      type: "desktop",
+      label: "桌面",
+      icon: Monitor,
+      width: 1280,
+      height: 800,
+    },
+    {
+      type: "tablet",
+      label: "平板",
+      icon: Tablet,
+      width: 768,
+      height: 1024,
+    },
+    {
+      type: "mobile",
+      label: "手机",
+      icon: Smartphone,
+      width: 375,
+      height: 812,
+    },
+  ]
+
+  function openPreview(device: (typeof devices)[0]) {
+    const url = `${window.location.origin}/s/${shareToken}?preview=1`
+    const features = `width=${device.width},height=${device.height},resizable=yes,scrollbars=yes`
+    window.open(url, "_blank", features)
+    onOpenChange(false)
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>选择试答设备</DialogTitle>
+          <DialogDescription>选择要模拟的设备类型开始试答</DialogDescription>
+        </DialogHeader>
+        <div className="grid grid-cols-3 gap-4 py-4">
+          {devices.map((device) => (
+            <button
+              key={device.type}
+              onClick={() => openPreview(device)}
+              className="flex flex-col items-center gap-3 rounded-lg border bg-card p-4 transition-colors hover:bg-accent hover:text-accent-foreground"
+            >
+              <device.icon className="h-8 w-8" />
+              <span className="text-sm font-medium">{device.label}</span>
+              <span className="text-xs text-muted-foreground">
+                {device.width}×{device.height}
+              </span>
+            </button>
+          ))}
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }
 

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { PlusCircle, Trash2, GripVertical } from "lucide-react"
 import { Label } from "@/components/ui/label"
 import { QuestionTitle } from "@/components/questions/question-title"
+import { QuestionTitleReadonly } from "@/components/questions/question-title-readonly"
 import {
   DndContext,
   DragEndEvent,
@@ -195,6 +196,50 @@ function SortableOption({
       >
         <Trash2 className="h-3.5 w-3.5 text-destructive" />
       </Button>
+    </div>
+  )
+}
+
+// 只读版本的拖拽选项（用于试答/发布）
+function SortableResponseOption({
+  opt,
+  idx,
+}: {
+  opt: { id: string; label: string }
+  idx: number
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: opt.id })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="relative flex items-center gap-3 rounded-lg border bg-card p-3 text-sm transition-all duration-200 hover:shadow-sm"
+    >
+      <div
+        {...attributes}
+        {...listeners}
+        className="flex h-6 w-6 shrink-0 cursor-grab items-center justify-center rounded hover:bg-muted active:cursor-grabbing"
+      >
+        <GripVertical className="h-4 w-4 text-muted-foreground" />
+      </div>
+      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-medium text-primary-foreground">
+        {idx + 1}
+      </div>
+      <span className="flex-1 truncate font-medium">{opt.label}</span>
     </div>
   )
 }
@@ -399,4 +444,81 @@ export const rankingDef: QuestionDef<RankingQuestion> = {
     )
   },
   QuestionCard,
+  Response: ({ question, order, showNumber = true, value, onChange }) => {
+    const { options } = question.config
+    const initialOrder = (value as string[]) || options.map((o) => o.id)
+    const [sortedOptions, setSortedOptions] = useState(() => {
+      // 根据 value 排序，如果没有 value 则保持原顺序
+      const ordered = initialOrder
+        .map((id) => options.find((o) => o.id === id))
+        .filter(Boolean) as typeof options
+      // 添加可能新增的选项
+      const remaining = options.filter((o) => !initialOrder.includes(o.id))
+      return [...ordered, ...remaining]
+    })
+    const [draggingId, setDraggingId] = useState<string | null>(null)
+
+    const handleDragStart = (event: DragStartEvent) => {
+      setDraggingId(event.active.id as string)
+    }
+
+    const handleDragEnd = (event: DragEndEvent) => {
+      const { active, over } = event
+      setDraggingId(null)
+
+      if (!over) return
+
+      const oldIndex = sortedOptions.findIndex((o) => o.id === active.id)
+      const newIndex = sortedOptions.findIndex((o) => o.id === over.id)
+
+      if (oldIndex === newIndex || oldIndex < 0 || newIndex < 0) return
+
+      const newOptions = arrayMove(sortedOptions, oldIndex, newIndex)
+      setSortedOptions(newOptions)
+      onChange?.(newOptions.map((o) => o.id))
+    }
+
+    return (
+      <div className="relative px-3 py-3">
+        <QuestionTitleReadonly
+          order={order}
+          showNumber={showNumber}
+          title={question.title}
+          description={question.description}
+          required={question.required}
+        />
+        <div className="mt-3 space-y-2">
+          <p className="text-sm text-muted-foreground">请拖拽选项进行排序</p>
+          <DndContext
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+            collisionDetection={closestCenter}
+          >
+            <SortableContext
+              items={sortedOptions.map((o) => o.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              {sortedOptions.map((opt, idx) => (
+                <SortableResponseOption key={opt.id} opt={opt} idx={idx} />
+              ))}
+            </SortableContext>
+            <DragOverlay>
+              {draggingId && (
+                <div className="flex items-center gap-3 rounded-lg border bg-background p-3 shadow-lg">
+                  <GripVertical className="h-4 w-4 text-muted-foreground" />
+                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-medium text-primary-foreground">
+                    {sortedOptions.findIndex((o) => o.id === draggingId) + 1}
+                  </div>
+                  <span className="text-sm font-medium">
+                    {sortedOptions.find((o) => o.id === draggingId)?.label ||
+                      ""}
+                  </span>
+                </div>
+              )}
+            </DragOverlay>
+          </DndContext>
+        </div>
+      </div>
+    )
+  },
 }

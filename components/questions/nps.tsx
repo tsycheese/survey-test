@@ -4,6 +4,7 @@ import { useState } from "react"
 import { cn } from "@/lib/utils"
 import type { QuestionDef, NPSQuestion } from "@/lib/questions/types"
 import { QuestionTitle } from "@/components/questions/question-title"
+import { QuestionTitleReadonly } from "@/components/questions/question-title-readonly"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 
@@ -201,4 +202,82 @@ export const npsDef: QuestionDef<NPSQuestion> = {
     )
   },
   QuestionCard,
+  Response: ({ question, order, showNumber = true, value, onChange }) => {
+    const {
+      max = 10,
+      lowLabel = "极不推荐",
+      highLabel = "极推荐",
+    } = question.config
+    const currentValue = (value as number) ?? null
+
+    const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      onChange?.(parseInt(e.target.value))
+    }
+
+    return (
+      <div className="relative px-3 py-3">
+        <QuestionTitleReadonly
+          order={order}
+          showNumber={showNumber}
+          title={question.title}
+          description={question.description}
+          required={question.required}
+        />
+        {/* 桌面端：按钮网格 */}
+        <div className="mt-4 hidden md:block">
+          <div className="grid grid-cols-11 gap-1">
+            {Array.from({ length: max + 1 }, (_, i) => i).map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => onChange?.(n)}
+                className={cn(
+                  "flex h-10 items-center justify-center rounded-md border text-sm font-medium transition-colors",
+                  currentValue === n
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "hover:border-primary"
+                )}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
+          <div className="mt-2 flex justify-between text-xs text-muted-foreground">
+            <span>{lowLabel}</span>
+            <span>{highLabel}</span>
+          </div>
+        </div>
+        {/* 移动端：滑块 */}
+        <div className="mt-6 md:hidden">
+          <div className="flex items-center justify-between text-sm text-muted-foreground">
+            <span>0</span>
+            <span className="text-lg font-semibold text-foreground">
+              {currentValue ?? "-"}
+            </span>
+            <span>{max}</span>
+          </div>
+          <div className="relative mt-2">
+            <input
+              type="range"
+              min={0}
+              max={max}
+              value={currentValue ?? 5}
+              onChange={handleSliderChange}
+              className="h-2 w-full cursor-pointer rounded-lg"
+              style={{
+                background:
+                  currentValue !== null
+                    ? `linear-gradient(to right, hsl(var(--primary)) 0%, hsl(var(--primary)) ${(currentValue / max) * 100}%, hsl(var(--muted)) ${(currentValue / max) * 100}%, hsl(var(--muted)) 100%)`
+                    : `hsl(var(--muted))`,
+              }}
+            />
+          </div>
+          <div className="mt-3 flex justify-between text-xs text-muted-foreground">
+            <span>{lowLabel}</span>
+            <span>{highLabel}</span>
+          </div>
+        </div>
+      </div>
+    )
+  },
 }

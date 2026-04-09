@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { PlusCircle, Trash2 } from "lucide-react"
 import { QuestionTitle } from "@/components/questions/question-title"
+import { QuestionTitleReadonly } from "@/components/questions/question-title-readonly"
 
 function QuestionCard({
   question,
@@ -178,4 +179,31 @@ export const dropdownDef: QuestionDef<DropdownQuestion> = {
     )
   },
   QuestionCard,
+  Response: ({ question, order, showNumber = true, value, onChange }) => {
+    const { options, placeholder = "请选择" } = question.config
+
+    return (
+      <div className="relative px-3 py-3">
+        <QuestionTitleReadonly
+          order={order}
+          showNumber={showNumber}
+          title={question.title}
+          description={question.description}
+          required={question.required}
+        />
+        <select
+          value={(value as string) || ""}
+          onChange={(e) => onChange?.(e.target.value)}
+          className="mt-3 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary"
+        >
+          <option value="">{placeholder}</option>
+          {options.map((opt) => (
+            <option key={opt.id} value={opt.label}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      </div>
+    )
+  },
 }

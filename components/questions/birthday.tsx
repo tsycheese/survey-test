@@ -1,8 +1,10 @@
 import { Calendar } from "lucide-react"
 import { nanoid } from "nanoid"
+import { useState } from "react"
 import type { QuestionDef, BirthdayQuestion } from "@/lib/questions/types"
 import { Label } from "@/components/ui/label"
 import { QuestionTitle } from "@/components/questions/question-title"
+import { QuestionTitleReadonly } from "@/components/questions/question-title-readonly"
 import {
   Select,
   SelectContent,
@@ -318,4 +320,131 @@ export const birthdayDef: QuestionDef<BirthdayQuestion> = {
     )
   },
   QuestionCard,
+  Response: ({ question, order, showNumber = true, value, onChange }) => {
+    const { format = "YYYY-MM-DD" } = question.config
+    const currentYear = new Date().getFullYear()
+    const years = Array.from({ length: 100 }, (_, i) => currentYear - i)
+    const months = Array.from({ length: 12 }, (_, i) => i + 1)
+    const days = Array.from({ length: 31 }, (_, i) => i + 1)
+
+    const handleChange = (field: string, fieldValue: string) => {
+      const currentValue =
+        (value as { year?: string; month?: string; day?: string }) || {}
+      onChange?.({ ...currentValue, [field]: fieldValue })
+    }
+
+    return (
+      <div className="relative px-3 py-3">
+        <QuestionTitleReadonly
+          order={order}
+          showNumber={showNumber}
+          title={question.title}
+          description={question.description}
+          required={question.required}
+        />
+        {format === "YYYY" && (
+          <div className="mt-3">
+            <Select
+              value={(value as { year?: string })?.year || ""}
+              onValueChange={(v) => handleChange("year", v)}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="请选择年份" />
+              </SelectTrigger>
+              <SelectContent>
+                {years.map((year) => (
+                  <SelectItem key={year} value={year.toString()}>
+                    {year}年
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+        {format === "MM-DD" && (
+          <div className="mt-3 flex gap-2">
+            <Select
+              value={(value as { month?: string })?.month || ""}
+              onValueChange={(v) => handleChange("month", v)}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="月" />
+              </SelectTrigger>
+              <SelectContent>
+                {months.map((month) => (
+                  <SelectItem key={month} value={month.toString()}>
+                    {month}月
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={(value as { day?: string })?.day || ""}
+              onValueChange={(v) => handleChange("day", v)}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="日" />
+              </SelectTrigger>
+              <SelectContent>
+                {days.map((day) => (
+                  <SelectItem key={day} value={day.toString()}>
+                    {day}日
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+        {format === "YYYY-MM-DD" && (
+          <div className="mt-3 flex gap-2">
+            <Select
+              value={(value as { year?: string })?.year || ""}
+              onValueChange={(v) => handleChange("year", v)}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="年" />
+              </SelectTrigger>
+              <SelectContent>
+                {years.map((year) => (
+                  <SelectItem key={year} value={year.toString()}>
+                    {year}年
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={(value as { month?: string })?.month || ""}
+              onValueChange={(v) => handleChange("month", v)}
+            >
+              <SelectTrigger className="w-[100px]">
+                <SelectValue placeholder="月" />
+              </SelectTrigger>
+              <SelectContent>
+                {months.map((month) => (
+                  <SelectItem key={month} value={month.toString()}>
+                    {month}月
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={(value as { day?: string })?.day || ""}
+              onValueChange={(v) => handleChange("day", v)}
+            >
+              <SelectTrigger className="w-[100px]">
+                <SelectValue placeholder="日" />
+              </SelectTrigger>
+              <SelectContent>
+                {days.map((day) => (
+                  <SelectItem key={day} value={day.toString()}>
+                    {day}日
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+      </div>
+    )
+  },
 }

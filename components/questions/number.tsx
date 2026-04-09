@@ -3,6 +3,7 @@ import { nanoid } from "nanoid"
 import type { QuestionDef, NumberQuestion } from "@/lib/questions/types"
 import { Input } from "@/components/ui/input"
 import { QuestionTitle } from "@/components/questions/question-title"
+import { QuestionTitleReadonly } from "@/components/questions/question-title-readonly"
 import { Label } from "@/components/ui/label"
 import { Input as UIInput } from "@/components/ui/input"
 
@@ -216,4 +217,41 @@ export const numberDef: QuestionDef<NumberQuestion> = {
     )
   },
   QuestionCard,
+  Response: ({ question, order, showNumber = true, value, onChange }) => {
+    const { placeholder, prefix, suffix, min, max, step = 1 } = question.config
+
+    return (
+      <div className="relative px-3 py-3">
+        <QuestionTitleReadonly
+          order={order}
+          showNumber={showNumber}
+          title={question.title}
+          description={question.description}
+          required={question.required}
+        />
+        <div className="mt-3 flex items-center gap-2">
+          {prefix && (
+            <span className="text-sm text-muted-foreground">{prefix}</span>
+          )}
+          <Input
+            type="number"
+            value={(value as number) ?? ""}
+            onChange={(e) =>
+              onChange?.(
+                e.target.value ? parseFloat(e.target.value) : undefined
+              )
+            }
+            placeholder={placeholder || "请输入数字"}
+            min={min}
+            max={max}
+            step={step}
+            className="h-10 flex-1 text-sm"
+          />
+          {suffix && (
+            <span className="text-sm text-muted-foreground">{suffix}</span>
+          )}
+        </div>
+      </div>
+    )
+  },
 }

@@ -9,6 +9,7 @@ import type {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { QuestionTitle } from "@/components/questions/question-title"
+import { QuestionTitleReadonly } from "@/components/questions/question-title-readonly"
 import {
   Select,
   SelectContent,
@@ -176,6 +177,44 @@ export const textDef: QuestionDef<TextQuestion> = {
           className="mt-3 h-10 text-sm"
           disabled
         />
+      </div>
+    )
+  },
+  Response: ({ question, order, showNumber = true, value, onChange }) => {
+    const { format = "any", placeholder } = question.config
+    const [error, setError] = useState("")
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const newValue = e.target.value
+      onChange(newValue)
+
+      if (newValue && !validateInput(newValue, format as TextFormat)) {
+        setError("格式不正确")
+      } else {
+        setError("")
+      }
+    }
+
+    return (
+      <div className="relative px-3 py-3">
+        <QuestionTitleReadonly
+          order={order}
+          showNumber={showNumber}
+          title={question.title}
+          description={question.description}
+          required={question.required}
+        />
+        <Input
+          type={format === "number" ? "number" : "text"}
+          placeholder={placeholder || getPlaceholder(format as TextFormat)}
+          value={(value as string) || ""}
+          onChange={handleChange}
+          className={cn(
+            "mt-3 h-10 text-sm",
+            error && "border-destructive focus-visible:ring-destructive"
+          )}
+        />
+        {error && <div className="mt-1 text-sm text-destructive">{error}</div>}
       </div>
     )
   },

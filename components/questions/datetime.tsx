@@ -1,7 +1,9 @@
 import { CalendarClock } from "lucide-react"
 import { nanoid } from "nanoid"
+import { useState } from "react"
 import type { QuestionDef, DateTimeQuestion } from "@/lib/questions/types"
 import { QuestionTitle } from "@/components/questions/question-title"
+import { QuestionTitleReadonly } from "@/components/questions/question-title-readonly"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { DatePicker } from "@/components/ui/date-picker"
@@ -440,4 +442,217 @@ export const dateTimeDef: QuestionDef<DateTimeQuestion> = {
     )
   },
   QuestionCard,
+  Response: ({ question, order, showNumber = true, value, onChange }) => {
+    const { format = "YYYY-MM-DD HH:mm", minDate, maxDate } = question.config
+
+    const showDate = format.includes("YYYY")
+    const showTime = format.includes("HH")
+    const showMonth = format.includes("MM")
+    const showDay = format.includes("DD")
+    const useDatePicker = showDate && showDay
+
+    const minYear = minDate ? new Date(minDate).getFullYear() : 1900
+    const maxYear = maxDate ? new Date(maxDate).getFullYear() : 2100
+
+    const hours = Array.from({ length: 24 }, (_, i) => i)
+    const minutes = Array.from({ length: 60 }, (_, i) => i)
+
+    // 解析当前值
+    const currentValue = value as
+      | {
+          date?: Date
+          year?: string
+          month?: string
+          day?: string
+          hour?: string
+          minute?: string
+        }
+      | undefined
+
+    const handleDateChange = (date: Date | undefined) => {
+      onChange?.({ ...currentValue, date })
+    }
+
+    const handleYearChange = (year: string) => {
+      onChange?.({ ...currentValue, year })
+    }
+
+    const handleMonthChange = (month: string) => {
+      onChange?.({ ...currentValue, month })
+    }
+
+    const handleDayChange = (day: string) => {
+      onChange?.({ ...currentValue, day })
+    }
+
+    const handleHourChange = (hour: string) => {
+      onChange?.({ ...currentValue, hour })
+    }
+
+    const handleMinuteChange = (minute: string) => {
+      onChange?.({ ...currentValue, minute })
+    }
+
+    return (
+      <div className="relative px-3 py-3">
+        <QuestionTitleReadonly
+          order={order}
+          showNumber={showNumber}
+          title={question.title}
+          description={question.description}
+          required={question.required}
+        />
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {useDatePicker ? (
+            <>
+              <DatePicker
+                placeholder="选择日期"
+                className="w-[200px]"
+                value={currentValue?.date}
+                onChange={handleDateChange}
+                minDate={minDate ? new Date(minDate) : undefined}
+                maxDate={maxDate ? new Date(maxDate) : undefined}
+              />
+              {showTime && (
+                <>
+                  <Select
+                    value={currentValue?.hour || ""}
+                    onValueChange={handleHourChange}
+                  >
+                    <SelectTrigger className="w-[80px]">
+                      <SelectValue placeholder="时" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {hours.map((hour) => (
+                        <SelectItem key={hour} value={hour.toString()}>
+                          {hour.toString().padStart(2, "0")}时
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <span className="text-muted-foreground">:</span>
+                  <Select
+                    value={currentValue?.minute || ""}
+                    onValueChange={handleMinuteChange}
+                  >
+                    <SelectTrigger className="w-[80px]">
+                      <SelectValue placeholder="分" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {minutes.map((minute) => (
+                        <SelectItem key={minute} value={minute.toString()}>
+                          {minute.toString().padStart(2, "0")}分
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              {showDate && (
+                <>
+                  <Select
+                    value={currentValue?.year || ""}
+                    onValueChange={handleYearChange}
+                  >
+                    <SelectTrigger className="w-[100px]">
+                      <SelectValue placeholder="年" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from(
+                        { length: maxYear - minYear + 1 },
+                        (_, i) => minYear + i
+                      ).map((year) => (
+                        <SelectItem key={year} value={year.toString()}>
+                          {year}年
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {showMonth && (
+                    <>
+                      <Select
+                        value={currentValue?.month || ""}
+                        onValueChange={handleMonthChange}
+                      >
+                        <SelectTrigger className="w-[80px]">
+                          <SelectValue placeholder="月" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Array.from({ length: 12 }, (_, i) => i + 1).map(
+                            (month) => (
+                              <SelectItem key={month} value={month.toString()}>
+                                {month.toString().padStart(2, "0")}月
+                              </SelectItem>
+                            )
+                          )}
+                        </SelectContent>
+                      </Select>
+                      {showDay && (
+                        <Select
+                          value={currentValue?.day || ""}
+                          onValueChange={handleDayChange}
+                        >
+                          <SelectTrigger className="w-[80px]">
+                            <SelectValue placeholder="日" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Array.from({ length: 31 }, (_, i) => i + 1).map(
+                              (day) => (
+                                <SelectItem key={day} value={day.toString()}>
+                                  {day.toString().padStart(2, "0")}日
+                                </SelectItem>
+                              )
+                            )}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+              {showTime && (
+                <>
+                  {showDate && <span className="text-muted-foreground"> </span>}
+                  <Select
+                    value={currentValue?.hour || ""}
+                    onValueChange={handleHourChange}
+                  >
+                    <SelectTrigger className="w-[80px]">
+                      <SelectValue placeholder="时" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {hours.map((hour) => (
+                        <SelectItem key={hour} value={hour.toString()}>
+                          {hour.toString().padStart(2, "0")}时
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <span className="text-muted-foreground">:</span>
+                  <Select
+                    value={currentValue?.minute || ""}
+                    onValueChange={handleMinuteChange}
+                  >
+                    <SelectTrigger className="w-[80px]">
+                      <SelectValue placeholder="分" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {minutes.map((minute) => (
+                        <SelectItem key={minute} value={minute.toString()}>
+                          {minute.toString().padStart(2, "0")}分
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    )
+  },
 }

@@ -1,8 +1,11 @@
 import { User } from "lucide-react"
 import { nanoid } from "nanoid"
+import { useState } from "react"
 import type { QuestionDef, GenderQuestion } from "@/lib/questions/types"
 import { Label } from "@/components/ui/label"
 import { QuestionTitle } from "@/components/questions/question-title"
+import { QuestionTitleReadonly } from "@/components/questions/question-title-readonly"
+import { cn } from "@/lib/utils"
 
 function QuestionCard({
   question,
@@ -142,4 +145,59 @@ export const genderDef: QuestionDef<GenderQuestion> = {
     )
   },
   QuestionCard,
+  Response: ({ question, order, showNumber = true, value, onChange }) => {
+    const { options = [] } = question.config
+
+    const defaultOptions =
+      options.length > 0
+        ? options
+        : [
+            { id: "male", label: "男" },
+            { id: "female", label: "女" },
+            { id: "other", label: "其他" },
+          ]
+
+    return (
+      <div className="relative px-3 py-3">
+        <QuestionTitleReadonly
+          order={order}
+          showNumber={showNumber}
+          title={question.title}
+          description={question.description}
+          required={question.required}
+        />
+        <div className="mt-3 space-y-2">
+          {defaultOptions.map((opt) => (
+            <label
+              key={opt.id}
+              className={cn(
+                "flex cursor-pointer items-center gap-3 rounded-lg border bg-card p-3 text-sm transition-colors",
+                value === opt.id
+                  ? "border-primary bg-primary/5"
+                  : "hover:bg-muted/50"
+              )}
+            >
+              <div
+                className={cn(
+                  "h-4 w-4 shrink-0 rounded-full border",
+                  value === opt.id
+                    ? "border-primary bg-primary"
+                    : "border-primary/50"
+                )}
+              />
+              <input
+                type="radio"
+                name={`gender-${question.id}`}
+                value={opt.id}
+                checked={value === opt.id}
+                onChange={() => onChange?.(opt.id)}
+                className="sr-only"
+              />
+              <span className="font-medium">{opt.label}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+    )
+  },
 }

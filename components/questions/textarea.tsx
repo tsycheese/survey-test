@@ -3,6 +3,7 @@ import { nanoid } from "nanoid"
 import type { QuestionDef, TextareaQuestion } from "@/lib/questions/types"
 import { Textarea } from "@/components/ui/textarea"
 import { QuestionTitle } from "@/components/questions/question-title"
+import { QuestionTitleReadonly } from "@/components/questions/question-title-readonly"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
@@ -178,4 +179,38 @@ export const textareaDef: QuestionDef<TextareaQuestion> = {
     )
   },
   QuestionCard,
+  Response: ({ question, order, showNumber = true, value, onChange }) => {
+    const { placeholder, maxLength, rows = 2 } = question.config
+
+    return (
+      <div className="relative px-3 py-3">
+        <QuestionTitleReadonly
+          order={order}
+          showNumber={showNumber}
+          title={question.title}
+          description={question.description}
+          required={question.required}
+        />
+        <Textarea
+          value={(value as string) || ""}
+          onChange={(e) => onChange?.(e.target.value)}
+          placeholder={placeholder || "请输入"}
+          rows={rows}
+          maxLength={maxLength}
+          className={cn(
+            "mt-3 w-full resize-none",
+            rows === 1 && "!h-10 !min-h-10"
+          )}
+          style={
+            rows > 1 ? { minHeight: `${40 + (rows - 1) * 20}px` } : undefined
+          }
+        />
+        {maxLength && (
+          <div className="mt-1 text-right text-xs text-muted-foreground">
+            {((value as string) || "").length} / {maxLength}
+          </div>
+        )}
+      </div>
+    )
+  },
 }

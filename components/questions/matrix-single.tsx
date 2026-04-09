@@ -1,5 +1,6 @@
 import { Table } from "lucide-react"
 import { nanoid } from "nanoid"
+import { useState } from "react"
 import { cn } from "@/lib/utils"
 import type { QuestionDef, MatrixSingleQuestion } from "@/lib/questions/types"
 import { Input } from "@/components/ui/input"
@@ -7,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { PlusCircle, Trash2 } from "lucide-react"
 import { Label } from "@/components/ui/label"
 import { QuestionTitle } from "@/components/questions/question-title"
+import { QuestionTitleReadonly } from "@/components/questions/question-title-readonly"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 
 function QuestionCard({
@@ -299,4 +301,137 @@ export const matrixSingleDef: QuestionDef<MatrixSingleQuestion> = {
     )
   },
   QuestionCard,
+  Response: ({ question, order, showNumber = true, value, onChange }) => {
+    const { rows, columns } = question.config
+    const selectedValues = (value as Record<string, string>) || {}
+
+    const handleSelect = (rowId: string, columnId: string) => {
+      onChange?.({ ...selectedValues, [rowId]: columnId })
+    }
+
+    return (
+      <div className="relative px-3 py-3">
+        <QuestionTitleReadonly
+          order={order}
+          showNumber={showNumber}
+          title={question.title}
+          description={question.description}
+          required={question.required}
+        />
+        {/* 桌面端：表格布局 */}
+        <div className="mt-4 hidden overflow-hidden rounded-lg border md:block">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b bg-muted/50">
+                <th className="w-[150px] border-r border-border p-3"></th>
+                {columns.map((col) => (
+                  <th
+                    key={col.id}
+                    className="border-r border-border p-3 text-center text-sm font-medium last:border-r-0"
+                  >
+                    {col.label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, rowIdx) => (
+                <tr
+                  key={row.id}
+                  className={cn(
+                    "border-b last:border-b-0",
+                    rowIdx % 2 === 0 ? "bg-card" : "bg-card/50"
+                  )}
+                >
+                  <td className="border-r border-border p-3 text-sm font-medium">
+                    {row.label}
+                  </td>
+                  {columns.map((col) => {
+                    const isSelected = selectedValues[row.id] === col.id
+                    return (
+                      <td
+                        key={col.id}
+                        className="border-r border-border p-3 text-center last:border-r-0"
+                      >
+                        <label className="inline-flex cursor-pointer items-center justify-center align-middle">
+                          <input
+                            type="radio"
+                            name={`matrix-${question.id}-${row.id}`}
+                            value={col.id}
+                            checked={isSelected}
+                            onChange={() => handleSelect(row.id, col.id)}
+                            className="sr-only"
+                          />
+                          <div className="relative h-5 w-5">
+                            <div
+                              className={cn(
+                                "absolute inset-0 rounded-full border transition-colors",
+                                isSelected
+                                  ? "border-primary bg-primary"
+                                  : "border-primary/50 hover:border-primary"
+                              )}
+                            />
+                            {isSelected && (
+                              <div className="absolute inset-0 flex items-center justify-center">
+                                <div className="h-2 w-2 rounded-full bg-white" />
+                              </div>
+                            )}
+                          </div>
+                        </label>
+                      </td>
+                    )
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {/* 移动端：卡片式纵向布局 */}
+        <div className="mt-4 space-y-3 md:hidden">
+          {rows.map((row) => (
+            <div key={row.id} className="rounded-lg border bg-card p-4">
+              <div className="mb-3 text-sm font-medium">{row.label}</div>
+              <div className="space-y-2">
+                {columns.map((col) => {
+                  const isSelected = selectedValues[row.id] === col.id
+                  return (
+                    <label
+                      key={col.id}
+                      className={cn(
+                        "flex cursor-pointer items-center gap-3 rounded-md border p-3 transition-all",
+                        isSelected
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:border-primary/50"
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors",
+                          isSelected
+                            ? "border-primary bg-primary"
+                            : "border-primary/50"
+                        )}
+                      >
+                        {isSelected && (
+                          <div className="h-2 w-2 rounded-full bg-white" />
+                        )}
+                      </div>
+                      <input
+                        type="radio"
+                        name={`matrix-${question.id}-${row.id}`}
+                        checked={isSelected}
+                        onChange={() => handleSelect(row.id, col.id)}
+                        className="sr-only"
+                      />
+                      <span className="text-sm">{col.label}</span>
+                    </label>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  },
 }

@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils"
 import type { QuestionDef, SingleChoiceQuestion } from "@/lib/questions/types"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { PlusCircle, Trash2 } from "lucide-react"
+import { PlusCircle, Trash2, Check } from "lucide-react"
 import {
   Select,
   SelectContent,
@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { QuestionTitle } from "@/components/questions/question-title"
+import { QuestionTitleReadonly } from "@/components/questions/question-title-readonly"
 
 function QuestionCard({
   question,
@@ -344,4 +345,62 @@ export const singleChoiceDef: QuestionDef<SingleChoiceQuestion> = {
     )
   },
   QuestionCard,
+  Response: ({ question, order, showNumber = true, value, onChange }) => {
+    const { options, columns = 1 } = question.config
+    const selectedValue = value as string | undefined
+
+    return (
+      <div className="relative px-3 py-3">
+        <QuestionTitleReadonly
+          order={order}
+          showNumber={showNumber}
+          title={question.title}
+          description={question.description}
+          required={question.required}
+        />
+
+        <div className="relative mt-3">
+          <div
+            className="grid gap-2"
+            style={{
+              gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+            }}
+          >
+            {options.map((opt) => {
+              const isSelected = selectedValue === opt.label
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => onChange(opt.label)}
+                  className={cn(
+                    "relative flex items-center gap-3 rounded-lg border p-3 text-left text-sm transition-all duration-200",
+                    isSelected
+                      ? "border-primary bg-primary/5 shadow-sm"
+                      : "border-border bg-card hover:border-primary/50 hover:shadow-sm"
+                  )}
+                >
+                  <div
+                    className={cn(
+                      "h-4 w-4 shrink-0 rounded-full border transition-colors",
+                      isSelected
+                        ? "border-primary bg-primary"
+                        : "border-primary/50"
+                    )}
+                  >
+                    {isSelected && (
+                      <div className="flex h-full w-full items-center justify-center">
+                        <div className="h-1.5 w-1.5 rounded-full bg-white" />
+                      </div>
+                    )}
+                  </div>
+                  <span className="truncate font-medium">{opt.label}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+    )
+  },
 }

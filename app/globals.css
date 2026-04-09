@@ -150,4 +150,5 @@
   .dark ::-webkit-scrollbar-thumb:hover {
     background: oklch(1 0 0 / 55%);
   }
+
 }

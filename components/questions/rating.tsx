@@ -1,9 +1,12 @@
 import { Star } from "lucide-react"
 import { nanoid } from "nanoid"
+import { useState } from "react"
 import type { QuestionDef, RatingQuestion } from "@/lib/questions/types"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { QuestionTitle } from "@/components/questions/question-title"
+import { QuestionTitleReadonly } from "@/components/questions/question-title-readonly"
+import { cn } from "@/lib/utils"
 
 export const ratingDef: QuestionDef<RatingQuestion> = {
   type: "RATING",
@@ -132,6 +135,57 @@ export const ratingDef: QuestionDef<RatingQuestion> = {
             {Array.from({ length: max ?? 5 }, (_, i) => (
               <Star key={i} className="h-4 w-4 text-muted-foreground" />
             ))}
+          </div>
+          {maxLabel && (
+            <span className="text-xs text-muted-foreground">{maxLabel}</span>
+          )}
+        </div>
+      </div>
+    )
+  },
+  Response: ({ question, order, showNumber = true, value, onChange }) => {
+    const { min, max, minLabel, maxLabel } = question.config
+    const [hoverValue, setHoverValue] = useState<number | null>(null)
+
+    return (
+      <div className="relative px-3 py-3">
+        <QuestionTitleReadonly
+          order={order}
+          showNumber={showNumber}
+          title={question.title}
+          description={question.description}
+          required={question.required}
+        />
+        <div className="mt-3 flex items-center gap-2">
+          {minLabel && (
+            <span className="text-xs text-muted-foreground">{minLabel}</span>
+          )}
+          <div className="flex items-center gap-1">
+            {Array.from({ length: max ?? 5 }, (_, i) => {
+              const starValue = i + 1
+              const isFilled =
+                (hoverValue !== null ? hoverValue : (value as number) || 0) >=
+                starValue
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => onChange?.(starValue)}
+                  onMouseEnter={() => setHoverValue(starValue)}
+                  onMouseLeave={() => setHoverValue(null)}
+                  className="p-1 transition-colors"
+                >
+                  <Star
+                    className={cn(
+                      "h-6 w-6",
+                      isFilled
+                        ? "fill-yellow-400 text-yellow-400"
+                        : "text-muted-foreground"
+                    )}
+                  />
+                </button>
+              )
+            })}
           </div>
           {maxLabel && (
             <span className="text-xs text-muted-foreground">{maxLabel}</span>

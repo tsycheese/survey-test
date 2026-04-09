@@ -4,6 +4,7 @@ import type { QuestionDef, NameQuestion } from "@/lib/questions/types"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { QuestionTitle } from "@/components/questions/question-title"
+import { QuestionTitleReadonly } from "@/components/questions/question-title-readonly"
 import { Switch } from "@/components/ui/switch"
 
 function QuestionCard({
@@ -166,4 +167,65 @@ export const nameDef: QuestionDef<NameQuestion> = {
     )
   },
   QuestionCard,
+  Response: ({ question, order, showNumber = true, value, onChange }) => {
+    const {
+      placeholder = "请输入姓名",
+      firstName = false,
+      lastName = false,
+    } = question.config
+
+    const handleChange = (field: string, fieldValue: string) => {
+      const currentValue =
+        (value as {
+          firstName?: string
+          lastName?: string
+          fullName?: string
+        }) || {}
+      onChange?.({ ...currentValue, [field]: fieldValue })
+    }
+
+    return (
+      <div className="relative px-3 py-3">
+        <QuestionTitleReadonly
+          order={order}
+          showNumber={showNumber}
+          title={question.title}
+          description={question.description}
+          required={question.required}
+        />
+        <div className="mt-3 space-y-3">
+          {firstName && (
+            <div className="space-y-2">
+              <Label className="text-sm">名</Label>
+              <Input
+                value={(value as { firstName?: string })?.firstName || ""}
+                onChange={(e) => handleChange("firstName", e.target.value)}
+                placeholder={placeholder || "请输入名"}
+              />
+            </div>
+          )}
+          {lastName && (
+            <div className="space-y-2">
+              <Label className="text-sm">姓</Label>
+              <Input
+                value={(value as { lastName?: string })?.lastName || ""}
+                onChange={(e) => handleChange("lastName", e.target.value)}
+                placeholder={placeholder || "请输入姓"}
+              />
+            </div>
+          )}
+          {!firstName && !lastName && (
+            <div className="space-y-2">
+              <Label className="text-sm">姓名</Label>
+              <Input
+                value={(value as { fullName?: string })?.fullName || ""}
+                onChange={(e) => handleChange("fullName", e.target.value)}
+                placeholder={placeholder || "请输入姓名"}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  },
 }

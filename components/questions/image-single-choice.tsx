@@ -9,7 +9,7 @@ import type {
 } from "@/lib/questions/types"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { PlusCircle, Trash2, Upload, X } from "lucide-react"
+import { PlusCircle, Trash2, Upload, X, Check } from "lucide-react"
 import {
   Select,
   SelectContent,
@@ -20,6 +20,7 @@ import {
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { QuestionTitle } from "@/components/questions/question-title"
+import { QuestionTitleReadonly } from "@/components/questions/question-title-readonly"
 import { Textarea } from "@/components/ui/textarea"
 import {
   uploadToCloudinary,
@@ -825,4 +826,80 @@ export const imageSingleChoiceDef: QuestionDef<ImageSingleChoiceQuestion> = {
     )
   },
   QuestionCard,
+  Response: ({ question, order, showNumber = true, value, onChange }) => {
+    const {
+      options,
+      columns = 2,
+      showTitles = true,
+      showLabels = true,
+      aspectRatio = "3:4",
+    } = question.config
+
+    return (
+      <div className="relative px-3 py-3">
+        <QuestionTitleReadonly
+          order={order}
+          showNumber={showNumber}
+          title={question.title}
+          description={question.description}
+          required={question.required}
+        />
+        <div
+          className="mt-3 grid gap-4"
+          style={{
+            gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+          }}
+        >
+          {options.map((opt) => (
+            <div
+              key={opt.id}
+              onClick={() => onChange?.(opt.id)}
+              className={cn(
+                "cursor-pointer overflow-hidden rounded-lg border transition-all",
+                value === opt.id
+                  ? "border-2 border-primary ring-2 ring-primary/20"
+                  : "border-border hover:border-primary/50"
+              )}
+            >
+              <div
+                className={cn(
+                  "relative bg-muted",
+                  getAspectRatioClass(aspectRatio)
+                )}
+              >
+                {opt.imageUrl ? (
+                  <img
+                    src={opt.imageUrl}
+                    alt={opt.title || opt.label}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+                    <Image className="h-8 w-8" />
+                  </div>
+                )}
+                {value === opt.id && (
+                  <div className="absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                    <Check className="h-4 w-4" />
+                  </div>
+                )}
+              </div>
+              {(showTitles || showLabels) && (
+                <div className="p-3 text-center">
+                  {showTitles && opt.title && (
+                    <div className="font-medium">{opt.title}</div>
+                  )}
+                  {showLabels && opt.label && (
+                    <div className="text-sm text-muted-foreground">
+                      {opt.label}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  },
 }

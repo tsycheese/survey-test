@@ -313,6 +313,13 @@ export type QuestionDef<Q extends Question = Question> = {
     onDescriptionBlur?: (description: string) => void
     onOptionChange?: (question: Q) => void
   }>
+  Response: React.FC<{
+    question: Q
+    order: number
+    showNumber?: boolean
+    value: unknown
+    onChange: (value: unknown) => void
+  }>
 }
 
 export type SurveySettings = {

@@ -1,49 +1,16 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useParams } from "next/navigation"
+import { useParams, useSearchParams } from "next/navigation"
 import { toast } from "sonner"
-
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card"
-
-type QuestionType = "SINGLE_CHOICE" | "MULTIPLE_CHOICE" | "TEXT" | "RATING"
-
-type QuestionConfig = {
-  options?: { id: string; label: string }[]
-  placeholder?: string
-  multiline?: boolean
-  min?: number
-  max?: number
-  minLabel?: string
-  maxLabel?: string
-}
-
-type Question = {
-  id: string
-  title: string
-  type: QuestionType
-  order: number
-  required: boolean
-  config: QuestionConfig | null
-}
-
-type Survey = {
-  id: string
-  title: string
-  description: string | null
-  questions: Question[]
-}
+import { getQuestionDef } from "@/lib/questions/registry"
+import type { Question, Survey } from "@/lib/questions/types"
 
 export default function PublicSurveyPage() {
   const { token } = useParams<{ token: string }>()
+  const searchParams = useSearchParams()
+  const isPreview = searchParams.get("preview") === "1"
   const [survey, setSurvey] = useState<Survey | null>(null)
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
@@ -52,17 +19,21 @@ export default function PublicSurveyPage() {
   const [answers, setAnswers] = useState<Record<string, unknown>>({})
 
   useEffect(() => {
-    fetch(`/api/s/${token}`).then(async (r) => {
+    const url = isPreview ? `/api/s/${token}?preview=1` : `/api/s/${token}`
+    fetch(url).then(async (r) => {
       if (!r.ok) {
         setNotFound(true)
         setLoading(false)
         return
       }
       const data = await r.json()
-      setSurvey(data)
+      setSurvey({
+        ...data,
+        settings: data.settings ?? { showQuestionNumber: true },
+      })
       setLoading(false)
     })
-  }, [token])
+  }, [token, isPreview])
 
   function setAnswer(questionId: string, value: unknown) {
     setAnswers((prev) => ({ ...prev, [questionId]: value }))
@@ -87,6 +58,16 @@ export default function PublicSurveyPage() {
     }
 
     setSubmitting(true)
+
+    // 预览模式：前端模拟提交
+    if (isPreview) {
+      await new Promise((resolve) => setTimeout(resolve, 500))
+      setSubmitted(true)
+      setSubmitting(false)
+      return
+    }
+
+    // 真实提交
     const res = await fetch(`/api/s/${token}/submit`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -115,146 +96,102 @@ export default function PublicSurveyPage() {
     )
   if (submitted)
     return (
-      <div className="flex min-h-svh items-center justify-center">
+      <div className="flex min-h-svh items-center justify-center bg-muted/30">
         <div className="text-center">
           <h2 className="text-2xl font-bold">提交成功！</h2>
           <p className="mt-2 text-muted-foreground">感谢你的参与</p>
+          {isPreview && (
+            <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-900 dark:bg-amber-950">
+              <p className="text-sm text-amber-800 dark:text-amber-200">
+                试答模式：数据未保存到服务器
+              </p>
+            </div>
+          )}
         </div>
       </div>
     )
 
   return (
-    <div className="min-h-svh bg-muted/30 p-6">
-      <div className="mx-auto max-w-xl">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold">{survey!.title}</h1>
-          {survey!.description && (
-            <p className="mt-1 text-muted-foreground">{survey!.description}</p>
-          )}
-        </div>
+    <div className="min-h-svh bg-muted/30 px-6 py-8">
+      <div className="mx-auto max-w-[800px]">
+        {/* 问卷纸张 - 使用编辑器画布样式 */}
+        <div className="rounded-sm bg-background shadow-[0_4px_24px_rgba(0,0,0,0.10)] ring-1 ring-border">
+          {/* 顶部色条 */}
+          <div className="h-2 rounded-t-sm bg-primary" />
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {survey!.questions.map((q, index) => (
-            <Card key={q.id}>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">
-                  {index + 1}. {q.title}
-                  {q.required && (
-                    <span className="ml-1 text-destructive">*</span>
-                  )}
-                </CardTitle>
-                {q.type === "MULTIPLE_CHOICE" && (
-                  <CardDescription>可多选</CardDescription>
-                )}
-              </CardHeader>
-              <CardContent>
-                <QuestionInput
+          <form onSubmit={handleSubmit}>
+            {/* 标题区 */}
+            <div className="border-b border-dashed border-border p-8">
+              <h1 className="text-2xl font-bold tracking-tight">
+                {survey!.title}
+              </h1>
+              {survey!.description && (
+                <p className="mt-2 text-muted-foreground">
+                  {survey!.description}
+                </p>
+              )}
+            </div>
+
+            {/* 题目列表 */}
+            <div className="divide-y divide-dashed divide-border">
+              {survey!.questions.map((q, index) => (
+                <ResponseQuestionCard
+                  key={q.id}
                   question={q}
+                  index={index}
+                  showNumber={survey!.settings?.showQuestionNumber ?? true}
                   value={answers[q.id]}
                   onChange={(v) => setAnswer(q.id, v)}
                 />
-              </CardContent>
-            </Card>
-          ))}
+              ))}
+            </div>
 
-          <Button type="submit" className="w-full" disabled={submitting}>
-            {submitting ? "提交中..." : "提交"}
-          </Button>
-        </form>
+            {/* 提交按钮区 */}
+            <div className="border-t border-dashed border-border p-8">
+              <Button
+                type="submit"
+                className="w-full"
+                size="lg"
+                disabled={submitting}
+              >
+                {submitting ? "提交中..." : "提交"}
+              </Button>
+            </div>
+          </form>
+        </div>
+
+        {/* 底部留白 */}
+        <div className="h-8" />
       </div>
     </div>
   )
 }
 
-function QuestionInput({
+function ResponseQuestionCard({
   question,
+  index,
+  showNumber,
   value,
   onChange,
 }: {
   question: Question
+  index: number
+  showNumber: boolean
   value: unknown
   onChange: (v: unknown) => void
 }) {
-  const { type } = question
-  const options = question.config?.options ?? []
+  const def = getQuestionDef(question.type)
+  const ResponseComponent = def.Response
 
-  if (type === "TEXT") {
-    return (
-      <Input
-        placeholder="请输入你的回答"
-        value={String(value ?? "")}
-        onChange={(e) => onChange(e.target.value)}
-      />
-    )
-  }
-
-  if (type === "RATING") {
-    const current = Number(value) || 0
-    return (
-      <div className="flex gap-2">
-        {[1, 2, 3, 4, 5].map((star) => (
-          <button
-            key={star}
-            type="button"
-            onClick={() => onChange(star)}
-            className={`h-10 w-10 rounded-full border text-sm font-medium transition-colors ${
-              current === star
-                ? "border-primary bg-primary text-primary-foreground"
-                : "border-border hover:border-primary"
-            }`}
-          >
-            {star}
-          </button>
-        ))}
-      </div>
-    )
-  }
-
-  if (type === "SINGLE_CHOICE") {
-    return (
-      <div className="space-y-2">
-        {options.map((opt) => (
-          <label
-            key={opt.id}
-            className="flex cursor-pointer items-center gap-2 text-sm"
-          >
-            <input
-              type="radio"
-              name={question.id}
-              value={opt.label}
-              checked={value === opt.label}
-              onChange={() => onChange(opt.label)}
-            />
-            {opt.label}
-          </label>
-        ))}
-      </div>
-    )
-  }
-
-  // MULTIPLE_CHOICE
-  const selected = Array.isArray(value) ? (value as string[]) : []
   return (
-    <div className="space-y-2">
-      {options.map((opt) => (
-        <label
-          key={opt.id}
-          className="flex cursor-pointer items-center gap-2 text-sm"
-        >
-          <input
-            type="checkbox"
-            checked={selected.includes(opt.label)}
-            onChange={(e) => {
-              if (e.target.checked) {
-                onChange([...selected, opt.label])
-              } else {
-                onChange(selected.filter((s) => s !== opt.label))
-              }
-            }}
-          />
-          {opt.label}
-        </label>
-      ))}
+    <div className="px-8 py-4">
+      <ResponseComponent
+        question={question}
+        order={index + 1}
+        showNumber={showNumber}
+        value={value}
+        onChange={onChange}
+      />
     </div>
   )
 }

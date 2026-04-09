@@ -4,6 +4,7 @@ import { useState } from "react"
 import { cn } from "@/lib/utils"
 import type { QuestionDef, CESQuestion } from "@/lib/questions/types"
 import { QuestionTitle } from "@/components/questions/question-title"
+import { QuestionTitleReadonly } from "@/components/questions/question-title-readonly"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 
@@ -200,4 +201,46 @@ export const cesDef: QuestionDef<CESQuestion> = {
     )
   },
   QuestionCard,
+  Response: ({ question, order, showNumber = true, value, onChange }) => {
+    const {
+      max = 5,
+      lowLabel = "非常困难",
+      highLabel = "非常容易",
+    } = question.config
+
+    return (
+      <div className="relative px-3 py-3">
+        <QuestionTitleReadonly
+          order={order}
+          showNumber={showNumber}
+          title={question.title}
+          description={question.description}
+          required={question.required}
+        />
+        <div className="mt-4">
+          <div className="grid grid-cols-5 gap-2">
+            {Array.from({ length: max }, (_, i) => i + 1).map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => onChange?.(n)}
+                className={cn(
+                  "rounded-md border px-4 py-3 text-sm font-medium transition-colors",
+                  value === n
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "hover:border-primary"
+                )}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
+          <div className="mt-2 flex justify-between text-xs text-muted-foreground">
+            <span>{lowLabel}</span>
+            <span>{highLabel}</span>
+          </div>
+        </div>
+      </div>
+    )
+  },
 }

@@ -3,6 +3,7 @@ import { nanoid } from "nanoid"
 import type { QuestionDef, EmailQuestion } from "@/lib/questions/types"
 import { Input } from "@/components/ui/input"
 import { QuestionTitle } from "@/components/questions/question-title"
+import { QuestionTitleReadonly } from "@/components/questions/question-title-readonly"
 import { Label } from "@/components/ui/label"
 import { Input as UIInput } from "@/components/ui/input"
 
@@ -92,4 +93,26 @@ export const emailDef: QuestionDef<EmailQuestion> = {
     )
   },
   QuestionCard,
+  Response: ({ question, order, showNumber = true, value, onChange }) => {
+    const { placeholder = "请输入邮箱地址" } = question.config
+
+    return (
+      <div className="relative px-3 py-3">
+        <QuestionTitleReadonly
+          order={order}
+          showNumber={showNumber}
+          title={question.title}
+          description={question.description}
+          required={question.required}
+        />
+        <Input
+          type="email"
+          value={(value as string) || ""}
+          onChange={(e) => onChange?.(e.target.value)}
+          placeholder={placeholder}
+          className="mt-3"
+        />
+      </div>
+    )
+  },
 }

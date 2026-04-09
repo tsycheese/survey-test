@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { QuestionTitle } from "@/components/questions/question-title"
+import { QuestionTitleReadonly } from "@/components/questions/question-title-readonly"
 
 function QuestionCard({
   question,
@@ -359,4 +360,80 @@ export const multipleChoiceDef: QuestionDef<MultipleChoiceQuestion> = {
     )
   },
   QuestionCard,
+  Response: ({ question, order, showNumber = true, value, onChange }) => {
+    const { options, columns = 1 } = question.config
+    const selectedValues = (value as string[]) || []
+
+    const toggleOption = (label: string) => {
+      if (selectedValues.includes(label)) {
+        onChange(selectedValues.filter((v) => v !== label))
+      } else {
+        onChange([...selectedValues, label])
+      }
+    }
+
+    return (
+      <div className="relative px-3 py-3">
+        <QuestionTitleReadonly
+          order={order}
+          showNumber={showNumber}
+          title={question.title}
+          description={question.description}
+          required={question.required}
+        />
+
+        <div className="relative mt-3">
+          <div
+            className="grid gap-2"
+            style={{
+              gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+            }}
+          >
+            {options.map((opt) => {
+              const isSelected = selectedValues.includes(opt.label)
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => toggleOption(opt.label)}
+                  className={cn(
+                    "relative flex items-center gap-3 rounded-lg border p-3 text-left text-sm transition-all duration-200",
+                    isSelected
+                      ? "border-primary bg-primary/5 shadow-sm"
+                      : "border-border bg-card hover:border-primary/50 hover:shadow-sm"
+                  )}
+                >
+                  <div
+                    className={cn(
+                      "flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border transition-colors",
+                      isSelected
+                        ? "border-primary bg-primary"
+                        : "border-primary/50"
+                    )}
+                  >
+                    {isSelected && (
+                      <svg
+                        className="h-3 w-3 text-white"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={3}
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M5 13l4 4L19 7"
+                        />
+                      </svg>
+                    )}
+                  </div>
+                  <span className="truncate font-medium">{opt.label}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+    )
+  },
 }
