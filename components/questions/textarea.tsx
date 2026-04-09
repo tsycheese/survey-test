@@ -5,6 +5,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { QuestionTitle } from "@/components/questions/question-title"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
+import { cn } from "@/lib/utils"
 
 function QuestionCard({
   question,
@@ -21,7 +22,7 @@ function QuestionCard({
   onTitleBlur?: (title: string) => void
   onOptionChange?: (question: TextareaQuestion) => void
 }) {
-  const { placeholder, maxLength, rows = 4 } = question.config
+  const { placeholder, maxLength, rows = 2 } = question.config
 
   return (
     <div className="relative px-3 py-3">
@@ -37,7 +38,13 @@ function QuestionCard({
       <Textarea
         placeholder={placeholder || "请输入"}
         rows={rows}
-        className="mt-3 w-full resize-none"
+        className={cn(
+          "mt-3 w-full resize-none",
+          rows === 1 && "!h-10 !min-h-10"
+        )}
+        style={
+          rows > 1 ? { minHeight: `${40 + (rows - 1) * 20}px` } : undefined
+        }
         disabled
       />
       {maxLength && (
@@ -63,18 +70,21 @@ export const textareaDef: QuestionDef<TextareaQuestion> = {
     config: {
       placeholder: "请输入",
       maxLength: 500,
-      rows: 4,
+      rows: 2,
     },
   }),
   Canvas: ({ question }) => {
-    const { placeholder, maxLength, rows = 4 } = question.config
+    const { placeholder, maxLength, rows = 2 } = question.config
 
     return (
       <>
         <Textarea
           placeholder={placeholder || "请输入"}
           rows={rows}
-          className="w-full resize-none"
+          className={cn("w-full resize-none", rows === 1 && "!h-10 !min-h-10")}
+          style={
+            rows > 1 ? { minHeight: `${40 + (rows - 1) * 20}px` } : undefined
+          }
         />
         {maxLength && (
           <div className="mt-1 text-right text-xs text-muted-foreground">
@@ -112,7 +122,7 @@ export const textareaDef: QuestionDef<TextareaQuestion> = {
           <Label className="text-xs text-muted-foreground">行数</Label>
           <Input
             type="number"
-            min={2}
+            min={1}
             max={20}
             value={rows}
             onChange={(e) =>
@@ -120,7 +130,7 @@ export const textareaDef: QuestionDef<TextareaQuestion> = {
                 ...question,
                 config: {
                   ...question.config,
-                  rows: parseInt(e.target.value) || 4,
+                  rows: parseInt(e.target.value) || 2,
                 },
               })
             }
