@@ -4,6 +4,7 @@ export type BaseQuestion = {
   id: string
   type: string
   title: string
+  description?: string
   required: boolean
   order: number
 }
