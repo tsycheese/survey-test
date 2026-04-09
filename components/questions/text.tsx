@@ -83,7 +83,7 @@ export const textDef: QuestionDef<TextQuestion> = {
           value={value}
           onChange={handleChange}
           className={cn(
-            "mt-3 h-10 text-base",
+            "mt-3 h-10 text-sm",
             error && "border-destructive focus-visible:ring-destructive"
           )}
           disabled
@@ -168,7 +168,7 @@ export const textDef: QuestionDef<TextQuestion> = {
         <Input
           type={format === "number" ? "number" : "text"}
           placeholder={placeholder || getPlaceholder(format as TextFormat)}
-          className="mt-3 h-10 text-base"
+          className="mt-3 h-10 text-sm"
           disabled
         />
       </div>
