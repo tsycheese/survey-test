@@ -23,18 +23,25 @@ export const ratingDef: QuestionDef<RatingQuestion> = {
       maxLabel: "",
     },
   }),
-  Canvas: ({ question }) => (
-    <div className="mt-3 flex items-center gap-1">
-      {Array.from({ length: question.config.max }, (_, i) => (
-        <Star key={i} className="h-4 w-4 text-muted-foreground" />
-      ))}
-      {question.config.minLabel && (
-        <span className="ml-2 text-xs text-muted-foreground">
-          {question.config.minLabel}
-        </span>
-      )}
-    </div>
-  ),
+  Canvas: ({ question }) => {
+    const { min, max, minLabel, maxLabel } = question.config
+
+    return (
+      <div className="mt-3 flex items-center gap-2">
+        {minLabel && (
+          <span className="text-xs text-muted-foreground">{minLabel}</span>
+        )}
+        <div className="flex items-center gap-1">
+          {Array.from({ length: max ?? 5 }, (_, i) => (
+            <Star key={i} className="h-4 w-4 text-muted-foreground" />
+          ))}
+        </div>
+        {maxLabel && (
+          <span className="text-xs text-muted-foreground">{maxLabel}</span>
+        )}
+      </div>
+    )
+  },
   Editor: ({ question, onChange }) => {
     const { config } = question
 
@@ -99,26 +106,33 @@ export const ratingDef: QuestionDef<RatingQuestion> = {
     showNumber = true,
     onTitleChange,
     onTitleBlur,
-  }) => (
-    <div className="relative px-3 py-3">
-      <QuestionTitle
-        order={order}
-        showNumber={showNumber}
-        title={question.title}
-        required={question.required}
-        onChange={onTitleChange}
-        onBlur={onTitleBlur}
-      />
-      <div className="mt-3 flex items-center gap-1">
-        {Array.from({ length: question.config.max }, (_, i) => (
-          <Star key={i} className="h-4 w-4 text-muted-foreground" />
-        ))}
-        {question.config.minLabel && (
-          <span className="ml-2 text-xs text-muted-foreground">
-            {question.config.minLabel}
-          </span>
-        )}
+  }) => {
+    const { min, max, minLabel, maxLabel } = question.config
+
+    return (
+      <div className="relative px-3 py-3">
+        <QuestionTitle
+          order={order}
+          showNumber={showNumber}
+          title={question.title}
+          required={question.required}
+          onChange={onTitleChange}
+          onBlur={onTitleBlur}
+        />
+        <div className="mt-3 flex items-center gap-2">
+          {minLabel && (
+            <span className="text-xs text-muted-foreground">{minLabel}</span>
+          )}
+          <div className="flex items-center gap-1">
+            {Array.from({ length: max ?? 5 }, (_, i) => (
+              <Star key={i} className="h-4 w-4 text-muted-foreground" />
+            ))}
+          </div>
+          {maxLabel && (
+            <span className="text-xs text-muted-foreground">{maxLabel}</span>
+          )}
+        </div>
       </div>
-    </div>
-  ),
+    )
+  },
 }
