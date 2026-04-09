@@ -35,38 +35,51 @@ function QuestionCard({
         onBlur={onTitleBlur}
       />
 
-      <div className="mt-4 space-y-3">
-        {rows.map((row, rowIdx) => (
-          <div
-            key={row.id}
-            className={cn(
-              "grid gap-0 rounded-lg border",
-              rowIdx % 2 === 0 ? "bg-card" : "bg-card/50"
-            )}
-            style={{
-              gridTemplateColumns: `150px repeat(${columns.length}, minmax(80px, 1fr))`,
-            }}
-          >
-            {/* 行标题 */}
-            <div className="flex items-center border-r border-border p-3 text-sm font-medium">
-              {row.label}
-            </div>
-            {/* 选项 */}
-            <RadioGroup className="contents">
+      <div className="mt-4 overflow-hidden rounded-lg border">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b bg-muted/50">
+              <th className="w-[150px] border-r border-border p-3"></th>
               {columns.map((col) => (
-                <div
+                <th
                   key={col.id}
-                  className="flex items-center justify-center border-r border-border p-3 last:border-r-0"
+                  className="border-r border-border p-3 text-center text-sm font-medium last:border-r-0"
                 >
-                  <RadioGroupItem
-                    value={`${row.id}-${col.id}`}
-                    id={`${row.id}-${col.id}`}
-                  />
-                </div>
+                  {col.label}
+                </th>
               ))}
-            </RadioGroup>
-          </div>
-        ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, rowIdx) => (
+              <tr
+                key={row.id}
+                className={cn(
+                  "border-b last:border-b-0",
+                  rowIdx % 2 === 0 ? "bg-card" : "bg-card/50"
+                )}
+              >
+                <td className="border-r border-border p-3 text-sm font-medium">
+                  {row.label}
+                </td>
+                {columns.map((col) => (
+                  <td
+                    key={col.id}
+                    className="border-r border-border p-3 text-center last:border-r-0"
+                  >
+                    <RadioGroup value={`${row.id}-selected`}>
+                      <RadioGroupItem
+                        value={`${row.id}-${col.id}`}
+                        id={`${row.id}-${col.id}`}
+                        className="mx-auto"
+                      />
+                    </RadioGroup>
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   )
@@ -99,38 +112,49 @@ export const matrixSingleDef: QuestionDef<MatrixSingleQuestion> = {
     const { rows, columns } = question.config
 
     return (
-      <div className="mt-4 space-y-3">
-        {rows.map((row, rowIdx) => (
-          <div
-            key={row.id}
-            className={cn(
-              "grid gap-0 rounded-lg border",
-              rowIdx % 2 === 0 ? "bg-card" : "bg-card/50"
-            )}
-            style={{
-              gridTemplateColumns: `150px repeat(${columns.length}, minmax(80px, 1fr))`,
-            }}
-          >
-            {/* 行标题 */}
-            <div className="flex items-center border-r border-border p-3 text-sm font-medium">
-              {row.label}
-            </div>
-            {/* 选项 */}
-            <RadioGroup className="contents">
+      <div className="mt-4 overflow-hidden rounded-lg border">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b bg-muted/50">
+              <th className="w-[150px] border-r border-border p-3"></th>
               {columns.map((col) => (
-                <div
+                <th
                   key={col.id}
-                  className="flex items-center justify-center border-r border-border p-3 last:border-r-0"
+                  className="border-r border-border p-3 text-center text-sm font-medium last:border-r-0"
                 >
-                  <RadioGroupItem
-                    value={`${row.id}-${col.id}`}
-                    id={`${row.id}-${col.id}`}
-                  />
-                </div>
+                  {col.label}
+                </th>
               ))}
-            </RadioGroup>
-          </div>
-        ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, rowIdx) => (
+              <tr
+                key={row.id}
+                className={cn(
+                  "border-b last:border-b-0",
+                  rowIdx % 2 === 0 ? "bg-card" : "bg-card/50"
+                )}
+              >
+                <td className="border-r border-border p-3 text-sm font-medium">
+                  {row.label}
+                </td>
+                {columns.map((col) => (
+                  <td
+                    key={col.id}
+                    className="border-r border-border p-3 text-center last:border-r-0"
+                  >
+                    <RadioGroupItem
+                      value={`${row.id}-${col.id}`}
+                      id={`${row.id}-${col.id}`}
+                      className="mx-auto"
+                    />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     )
   },
