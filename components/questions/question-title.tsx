@@ -80,8 +80,6 @@ export function QuestionTitle({
                 }}
                 onChange={(e) => {
                   const target = e.target as HTMLTextAreaElement
-                  target.style.height = "auto"
-                  target.style.height = `${Math.max(target.scrollHeight, 36)}px`
                   handleChange(target.value)
                 }}
                 onBlur={(e) => handleTitleBlur(e.target.value)}
@@ -121,8 +119,6 @@ export function QuestionTitle({
             }}
             onChange={(e) => {
               const target = e.target as HTMLTextAreaElement
-              target.style.height = "auto"
-              target.style.height = `${Math.max(target.scrollHeight, 28)}px`
               handleDescChange(target.value)
             }}
             onBlur={(e) => handleDescBlur(e.target.value)}
