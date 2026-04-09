@@ -1,14 +1,52 @@
 import { AlignLeft } from "lucide-react"
 import { nanoid } from "nanoid"
-import type { QuestionDef, TextQuestion } from "@/lib/questions/types"
+import { useState } from "react"
+import type {
+  QuestionDef,
+  TextQuestion,
+  TextFormat,
+} from "@/lib/questions/types"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { QuestionTitle } from "@/components/questions/question-title"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { cn } from "@/lib/utils"
+
+const FORMAT_OPTIONS: {
+  value: TextFormat
+  label: string
+  placeholder: string
+}[] = [
+  { value: "any", label: "不限", placeholder: "请输入文本" },
+  { value: "number", label: "数字", placeholder: "请输入数字" },
+  { value: "date", label: "日期 (YYYY-MM-DD)", placeholder: "YYYY-MM-DD" },
+  { value: "email", label: "电子邮件", placeholder: "example@email.com" },
+  { value: "phone", label: "手机号", placeholder: "13800138000" },
+]
+
+function getPlaceholder(format: TextFormat): string {
+  return FORMAT_OPTIONS.find((f) => f.value === format)?.placeholder || "请输入"
+}
+
+function validateInput(value: string, format: TextFormat): boolean {
+  if (format === "any") return true
+  if (format === "number") return /^\d+$/.test(value)
+  if (format === "date") return /^\d{4}-\d{2}-\d{2}$/.test(value)
+  if (format === "email") return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+  if (format === "phone") return /^1\d{10}$/.test(value)
+  return true
+}
 
 export const textDef: QuestionDef<TextQuestion> = {
   type: "TEXT",
   category: "text",
-  label: "文本填空",
+  label: "单行文本",
   icon: AlignLeft,
   defaultQuestion: (order) => ({
     id: nanoid(),
@@ -18,61 +56,92 @@ export const textDef: QuestionDef<TextQuestion> = {
     order,
     config: {
       placeholder: "",
-      multiline: false,
+      format: "any",
     },
   }),
-  Canvas: ({ question }) => (
-    <div className="mt-3">
-      {question.config.multiline ? (
-        <div className="h-16 rounded border border-dashed border-border bg-muted/30" />
-      ) : (
-        <div className="h-8 rounded border border-dashed border-border bg-muted/30" />
-      )}
-    </div>
-  ),
-  Editor: ({ question, onChange }) => {
+  Canvas: ({ question }) => {
+    const { format = "any", placeholder } = question.config
+    const [value, setValue] = useState("")
+    const [error, setError] = useState("")
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const newValue = e.target.value
+      setValue(newValue)
+
+      if (validateInput(newValue, format as TextFormat)) {
+        setError("")
+      } else {
+        setError("格式不正确")
+      }
+    }
+
+    return (
+      <>
+        <Input
+          type={format === "number" ? "number" : "text"}
+          placeholder={placeholder || getPlaceholder(format as TextFormat)}
+          value={value}
+          onChange={handleChange}
+          className={cn(
+            "mt-3 h-10 text-base",
+            error && "border-destructive focus-visible:ring-destructive"
+          )}
+          disabled
+        />
+        {error && <div className="mt-1 text-sm text-destructive">{error}</div>}
+      </>
+    )
+  },
+  Editor: ({ question, onChange, onSave }) => {
     const { config } = question
+    const { placeholder = "", format = "any" } = config
 
     return (
       <div className="space-y-4">
         <div className="space-y-2">
           <Label className="text-xs text-muted-foreground">占位提示文字</Label>
           <Input
-            value={config.placeholder ?? ""}
+            value={placeholder}
             onChange={(e) =>
               onChange({
                 ...question,
                 config: { ...config, placeholder: e.target.value },
               })
             }
+            onBlur={() => {
+              const updated = { ...question }
+              onSave?.(updated)
+            }}
             placeholder="请输入..."
             className="h-8 text-sm"
           />
         </div>
-        <div className="flex items-center justify-between">
-          <Label className="text-xs text-muted-foreground">多行输入</Label>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={config.multiline}
-            onClick={() =>
+        <div className="space-y-2">
+          <Label className="text-xs text-muted-foreground">文本格式</Label>
+          <Select
+            value={format}
+            onValueChange={(value: TextFormat) => {
               onChange({
                 ...question,
-                config: { ...config, multiline: !config.multiline },
+                config: { ...config, format: value },
               })
-            }
-            className={[
-              "relative h-5 w-9 rounded-full transition-colors",
-              config.multiline ? "bg-primary" : "bg-muted",
-            ].join(" ")}
+              onSave?.({
+                ...question,
+                config: { ...config, format: value },
+              })
+            }}
           >
-            <span
-              className={[
-                "absolute top-0.5 h-4 w-4 rounded-full bg-background shadow transition-transform",
-                config.multiline ? "translate-x-4" : "translate-x-0.5",
-              ].join(" ")}
-            />
-          </button>
+            <SelectTrigger className="h-8">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {FORMAT_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
     )
@@ -83,23 +152,26 @@ export const textDef: QuestionDef<TextQuestion> = {
     showNumber = true,
     onTitleChange,
     onTitleBlur,
-  }) => (
-    <div className="relative px-3 py-3">
-      <QuestionTitle
-        order={order}
-        showNumber={showNumber}
-        title={question.title}
-        required={question.required}
-        onChange={onTitleChange}
-        onBlur={onTitleBlur}
-      />
-      <div className="mt-3">
-        {question.config.multiline ? (
-          <div className="h-16 rounded border border-dashed border-border bg-muted/30" />
-        ) : (
-          <div className="h-8 rounded border border-dashed border-border bg-muted/30" />
-        )}
+  }) => {
+    const { format = "any", placeholder } = question.config
+
+    return (
+      <div className="relative px-3 py-3">
+        <QuestionTitle
+          order={order}
+          showNumber={showNumber}
+          title={question.title}
+          required={question.required}
+          onChange={onTitleChange}
+          onBlur={onTitleBlur}
+        />
+        <Input
+          type={format === "number" ? "number" : "text"}
+          placeholder={placeholder || getPlaceholder(format as TextFormat)}
+          className="mt-3 h-10 text-base"
+          disabled
+        />
       </div>
-    </div>
-  ),
+    )
+  },
 }

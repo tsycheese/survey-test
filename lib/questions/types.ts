@@ -36,9 +36,11 @@ export type MatrixSingleConfig = {
 }
 
 // ============ 文本输入类 ============
+export type TextFormat = "any" | "number" | "date" | "email" | "phone"
+
 export type TextConfig = {
   placeholder?: string
-  multiline?: boolean
+  format?: TextFormat
 }
 
 export type TextareaConfig = {
