@@ -41,7 +41,7 @@ function QuestionCard({
         <Input
           type="number"
           placeholder={placeholder || "请输入数字"}
-          className="flex-1"
+          className="h-10 flex-1 text-sm"
           disabled
         />
         {suffix && (
@@ -84,7 +84,7 @@ export const numberDef: QuestionDef<NumberQuestion> = {
           min={min}
           max={max}
           step={step}
-          className="flex-1"
+          className="h-10 flex-1 text-sm"
         />
         {suffix && (
           <span className="text-sm text-muted-foreground">{suffix}</span>
