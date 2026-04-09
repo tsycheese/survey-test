@@ -66,7 +66,6 @@ function validateAndTransformQuestion(raw: unknown, index: number) {
     "NAME",
     "BIRTHDAY",
     "MATRIX_SINGLE",
-    "MATRIX_SCALE",
     "IMAGE_SINGLE_CHOICE",
     "IMAGE_MULTIPLE_CHOICE",
   ]

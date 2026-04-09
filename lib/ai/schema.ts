@@ -50,7 +50,6 @@ export const questionTypeSchema = z.enum([
   "BIRTHDAY",
   "TIME",
   "MATRIX_SINGLE",
-  "MATRIX_SCALE",
 ])
 
 // 完整题目 Schema

@@ -81,11 +81,6 @@ export type CESConfig = {
   highLabel?: string
 }
 
-export type MatrixScaleConfig = {
-  rows: { id: string; label: string }[]
-  scale: { id: string; label: string }[]
-}
-
 // ============ 个人信息类 ============
 export type NameConfig = {
   placeholder?: string
@@ -204,11 +199,6 @@ export type CESQuestion = BaseQuestion & {
   config: CESConfig
 }
 
-export type MatrixScaleQuestion = BaseQuestion & {
-  type: "MATRIX_SCALE"
-  config: MatrixScaleConfig
-}
-
 export type NameQuestion = BaseQuestion & {
   type: "NAME"
   config: NameConfig
@@ -262,7 +252,6 @@ export type Question =
   | RatingQuestion
   | NPSQuestion
   | CESQuestion
-  | MatrixScaleQuestion
   | NameQuestion
   | GenderQuestion
   | BirthdayQuestion
