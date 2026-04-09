@@ -5,6 +5,7 @@ import { z } from "zod"
 
 const questionSchema = z.object({
   title: z.string().min(1, "题目不能为空"),
+  description: z.string().optional(),
   type: z.enum([
     "SINGLE_CHOICE",
     "MULTIPLE_CHOICE",
@@ -71,6 +72,7 @@ export async function POST(
     data: {
       surveyId: id,
       title: parsed.data.title,
+      description: parsed.data.description,
       type: parsed.data.type,
       required: parsed.data.required,
       config: parsed.data.config ?? {},

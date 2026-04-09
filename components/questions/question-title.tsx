@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import React, { useState } from "react"
 
 interface QuestionTitleProps {
   order?: number
@@ -28,6 +28,13 @@ export function QuestionTitle({
   const [editingTitle, setEditingTitle] = useState(false)
   const [editingDesc, setEditingDesc] = useState(false)
   const [descValue, setDescValue] = useState(description || "")
+
+  // 当外部 description 变化时，同步更新内部状态
+  React.useEffect(() => {
+    if (!editingDesc) {
+      setDescValue(description || "")
+    }
+  }, [description, editingDesc])
 
   const handleChange = (value: string) => {
     onChange?.(value)

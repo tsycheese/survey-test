@@ -187,6 +187,7 @@ export default function EditSurveyPage() {
               id: q.id,
               type: q.type,
               title: q.title,
+              description: q.description,
               required: q.required,
               order: q.order,
               config: q.config ?? {},
@@ -332,6 +333,7 @@ export default function EditSurveyPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         title: updated.title,
+        description: updated.description,
         required: updated.required,
         config: updated.config,
       }),
@@ -757,7 +759,9 @@ function QuestionEditor({
             onChange={(e) =>
               handleUpdate({ ...question, description: e.target.value })
             }
-            onBlur={() => handleSave({ ...question })}
+            onBlur={(e) =>
+              handleSave({ ...question, description: e.target.value })
+            }
             placeholder="添加题目描述，帮助用户理解题目..."
           />
         </div>

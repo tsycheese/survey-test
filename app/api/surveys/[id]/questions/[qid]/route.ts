@@ -5,6 +5,7 @@ import { z } from "zod"
 
 const updateQuestionSchema = z.object({
   title: z.string().min(1).optional(),
+  description: z.string().optional(),
   type: z
     .enum([
       "SINGLE_CHOICE",
