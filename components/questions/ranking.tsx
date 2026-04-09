@@ -66,6 +66,10 @@ function QuestionCard({
 
   return (
     <div className="relative px-3 py-3">
+      <div className="absolute -top-2 left-6 z-10 rounded-t-none rounded-b bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground">
+        排序题
+      </div>
+
       <QuestionTitle
         order={order}
         showNumber={showNumber}
