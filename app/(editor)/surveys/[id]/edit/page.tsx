@@ -556,6 +556,12 @@ export default function EditSurveyPage() {
                             onTitleBlur={(title) => {
                               handleUpdateQuestion({ ...q, title })
                             }}
+                            onDescriptionChange={(description) =>
+                              updateQuestion({ ...q, description })
+                            }
+                            onDescriptionBlur={(description) => {
+                              handleUpdateQuestion({ ...q, description })
+                            }}
                             onOptionChange={(updated) =>
                               updateQuestion(updated as Question)
                             }
@@ -739,6 +745,23 @@ function QuestionEditor({
           />
         </div>
 
+        {/* 题目描述 */}
+        <div>
+          <Label className="text-xs text-muted-foreground">
+            题目描述（可选）
+          </Label>
+          <textarea
+            className="mt-1 w-full resize-none rounded-md border bg-background px-3 py-2 text-sm text-muted-foreground outline-none focus:ring-1 focus:ring-primary"
+            rows={2}
+            value={question.description || ""}
+            onChange={(e) =>
+              handleUpdate({ ...question, description: e.target.value })
+            }
+            onBlur={() => handleSave({ ...question })}
+            placeholder="添加题目描述，帮助用户理解题目..."
+          />
+        </div>
+
         {/* 必填开关 */}
         <div className="flex items-center justify-between">
           <Label className="text-xs text-muted-foreground">必填</Label>
@@ -783,6 +806,8 @@ function SortableQuestionCard({
   onUpdate,
   onTitleChange,
   onTitleBlur,
+  onDescriptionChange,
+  onDescriptionBlur,
   onOptionChange,
 }: {
   question: Question
@@ -793,6 +818,8 @@ function SortableQuestionCard({
   onUpdate: (q: Question) => void
   onTitleChange: (title: string) => void
   onTitleBlur: (title: string) => void
+  onDescriptionChange?: (description: string) => void
+  onDescriptionBlur?: (description: string) => void
   onOptionChange: (q: Question) => void
 }) {
   const {
@@ -851,6 +878,8 @@ function SortableQuestionCard({
           onUpdate={onUpdate}
           onTitleChange={onTitleChange}
           onTitleBlur={onTitleBlur}
+          onDescriptionChange={onDescriptionChange}
+          onDescriptionBlur={onDescriptionBlur}
           onOptionChange={onOptionChange}
         />
       </div>

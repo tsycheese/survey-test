@@ -29,6 +29,8 @@ function QuestionCard({
   onUpdate,
   onTitleChange,
   onTitleBlur,
+  onDescriptionChange,
+  onDescriptionBlur,
   onOptionChange,
 }: {
   question: RankingQuestion
@@ -37,6 +39,8 @@ function QuestionCard({
   onUpdate?: (question: RankingQuestion) => void
   onTitleChange?: (title: string) => void
   onTitleBlur?: (title: string) => void
+  onDescriptionChange?: (description: string) => void
+  onDescriptionBlur?: (description: string) => void
   onOptionChange?: (question: RankingQuestion) => void
 }) {
   const { options } = question.config
@@ -74,9 +78,12 @@ function QuestionCard({
         order={order}
         showNumber={showNumber}
         title={question.title}
+        description={question.description}
         required={question.required}
         onChange={onTitleChange}
         onBlur={onTitleBlur}
+        onDescriptionChange={onDescriptionChange}
+        onDescriptionBlur={onDescriptionBlur}
       />
 
       <div className="mt-3 space-y-2">

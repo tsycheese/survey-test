@@ -320,6 +320,8 @@ export type QuestionDef<Q extends Question = Question> = {
     onTitleClick?: () => void
     onTitleChange?: (title: string) => void
     onTitleBlur?: (title: string) => void
+    onDescriptionChange?: (description: string) => void
+    onDescriptionBlur?: (description: string) => void
     onOptionChange?: (question: Q) => void
   }>
 }

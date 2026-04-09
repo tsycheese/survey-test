@@ -106,6 +106,8 @@ export const ratingDef: QuestionDef<RatingQuestion> = {
     showNumber = true,
     onTitleChange,
     onTitleBlur,
+    onDescriptionChange,
+    onDescriptionBlur,
   }) => {
     const { min, max, minLabel, maxLabel } = question.config
 
@@ -115,9 +117,12 @@ export const ratingDef: QuestionDef<RatingQuestion> = {
           order={order}
           showNumber={showNumber}
           title={question.title}
+          description={question.description}
           required={question.required}
           onChange={onTitleChange}
           onBlur={onTitleBlur}
+          onDescriptionChange={onDescriptionChange}
+          onDescriptionBlur={onDescriptionBlur}
         />
         <div className="mt-3 flex items-center gap-2">
           {minLabel && (

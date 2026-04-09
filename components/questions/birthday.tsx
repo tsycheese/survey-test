@@ -17,12 +17,16 @@ function QuestionCard({
   showNumber = true,
   onTitleChange,
   onTitleBlur,
+  onDescriptionChange,
+  onDescriptionBlur,
 }: {
   question: BirthdayQuestion
   order: number
   showNumber?: boolean
   onTitleChange?: (title: string) => void
   onTitleBlur?: (title: string) => void
+  onDescriptionChange?: (description: string) => void
+  onDescriptionBlur?: (description: string) => void
 }) {
   const { format = "YYYY-MM-DD" } = question.config
   const currentYear = new Date().getFullYear()
@@ -38,9 +42,12 @@ function QuestionCard({
           order={order}
           showNumber={showNumber}
           title={question.title}
+          description={question.description}
           required={question.required}
           onChange={onTitleChange}
           onBlur={onTitleBlur}
+          onDescriptionChange={onDescriptionChange}
+          onDescriptionBlur={onDescriptionBlur}
         />
         <div className="mt-3">
           <Select>
@@ -67,9 +74,12 @@ function QuestionCard({
           order={order}
           showNumber={showNumber}
           title={question.title}
+          description={question.description}
           required={question.required}
           onChange={onTitleChange}
           onBlur={onTitleBlur}
+          onDescriptionChange={onDescriptionChange}
+          onDescriptionBlur={onDescriptionBlur}
         />
         <div className="mt-3 flex gap-2">
           <Select>
@@ -108,9 +118,12 @@ function QuestionCard({
         order={order}
         showNumber={showNumber}
         title={question.title}
+        description={question.description}
         required={question.required}
         onChange={onTitleChange}
         onBlur={onTitleBlur}
+        onDescriptionChange={onDescriptionChange}
+        onDescriptionBlur={onDescriptionBlur}
       />
       <div className="mt-3 flex gap-2">
         <Select>

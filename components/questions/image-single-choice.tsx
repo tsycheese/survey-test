@@ -258,6 +258,8 @@ function QuestionCard({
   onUpdate,
   onTitleChange,
   onTitleBlur,
+  onDescriptionChange,
+  onDescriptionBlur,
   onOptionChange,
 }: {
   question: ImageSingleChoiceQuestion
@@ -266,6 +268,8 @@ function QuestionCard({
   onUpdate?: (question: ImageSingleChoiceQuestion) => void
   onTitleChange?: (title: string) => void
   onTitleBlur?: (title: string) => void
+  onDescriptionChange?: (description: string) => void
+  onDescriptionBlur?: (description: string) => void
   onOptionChange?: (question: ImageSingleChoiceQuestion) => void
 }) {
   const {
@@ -287,9 +291,12 @@ function QuestionCard({
         order={order}
         showNumber={showNumber}
         title={question.title}
+        description={question.description}
         required={question.required}
         onChange={onTitleChange}
         onBlur={onTitleBlur}
+        onDescriptionChange={onDescriptionChange}
+        onDescriptionBlur={onDescriptionBlur}
       />
 
       <div className="relative mt-4">

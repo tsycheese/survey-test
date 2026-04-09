@@ -152,6 +152,8 @@ export const textDef: QuestionDef<TextQuestion> = {
     showNumber = true,
     onTitleChange,
     onTitleBlur,
+    onDescriptionChange,
+    onDescriptionBlur,
   }) => {
     const { format = "any", placeholder } = question.config
 
@@ -161,9 +163,12 @@ export const textDef: QuestionDef<TextQuestion> = {
           order={order}
           showNumber={showNumber}
           title={question.title}
+          description={question.description}
           required={question.required}
           onChange={onTitleChange}
           onBlur={onTitleBlur}
+          onDescriptionChange={onDescriptionChange}
+          onDescriptionBlur={onDescriptionBlur}
         />
         <Input
           type={format === "number" ? "number" : "text"}

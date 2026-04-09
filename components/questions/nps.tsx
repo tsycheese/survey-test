@@ -13,6 +13,8 @@ function QuestionCard({
   showNumber = true,
   onTitleChange,
   onTitleBlur,
+  onDescriptionChange,
+  onDescriptionBlur,
 }: {
   question: NPSQuestion
   order: number
@@ -20,6 +22,8 @@ function QuestionCard({
   onUpdate?: (question: NPSQuestion) => void
   onTitleChange?: (title: string) => void
   onTitleBlur?: (title: string) => void
+  onDescriptionChange?: (description: string) => void
+  onDescriptionBlur?: (description: string) => void
 }) {
   const {
     max = 10,
@@ -34,9 +38,12 @@ function QuestionCard({
         order={order}
         showNumber={showNumber}
         title={question.title}
+        description={question.description}
         required={question.required}
         onChange={onTitleChange}
         onBlur={onTitleBlur}
+        onDescriptionChange={onDescriptionChange}
+        onDescriptionBlur={onDescriptionBlur}
       />
 
       <div className="mt-4">

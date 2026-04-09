@@ -12,6 +12,8 @@ function QuestionCard({
   showNumber = true,
   onTitleChange,
   onTitleBlur,
+  onDescriptionChange,
+  onDescriptionBlur,
 }: {
   question: EmailQuestion
   order: number
@@ -19,6 +21,8 @@ function QuestionCard({
   onUpdate?: (question: EmailQuestion) => void
   onTitleChange?: (title: string) => void
   onTitleBlur?: (title: string) => void
+  onDescriptionChange?: (description: string) => void
+  onDescriptionBlur?: (description: string) => void
 }) {
   const { placeholder = "请输入邮箱地址" } = question.config
 
@@ -28,9 +32,12 @@ function QuestionCard({
         order={order}
         showNumber={showNumber}
         title={question.title}
+        description={question.description}
         required={question.required}
         onChange={onTitleChange}
         onBlur={onTitleBlur}
+        onDescriptionChange={onDescriptionChange}
+        onDescriptionBlur={onDescriptionBlur}
       />
 
       <Input type="email" placeholder={placeholder} className="mt-3" disabled />
