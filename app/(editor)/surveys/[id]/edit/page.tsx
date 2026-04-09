@@ -93,6 +93,12 @@ export default function EditSurveyPage() {
 
     // 如果是新题目拖拽
     if (draggingType) {
+      // 拖拽到空画布
+      if (over.id === "empty-canvas-dropzone") {
+        setInsertIndex(0)
+        return
+      }
+
       const overIndex = survey.questions.findIndex((q) => q.id === over.id)
       if (overIndex >= 0) {
         setInsertIndex(overIndex)
@@ -122,6 +128,12 @@ export default function EditSurveyPage() {
 
     // 新题目拖拽：添加到指定位置
     if (draggingType && survey) {
+      // 拖拽到空画布
+      if (over.id === "empty-canvas-dropzone") {
+        await handleAddQuestionAtPosition(draggingType, 0)
+        return
+      }
+
       const overIndex = survey.questions.findIndex((q) => q.id === over.id)
       if (overIndex >= 0) {
         await handleAddQuestionAtPosition(draggingType, overIndex)
@@ -513,8 +525,16 @@ export default function EditSurveyPage() {
                 >
                   <div className="divide-y divide-dashed divide-border">
                     {survey.questions.length === 0 ? (
-                      <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
-                        点击左侧题型添加第一道题
+                      <div
+                        id="empty-canvas-dropzone"
+                        className={cn(
+                          "flex h-40 items-center justify-center text-sm text-muted-foreground transition-colors",
+                          draggingType && "bg-muted/50"
+                        )}
+                      >
+                        {draggingType
+                          ? "松开鼠标添加题目"
+                          : "点击左侧题型添加第一道题"}
                       </div>
                     ) : (
                       survey.questions.map((q, idx) => (
@@ -857,13 +877,25 @@ function DraggableQuestionType({
   return (
     <div
       ref={setNodeRef}
-      className="flex w-full cursor-grab items-center gap-2.5 rounded-md p-2 text-left transition-colors hover:bg-muted active:cursor-grabbing"
-      {...listeners}
-      {...attributes}
-      onClick={onClick}
+      className="flex w-full items-center gap-2.5 rounded-md p-2 text-left transition-colors hover:bg-muted"
     >
-      <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
-      <span className="text-sm text-muted-foreground">{label}</span>
+      {/* 拖拽手柄 - 只有按住这里才能拖拽 */}
+      <div
+        className="cursor-grab p-1 text-muted-foreground hover:text-foreground active:cursor-grabbing"
+        {...listeners}
+        {...attributes}
+      >
+        <GripVertical className="h-4 w-4" />
+      </div>
+      {/* 点击区域 - 直接添加题目 */}
+      <button
+        className="flex flex-1 items-center gap-2.5"
+        onClick={onClick}
+        type="button"
+      >
+        <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <span className="text-sm text-muted-foreground">{label}</span>
+      </button>
     </div>
   )
 }
