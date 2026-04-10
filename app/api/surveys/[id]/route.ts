@@ -19,16 +19,31 @@ export async function GET(
   }
 
   const { id } = await params
+  const userId = session.user.id
+
+  // 先尝试查找问卷（不限制 userId，可能是协作者访问）
   const survey = await prisma.survey.findUnique({
-    where: { id, userId: session.user.id },
+    where: { id },
     include: {
       questions: { orderBy: { order: "asc" } },
       _count: { select: { responses: true } },
+      collaborators: {
+        where: { userId },
+        select: { id: true },
+      },
     },
   })
 
   if (!survey) {
     return NextResponse.json({ error: "问卷不存在" }, { status: 404 })
+  }
+
+  // 检查是否是创建者或协作者
+  const isOwner = survey.userId === userId
+  const isCollaborator = survey.collaborators.length > 0
+
+  if (!isOwner && !isCollaborator) {
+    return NextResponse.json({ error: "无权限访问" }, { status: 403 })
   }
 
   return NextResponse.json({

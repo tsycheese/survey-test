@@ -49,6 +49,7 @@ import type {
 import { QUESTION_CATEGORIES } from "@/lib/questions/types"
 import { SurveySettingsPanel } from "@/components/editor/survey-settings-panel"
 import { AIChatDialog } from "@/components/ai/ai-chat-dialog"
+import { CollaborationDialog } from "@/components/editor/collaboration-dialog"
 import {
   Dialog,
   DialogContent,
@@ -79,6 +80,11 @@ export default function EditSurveyPage() {
   const [draggingType, setDraggingType] = useState<QuestionType | null>(null)
   const [insertIndex, setInsertIndex] = useState<number | null>(null)
   const [isPreviewDialogOpen, setIsPreviewDialogOpen] = useState(false)
+  const [permission, setPermission] = useState<{
+    canAccess: boolean
+    canEdit: boolean
+    isLoading: boolean
+  }>({ canAccess: false, canEdit: false, isLoading: true })
 
   // 选中题目时自动切换到题目面板
   const handleSelectQuestion = (id: string) => {
@@ -189,28 +195,79 @@ export default function EditSurveyPage() {
   }
 
   useEffect(() => {
-    fetch(`/api/surveys/${id}`)
-      .then((r) => r.json())
-      .then((data) => {
-        setSurvey({
-          id: data.id,
-          title: data.title,
-          description: data.description,
-          published: data.published,
-          settings: data.settings,
-          questions: (data.questions ?? []).map(
-            (q: Record<string, unknown>) => ({
-              id: q.id,
-              type: q.type,
-              title: q.title,
-              description: q.description,
-              required: q.required,
-              order: q.order,
-              config: q.config ?? {},
-            })
-          ) as Question[],
+    // 检查权限
+    async function checkPermission() {
+      try {
+        const [surveyRes, sessionRes] = await Promise.all([
+          fetch(`/api/surveys/${id}`),
+          fetch("/api/auth/session"),
+        ])
+
+        if (!surveyRes.ok) {
+          setPermission({ canAccess: false, canEdit: false, isLoading: false })
+          return
+        }
+
+        const surveyData = await surveyRes.json()
+        const sessionData = await sessionRes.json()
+        const userId = sessionData?.user?.id
+
+        // 检查是否是创建者
+        const isOwner = surveyData.userId === userId
+
+        // 检查是否是协作者
+        let isCollaborator = false
+        let canEdit = false
+        if (userId && !isOwner) {
+          const collabRes = await fetch(`/api/surveys/${id}/collaborators`)
+          if (collabRes.ok) {
+            const data = await collabRes.json()
+            const myCollab = data.collaborators?.find(
+              (c: { userId: string }) => c.userId === userId
+            )
+            if (myCollab) {
+              isCollaborator = true
+              canEdit = myCollab.canEdit
+            }
+          }
+        }
+
+        // 创建者或协作者可以访问
+        const canAccess = isOwner || isCollaborator
+        const hasEditPermission = isOwner || canEdit
+
+        setPermission({
+          canAccess,
+          canEdit: hasEditPermission,
+          isLoading: false,
         })
-      })
+
+        if (canAccess) {
+          setSurvey({
+            id: surveyData.id,
+            title: surveyData.title,
+            description: surveyData.description,
+            published: surveyData.published,
+            settings: surveyData.settings,
+            questions: (surveyData.questions ?? []).map(
+              (q: Record<string, unknown>) => ({
+                id: q.id,
+                type: q.type,
+                title: q.title,
+                description: q.description,
+                required: q.required,
+                order: q.order,
+                config: q.config ?? {},
+              })
+            ) as Question[],
+          })
+        }
+      } catch {
+        setPermission({ canAccess: false, canEdit: false, isLoading: false })
+      }
+    }
+
+    checkPermission()
   }, [id, setSurvey])
 
   async function handleSaveTitleDesc(title: string, description: string) {
@@ -356,6 +413,26 @@ export default function EditSurveyPage() {
     })
   }
 
+  if (permission.isLoading) {
+    return (
+      <div className="flex h-svh items-center justify-center text-muted-foreground">
+        加载中...
+      </div>
+    )
+  }
+
+  if (!permission.canAccess) {
+    return (
+      <div className="flex h-svh flex-col items-center justify-center gap-4">
+        <div className="text-lg font-medium">无权限访问</div>
+        <div className="text-sm text-muted-foreground">
+          您没有权限编辑此问卷，请联系问卷创建者获取访问权限
+        </div>
+        <Button onClick={() => router.push("/surveys")}>返回问卷列表</Button>
+      </div>
+    )
+  }
+
   if (!survey) {
     return (
       <div className="flex h-svh items-center justify-center text-muted-foreground">
@@ -395,6 +472,7 @@ export default function EditSurveyPage() {
           />
         </div>
         <div className="flex items-center gap-3">
+          <CollaborationDialog surveyId={id} />
           <Button
             variant="outline"
             size="sm"
@@ -404,6 +482,11 @@ export default function EditSurveyPage() {
             <Play className="mr-1.5 h-3.5 w-3.5" />
             试答
           </Button>
+          {!permission.canEdit && (
+            <span className="rounded-md bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+              只读模式
+            </span>
+          )}
           <span
             className={cn(
               "text-xs font-medium",

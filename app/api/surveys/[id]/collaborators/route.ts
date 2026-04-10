@@ -14,10 +14,13 @@ export async function GET(
 
   const { id: surveyId } = await params
 
-  // 检查是否是创建者或协作者
+  // 获取问卷、拥有者和协作者列表
   const survey = await prisma.survey.findUnique({
     where: { id: surveyId },
     include: {
+      user: {
+        select: { id: true, name: true, email: true, image: true },
+      },
       collaborators: {
         include: {
           user: {
@@ -32,14 +35,8 @@ export async function GET(
     return NextResponse.json({ error: "Survey not found" }, { status: 404 })
   }
 
-  const isOwner = survey.userId === session.user!.id
-  const isCollaborator = survey.collaborators.some(
-    (c) => c.userId === session.user!.id
-  )
-
-  if (!isOwner && !isCollaborator) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-  }
-
-  return NextResponse.json(survey.collaborators)
+  return NextResponse.json({
+    owner: survey.user,
+    collaborators: survey.collaborators,
+  })
 }

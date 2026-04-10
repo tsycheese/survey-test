@@ -2,7 +2,13 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { ClipboardList, LayoutDashboard, LogOut, User } from "lucide-react"
+import {
+  ClipboardList,
+  LayoutDashboard,
+  LogOut,
+  User,
+  Users,
+} from "lucide-react"
 import { cn } from "@/lib/utils"
 
 type SidebarUser = {
@@ -16,6 +22,11 @@ const navItems = [
     label: "我的问卷",
     href: "/surveys",
     icon: ClipboardList,
+  },
+  {
+    label: "我参与的问卷",
+    href: "/surveys/shared",
+    icon: Users,
   },
 ]
 
@@ -41,8 +52,18 @@ export function Sidebar({ user }: { user: SidebarUser }) {
       <nav className="flex-1 space-y-1 p-3">
         {navItems.map((item) => {
           const Icon = item.icon
+          const isExactMatch = pathname === item.href
+          // 子路径匹配：当前路径以 item.href + "/" 开头
+          // 但要排除当前路径是其他菜单的精确匹配或子路径的情况
+          const isSubPathMatch = pathname.startsWith(item.href + "/")
+          // 检查是否有其他菜单更精确地匹配当前路径
+          const hasMoreSpecificMatch = navItems.some(
+            (other) =>
+              other.href !== item.href &&
+              (pathname === other.href || pathname.startsWith(other.href + "/"))
+          )
           const active =
-            pathname === item.href || pathname.startsWith(item.href + "/")
+            isExactMatch || (isSubPathMatch && !hasMoreSpecificMatch)
           return (
             <Link
               key={item.href}

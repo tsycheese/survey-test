@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/prisma"
 
-// 使用邀请码加入协作
+// 验证邀请码有效性（不加入）
 export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session?.user?.id) {
@@ -28,11 +28,7 @@ export async function POST(req: NextRequest) {
     },
     include: {
       survey: {
-        include: {
-          _count: {
-            select: { collaborators: true },
-          },
-        },
+        select: { id: true, title: true, userId: true },
       },
     },
   })
@@ -77,34 +73,26 @@ export async function POST(req: NextRequest) {
   }
 
   // 检查协作者数量是否已达上限
-  if (invite.survey._count.collaborators >= invite.survey.maxCollaborators) {
+  const survey = await prisma.survey.findUnique({
+    where: { id: invite.surveyId },
+    include: {
+      _count: {
+        select: { collaborators: true },
+      },
+    },
+  })
+
+  if (survey && survey._count.collaborators >= survey.maxCollaborators) {
     return NextResponse.json(
       { error: "Collaborator limit reached" },
       { status: 400 }
     )
   }
 
-  // 创建协作者关系
   const permissions = (invite.permissions as {
     canEdit?: boolean
     canViewResults?: boolean
   }) || { canEdit: false, canViewResults: false }
-
-  const collaborator = await prisma.surveyCollaborator.create({
-    data: {
-      surveyId: invite.surveyId,
-      userId: session.user.id,
-      canEdit: permissions.canEdit ?? false,
-      canViewResults: permissions.canViewResults ?? false,
-      invitedBy: invite.createdBy,
-    },
-  })
-
-  // 更新邀请码使用次数
-  await prisma.surveyInvite.update({
-    where: { id: invite.id },
-    data: { usedCount: { increment: 1 } },
-  })
 
   return NextResponse.json({
     survey: {
@@ -112,8 +100,8 @@ export async function POST(req: NextRequest) {
       title: invite.survey.title,
     },
     permissions: {
-      canEdit: collaborator.canEdit,
-      canViewResults: collaborator.canViewResults,
+      canEdit: permissions.canEdit ?? false,
+      canViewResults: permissions.canViewResults ?? false,
     },
   })
 }
