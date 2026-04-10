@@ -4,7 +4,7 @@ import { prisma } from "@/prisma"
 import { NextResponse } from "next/server"
 
 /**
- * Pusher 私有频道认证端点
+ * Pusher Presence 频道认证端点
  * 验证用户是否有权限访问该问卷频道
  */
 export async function POST(request: Request) {
@@ -22,8 +22,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "缺少必要参数" }, { status: 400 })
     }
 
-    // 解析频道名称，格式: private-survey-{surveyId}
-    const match = channel.match(/^private-survey-(.+)$/)
+    // 解析频道名称，格式: presence-survey-{surveyId}
+    const match = channel.match(/^presence-survey-(.+)$/)
     if (!match) {
       return NextResponse.json({ error: "无效的频道名称" }, { status: 400 })
     }
@@ -52,14 +52,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "没有权限访问该问卷" }, { status: 403 })
     }
 
-    // 生成认证签名
-    const authResponse = pusherServer.authorizeChannel(socketId, channel, {
+    // 生成 Presence Channel 认证签名
+    // channel_data 包含用户信息，Pusher 会维护在线成员列表
+    const channelData = {
       user_id: session.user.id,
       user_info: {
         name: session.user.name,
         image: session.user.image,
       },
-    })
+    }
+
+    const authResponse = pusherServer.authorizeChannel(
+      socketId,
+      channel,
+      channelData
+    )
 
     return NextResponse.json(authResponse)
   } catch (error) {

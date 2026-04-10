@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/prisma"
 import { z } from "zod"
+import {
+  pusherServer,
+  getSurveyChannel,
+  COLLABORATION_EVENTS,
+} from "@/lib/pusher"
 
 const updateQuestionSchema = z.object({
   title: z.string().min(1).optional(),
@@ -91,6 +96,26 @@ export async function PUT(
     data: parsed.data,
   })
 
+  // 触发实时同步事件
+  await pusherServer.trigger(
+    getSurveyChannel(id),
+    COLLABORATION_EVENTS.QUESTION_UPDATED,
+    {
+      questionId: qid,
+      question: {
+        id: question.id,
+        type: question.type,
+        title: question.title,
+        description: question.description ?? undefined,
+        required: question.required,
+        order: question.order,
+        config: question.config as Record<string, unknown>,
+      },
+      fromUserId: userId,
+      timestamp: new Date().toISOString(),
+    }
+  )
+
   return NextResponse.json(question)
 }
 
@@ -129,5 +154,17 @@ export async function DELETE(
   }
 
   await prisma.question.delete({ where: { id: qid, surveyId: id } })
+
+  // 触发实时同步事件
+  await pusherServer.trigger(
+    getSurveyChannel(id),
+    COLLABORATION_EVENTS.QUESTION_DELETED,
+    {
+      questionId: qid,
+      fromUserId: userId,
+      timestamp: new Date().toISOString(),
+    }
+  )
+
   return NextResponse.json({ message: "删除成功" })
 }

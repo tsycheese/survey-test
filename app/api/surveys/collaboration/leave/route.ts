@@ -1,15 +1,11 @@
 import { auth } from "@/lib/auth"
-import {
-  pusherServer,
-  getSurveyChannel,
-  COLLABORATION_EVENTS,
-} from "@/lib/pusher"
 import { prisma } from "@/prisma"
 import { NextResponse } from "next/server"
 
 /**
  * POST /api/surveys/collaboration/leave
- * 用户离开问卷协作
+ * 用户离开问卷协作（仅用于解锁题目和日志记录）
+ * Presence Channel 自动处理成员离开事件
  */
 export async function POST(request: Request) {
   try {
@@ -24,16 +20,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "缺少问卷ID" }, { status: 400 })
     }
 
-    // 获取用户信息
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { id: true, name: true },
-    })
-
-    if (!user) {
-      return NextResponse.json({ error: "用户不存在" }, { status: 404 })
-    }
-
     // 解锁该用户锁定的所有题目
     await prisma.question.updateMany({
       where: {
@@ -46,25 +32,7 @@ export async function POST(request: Request) {
       },
     })
 
-    // 触发成员离开事件
-    const channel = getSurveyChannel(surveyId)
-    await pusherServer.trigger(channel, COLLABORATION_EVENTS.MEMBER_LEFT, {
-      userId: user.id,
-      name: user.name,
-      leftAt: new Date().toISOString(),
-    })
-
-    // 触发解锁所有该用户锁定的题目事件
-    await pusherServer.trigger(
-      channel,
-      COLLABORATION_EVENTS.QUESTIONS_UNLOCK_ALL,
-      {
-        userId: user.id,
-        unlockedAt: new Date().toISOString(),
-      }
-    )
-
-    // 记录日志
+    // 记录日志（可选，Presence Channel 已处理成员管理）
     await prisma.surveyLog.create({
       data: {
         surveyId,

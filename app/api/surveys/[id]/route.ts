@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/prisma"
 import { z } from "zod"
+import {
+  pusherServer,
+  getSurveyChannel,
+  COLLABORATION_EVENTS,
+} from "@/lib/pusher"
 
 const updateSurveySchema = z.object({
   title: z.string().min(1).max(100).optional(),
@@ -82,6 +87,21 @@ export async function PUT(
     where: { id },
     data: parsed.data,
   })
+
+  // 触发实时同步事件
+  await pusherServer.trigger(
+    getSurveyChannel(id),
+    COLLABORATION_EVENTS.SURVEY_UPDATED,
+    {
+      survey: {
+        title: survey.title,
+        description: survey.description,
+        settings: survey.settings as Record<string, unknown>,
+      },
+      fromUserId: session.user.id,
+      timestamp: new Date().toISOString(),
+    }
+  )
 
   return NextResponse.json(survey)
 }

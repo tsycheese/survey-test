@@ -9,9 +9,9 @@ export const pusherServer = new Pusher({
   useTLS: true,
 })
 
-// 频道名称工具函数
+// 频道名称工具函数（使用 Presence Channel）
 export const getSurveyChannel = (surveyId: string) =>
-  `private-survey-${surveyId}`
+  `presence-survey-${surveyId}`
 
 // 事件名称常量
 export const COLLABORATION_EVENTS = {
@@ -50,4 +50,32 @@ export type LockInfo = {
   userId: string
   userName: string | null
   lockedAt: string
+}
+
+// 题目数据类型（用于实时同步）
+export type QuestionData = {
+  id: string
+  type: string
+  title: string
+  description?: string
+  required: boolean
+  order: number
+  config: Record<string, unknown>
+}
+
+// 问卷数据类型（用于实时同步）
+export type SurveyData = {
+  title: string
+  description?: string | null
+  settings?: Record<string, unknown>
+}
+
+// 实时同步事件数据类型
+export type SyncEventData = {
+  questionId?: string
+  question?: QuestionData
+  questions?: QuestionData[]
+  survey?: SurveyData
+  fromUserId: string
+  timestamp: string
 }

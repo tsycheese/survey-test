@@ -12,6 +12,12 @@ import {
   Tablet,
   Smartphone,
 } from "lucide-react"
+import { useSurveyCollaboration } from "@/hooks/use-survey-collaboration"
+import { OnlineMembers } from "@/components/collaboration/online-members"
+import {
+  LockIndicator,
+  QuestionLockOverlay,
+} from "@/components/collaboration/lock-indicator"
 import {
   DndContext,
   DragEndEvent,
@@ -46,6 +52,9 @@ import type {
   SurveySettings,
   QuestionCategory,
 } from "@/lib/questions/types"
+import type { LockInfo } from "@/lib/pusher"
+import { COLLABORATION_EVENTS } from "@/lib/pusher"
+import type { QuestionData, SurveyData } from "@/lib/pusher"
 import { QUESTION_CATEGORIES } from "@/lib/questions/types"
 import { SurveySettingsPanel } from "@/components/editor/survey-settings-panel"
 import { AIChatDialog } from "@/components/ai/ai-chat-dialog"
@@ -84,7 +93,138 @@ export default function EditSurveyPage() {
     canAccess: boolean
     canEdit: boolean
     isLoading: boolean
-  }>({ canAccess: false, canEdit: false, isLoading: true })
+    userId: string | null
+  }>({ canAccess: false, canEdit: false, isLoading: true, userId: null })
+
+  // 协作功能（Presence Channel 自动处理加入/离开）
+  const {
+    members,
+    lockedQuestions,
+    isConnected,
+    lockQuestion,
+    unlockQuestion,
+    onEvent,
+  } = useSurveyCollaboration(
+    permission.canAccess ? id : null,
+    permission.userId
+  )
+
+  // 监听远程内容变更
+  useEffect(() => {
+    if (!permission.canAccess || !survey) return
+
+    // 监听题目更新
+    const unsubscribeQuestionUpdated = onEvent(
+      COLLABORATION_EVENTS.QUESTION_UPDATED,
+      (data: unknown) => {
+        const { question, fromUserId } = data as {
+          question: QuestionData
+          fromUserId: string
+        }
+        // 忽略自己触发的更新
+        if (fromUserId === permission.userId) return
+
+        updateQuestion({
+          ...question,
+          config: question.config,
+        } as Question)
+
+        toast.info("题目已被其他协作者更新", {
+          duration: 2000,
+        })
+      }
+    )
+
+    // 监听题目创建
+    const unsubscribeQuestionCreated = onEvent(
+      COLLABORATION_EVENTS.QUESTION_CREATED,
+      (data: unknown) => {
+        const { question, fromUserId } = data as {
+          question: QuestionData
+          fromUserId: string
+        }
+        if (fromUserId === permission.userId) return
+
+        addQuestion({
+          ...question,
+          config: question.config,
+        } as Question)
+
+        toast.info("有新题目添加", { duration: 2000 })
+      }
+    )
+
+    // 监听题目删除
+    const unsubscribeQuestionDeleted = onEvent(
+      COLLABORATION_EVENTS.QUESTION_DELETED,
+      (data: unknown) => {
+        const { questionId, fromUserId } = data as {
+          questionId: string
+          fromUserId: string
+        }
+        if (fromUserId === permission.userId) return
+
+        deleteQuestion(questionId)
+        toast.info("有题目被删除", { duration: 2000 })
+      }
+    )
+
+    // 监听题目重排
+    const unsubscribeQuestionsReordered = onEvent(
+      COLLABORATION_EVENTS.QUESTIONS_REORDERED,
+      (data: unknown) => {
+        const { questions: reorderedQuestions, fromUserId } = data as {
+          questions: { id: string; order: number }[]
+          fromUserId: string
+        }
+        if (fromUserId === permission.userId) return
+
+        // 根据新顺序重新排序
+        const orderMap = new Map(reorderedQuestions.map((q) => [q.id, q.order]))
+        const newQuestions = [...survey.questions].sort(
+          (a, b) =>
+            (orderMap.get(a.id) ?? a.order) - (orderMap.get(b.id) ?? b.order)
+        )
+        newQuestions.forEach((q, idx) => {
+          q.order = idx
+        })
+        setSurvey({ ...survey, questions: newQuestions })
+      }
+    )
+
+    // 监听问卷更新
+    const unsubscribeSurveyUpdated = onEvent(
+      COLLABORATION_EVENTS.SURVEY_UPDATED,
+      (data: unknown) => {
+        const { survey: surveyData, fromUserId } = data as {
+          survey: SurveyData
+          fromUserId: string
+        }
+        if (fromUserId === permission.userId) return
+
+        updateSurveyInfo(surveyData.title, surveyData.description ?? "")
+        toast.info("问卷信息已更新", { duration: 2000 })
+      }
+    )
+
+    return () => {
+      unsubscribeQuestionUpdated()
+      unsubscribeQuestionCreated()
+      unsubscribeQuestionDeleted()
+      unsubscribeQuestionsReordered()
+      unsubscribeSurveyUpdated()
+    }
+  }, [
+    permission.canAccess,
+    permission.userId,
+    survey,
+    onEvent,
+    updateQuestion,
+    addQuestion,
+    deleteQuestion,
+    setSurvey,
+    updateSurveyInfo,
+  ])
 
   // 选中题目时自动切换到题目面板
   const handleSelectQuestion = (id: string) => {
@@ -204,7 +344,12 @@ export default function EditSurveyPage() {
         ])
 
         if (!surveyRes.ok) {
-          setPermission({ canAccess: false, canEdit: false, isLoading: false })
+          setPermission({
+            canAccess: false,
+            canEdit: false,
+            isLoading: false,
+            userId: null,
+          })
           return
         }
 
@@ -240,6 +385,7 @@ export default function EditSurveyPage() {
           canAccess,
           canEdit: hasEditPermission,
           isLoading: false,
+          userId,
         })
 
         if (canAccess) {
@@ -263,7 +409,12 @@ export default function EditSurveyPage() {
           })
         }
       } catch {
-        setPermission({ canAccess: false, canEdit: false, isLoading: false })
+        setPermission({
+          canAccess: false,
+          canEdit: false,
+          isLoading: false,
+          userId: null,
+        })
       }
     }
 
@@ -400,6 +551,13 @@ export default function EditSurveyPage() {
   }
 
   async function handleUpdateQuestion(updated: Question) {
+    // 检查题目是否被锁定
+    const lockInfo = lockedQuestions.get(updated.id)
+    if (lockInfo && lockInfo.userId !== permission.userId) {
+      toast.error(`该题目正在被 ${lockInfo.userName || "其他用户"} 编辑`)
+      return
+    }
+
     updateQuestion(updated)
     const res = await fetch(`/api/surveys/${id}/questions/${updated.id}`, {
       method: "PUT",
@@ -416,6 +574,28 @@ export default function EditSurveyPage() {
     } else {
       toast.error("保存失败")
     }
+  }
+
+  // 选中题目时尝试锁定
+  const handleSelectQuestionWithLock = async (questionId: string) => {
+    // 先解锁之前选中的题目
+    if (selectedId && selectedId !== questionId) {
+      const prevLock = lockedQuestions.get(selectedId)
+      if (prevLock?.userId === permission.userId) {
+        await unlockQuestion(selectedId)
+      }
+    }
+
+    // 尝试锁定新选中的题目
+    const lockInfo = lockedQuestions.get(questionId)
+    if (!lockInfo || lockInfo.userId === permission.userId) {
+      const success = await lockQuestion(questionId)
+      if (!success && lockInfo) {
+        toast.warning(`该题目正在被 ${lockInfo.userName || "其他用户"} 编辑`)
+      }
+    }
+
+    handleSelectQuestion(questionId)
   }
 
   if (permission.isLoading) {
@@ -477,6 +657,12 @@ export default function EditSurveyPage() {
           />
         </div>
         <div className="flex items-center gap-3">
+          <OnlineMembers
+            members={members}
+            currentUserId={permission.userId}
+            isConnected={isConnected}
+          />
+          <div className="h-4 w-px bg-border" />
           <CollaborationDialog surveyId={id} />
           <Button
             variant="outline"
@@ -652,37 +838,49 @@ export default function EditSurveyPage() {
                           : "点击左侧题型添加第一道题"}
                       </div>
                     ) : (
-                      survey.questions.map((q, idx) => (
-                        <div key={q.id} className="relative">
-                          {/* 插入位置指示线 */}
-                          {insertIndex === idx && draggingType && (
-                            <div className="absolute -top-px right-0 left-0 z-10 h-0.5 bg-primary shadow-[0_0_8px_2px_rgba(59,130,246,0.5)]" />
-                          )}
-                          <SortableQuestionCard
-                            question={q}
-                            idx={idx}
-                            selectedId={selectedId}
-                            survey={survey}
-                            onSelect={handleSelectQuestion}
-                            onUpdate={handleUpdateQuestion}
-                            onTitleChange={(title) =>
-                              updateQuestion({ ...q, title })
-                            }
-                            onTitleBlur={(title) => {
-                              handleUpdateQuestion({ ...q, title })
-                            }}
-                            onDescriptionChange={(description) =>
-                              updateQuestion({ ...q, description })
-                            }
-                            onDescriptionBlur={(description) => {
-                              handleUpdateQuestion({ ...q, description })
-                            }}
-                            onOptionChange={(updated) =>
-                              updateQuestion(updated as Question)
-                            }
-                          />
-                        </div>
-                      ))
+                      survey.questions.map((q, idx) => {
+                        const lockInfo = lockedQuestions.get(q.id)
+                        const isLockedByMe =
+                          lockInfo?.userId === permission.userId
+                        const isLockedByOther = lockInfo && !isLockedByMe
+
+                        return (
+                          <div key={q.id} className="relative">
+                            {/* 插入位置指示线 */}
+                            {insertIndex === idx && draggingType && (
+                              <div className="absolute -top-px right-0 left-0 z-10 h-0.5 bg-primary shadow-[0_0_8px_2px_rgba(59,130,246,0.5)]" />
+                            )}
+                            <SortableQuestionCard
+                              question={q}
+                              idx={idx}
+                              selectedId={selectedId}
+                              survey={survey}
+                              lockInfo={lockInfo}
+                              isLockedByMe={!!isLockedByMe}
+                              isLockedByOther={!!isLockedByOther}
+                              onSelect={() =>
+                                handleSelectQuestionWithLock(q.id)
+                              }
+                              onUpdate={handleUpdateQuestion}
+                              onTitleChange={(title) =>
+                                updateQuestion({ ...q, title })
+                              }
+                              onTitleBlur={(title) => {
+                                handleUpdateQuestion({ ...q, title })
+                              }}
+                              onDescriptionChange={(description) =>
+                                updateQuestion({ ...q, description })
+                              }
+                              onDescriptionBlur={(description) => {
+                                handleUpdateQuestion({ ...q, description })
+                              }}
+                              onOptionChange={(updated) =>
+                                updateQuestion(updated as Question)
+                              }
+                            />
+                          </div>
+                        )
+                      })
                     )}
                     {/* 末尾插入指示线 */}
                     {insertIndex === survey.questions.length &&
@@ -997,6 +1195,9 @@ function SortableQuestionCard({
   idx,
   selectedId,
   survey,
+  lockInfo,
+  isLockedByMe,
+  isLockedByOther,
   onSelect,
   onUpdate,
   onTitleChange,
@@ -1009,7 +1210,10 @@ function SortableQuestionCard({
   idx: number
   selectedId: string | null
   survey: Survey | null
-  onSelect: (id: string) => void
+  lockInfo: LockInfo | undefined
+  isLockedByMe: boolean
+  isLockedByOther: boolean
+  onSelect: () => void
   onUpdate: (q: Question) => void
   onTitleChange: (title: string) => void
   onTitleBlur: (title: string) => void
@@ -1040,7 +1244,9 @@ function SortableQuestionCard({
       style={style}
       className={cn(
         "group relative flex w-full items-start transition-colors",
-        selectedId === question.id ? "bg-primary/5" : "hover:bg-muted/5"
+        selectedId === question.id ? "bg-primary/5" : "hover:bg-muted/5",
+        isLockedByOther && "opacity-75",
+        isLockedByOther && "rounded-sm ring-1 ring-amber-400/70 ring-inset"
       )}
     >
       {/* 拖拽手柄 */}
@@ -1060,23 +1266,42 @@ function SortableQuestionCard({
         <div className="absolute top-0 left-0 h-full w-1 rounded-l-sm bg-primary" />
       )}
 
+      {/* 锁定指示器 */}
+      {lockInfo && (
+        <div className="absolute top-2 right-2 z-20">
+          <LockIndicator lockInfo={lockInfo} isLockedByMe={isLockedByMe} />
+        </div>
+      )}
+
       {/* 点击区域 */}
-      <div
-        onClick={() => onSelect(question.id)}
-        className="flex-1 px-12 py-2 text-left"
-      >
-        <def.QuestionCard
-          question={question as never}
-          selected={selectedId === question.id}
-          order={idx + 1}
-          showNumber={survey?.settings?.showQuestionNumber ?? true}
-          onUpdate={onUpdate}
-          onTitleChange={onTitleChange}
-          onTitleBlur={onTitleBlur}
-          onDescriptionChange={onDescriptionChange}
-          onDescriptionBlur={onDescriptionBlur}
-          onOptionChange={onOptionChange}
-        />
+      <div onClick={onSelect} className="relative flex-1 px-12 py-2 text-left">
+        {isLockedByOther ? (
+          // 只读模式：使用 Response 组件（仅展示，不能编辑）
+          <def.Response
+            question={question as never}
+            order={idx + 1}
+            showNumber={survey?.settings?.showQuestionNumber ?? true}
+            value={undefined}
+            onChange={() => {}}
+          />
+        ) : (
+          // 编辑模式
+          <def.QuestionCard
+            question={question as never}
+            selected={selectedId === question.id}
+            order={idx + 1}
+            showNumber={survey?.settings?.showQuestionNumber ?? true}
+            onUpdate={onUpdate}
+            onTitleChange={onTitleChange}
+            onTitleBlur={onTitleBlur}
+            onDescriptionChange={onDescriptionChange}
+            onDescriptionBlur={onDescriptionBlur}
+            onOptionChange={onOptionChange}
+          />
+        )}
+
+        {/* 被锁定时显示提示 */}
+        <QuestionLockOverlay lockInfo={lockInfo} isLockedByMe={isLockedByMe} />
       </div>
     </div>
   )

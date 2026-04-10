@@ -305,6 +305,7 @@ export type QuestionDef<Q extends Question = Question> = {
     selected: boolean
     order: number
     showNumber?: boolean
+    readOnly?: boolean
     onUpdate?: (question: Q) => void
     onTitleClick?: () => void
     onTitleChange?: (title: string) => void

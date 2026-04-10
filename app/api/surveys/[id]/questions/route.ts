@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/prisma"
 import { z } from "zod"
+import {
+  pusherServer,
+  getSurveyChannel,
+  COLLABORATION_EVENTS,
+} from "@/lib/pusher"
 
 const questionSchema = z.object({
   title: z.string().min(1, "题目不能为空"),
@@ -78,6 +83,25 @@ export async function POST(
       order: count,
     },
   })
+
+  // 触发实时同步事件
+  await pusherServer.trigger(
+    getSurveyChannel(id),
+    COLLABORATION_EVENTS.QUESTION_CREATED,
+    {
+      question: {
+        id: question.id,
+        type: question.type,
+        title: question.title,
+        description: question.description ?? undefined,
+        required: question.required,
+        order: question.order,
+        config: question.config as Record<string, unknown>,
+      },
+      fromUserId: session.user.id,
+      timestamp: new Date().toISOString(),
+    }
+  )
 
   return NextResponse.json(question, { status: 201 })
 }

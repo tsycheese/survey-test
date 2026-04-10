@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/prisma"
 import { z } from "zod"
+import {
+  pusherServer,
+  getSurveyChannel,
+  COLLABORATION_EVENTS,
+} from "@/lib/pusher"
 
 const reorderSchema = z.object({
   questions: z.array(
@@ -46,6 +51,20 @@ export async function PUT(
         data: { order: q.order },
       })
     )
+  )
+
+  // 触发实时同步事件
+  await pusherServer.trigger(
+    getSurveyChannel(id),
+    COLLABORATION_EVENTS.QUESTIONS_REORDERED,
+    {
+      questions: parsed.data.questions.map((q) => ({
+        id: q.id,
+        order: q.order,
+      })),
+      fromUserId: session.user.id,
+      timestamp: new Date().toISOString(),
+    }
   )
 
   return NextResponse.json({ success: true })
