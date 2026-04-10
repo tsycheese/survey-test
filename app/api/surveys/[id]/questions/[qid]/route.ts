@@ -5,7 +5,7 @@ import { z } from "zod"
 
 const updateQuestionSchema = z.object({
   title: z.string().min(1).optional(),
-  description: z.string().optional(),
+  description: z.string().nullable().optional(),
   type: z
     .enum([
       "SINGLE_CHOICE",
@@ -32,6 +32,7 @@ const updateQuestionSchema = z.object({
   required: z.boolean().optional(),
   config: z
     .record(z.unknown())
+    .nullable()
     .optional()
     .transform(
       (v) =>
@@ -52,11 +53,28 @@ export async function PUT(
   }
 
   const { id, qid } = await params
+  const userId = session.user.id
+
+  // 检查是否是创建者或协作者
   const survey = await prisma.survey.findUnique({
-    where: { id, userId: session.user.id },
+    where: { id },
+    include: {
+      collaborators: {
+        where: { userId },
+        select: { canEdit: true },
+      },
+    },
   })
+
   if (!survey) {
     return NextResponse.json({ error: "问卷不存在" }, { status: 404 })
+  }
+
+  const isOwner = survey.userId === userId
+  const canEdit = isOwner || survey.collaborators[0]?.canEdit
+
+  if (!canEdit) {
+    return NextResponse.json({ error: "无权限编辑" }, { status: 403 })
   }
 
   const body = await request.json()
@@ -86,11 +104,28 @@ export async function DELETE(
   }
 
   const { id, qid } = await params
+  const userId = session.user.id
+
+  // 检查是否是创建者或协作者
   const survey = await prisma.survey.findUnique({
-    where: { id, userId: session.user.id },
+    where: { id },
+    include: {
+      collaborators: {
+        where: { userId },
+        select: { canEdit: true },
+      },
+    },
   })
+
   if (!survey) {
     return NextResponse.json({ error: "问卷不存在" }, { status: 404 })
+  }
+
+  const isOwner = survey.userId === userId
+  const canEdit = isOwner || survey.collaborators[0]?.canEdit
+
+  if (!canEdit) {
+    return NextResponse.json({ error: "无权限删除" }, { status: 403 })
   }
 
   await prisma.question.delete({ where: { id: qid, surveyId: id } })
