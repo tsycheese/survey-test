@@ -12,6 +12,8 @@ model User {
   sessions       Session[]
   authenticators Authenticator[]
   surveys        Survey[]
+  collaborations SurveyCollaborator[]
+  surveyLogs     SurveyLog[]
 }
 
 model Account {
