@@ -401,7 +401,7 @@ export default function EditSurveyPage() {
 
   async function handleUpdateQuestion(updated: Question) {
     updateQuestion(updated)
-    await fetch(`/api/surveys/${id}/questions/${updated.id}`, {
+    const res = await fetch(`/api/surveys/${id}/questions/${updated.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -411,6 +411,11 @@ export default function EditSurveyPage() {
         config: updated.config,
       }),
     })
+    if (res.ok) {
+      toast.success("保存成功")
+    } else {
+      toast.error("保存失败")
+    }
   }
 
   if (permission.isLoading) {
