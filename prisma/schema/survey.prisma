@@ -27,9 +27,13 @@ model Question {
   order       Int
   required    Boolean      @default(false)
   config      Json?
+  lockedBy    String?      // 正在编辑的用户ID
+  lockedAt    DateTime?    // 锁定时间
 
   survey  Survey   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
   answers Answer[]
+
+  @@index([lockedBy])
 }
 
 enum QuestionType {
