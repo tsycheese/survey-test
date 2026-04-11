@@ -42,7 +42,7 @@ export function OnlineMembers({
 
   return (
     <div
-      className="flex items-center gap-2 rounded-full border bg-background px-3 py-1.5"
+      className="relative flex items-center gap-2 rounded-full border bg-background px-3 py-1.5"
       onMouseEnter={() => setIsExpanded(true)}
       onMouseLeave={() => setIsExpanded(false)}
     >
@@ -69,30 +69,37 @@ export function OnlineMembers({
 
       {/* 悬停展开的成员列表 */}
       {isExpanded && (
-        <div className="absolute top-full right-0 z-50 mt-2 w-56 rounded-lg border bg-popover p-2 shadow-lg">
-          <div className="mb-2 px-2 py-1 text-xs font-medium text-muted-foreground">
-            在线成员 ({membersList.length})
-          </div>
-          <div className="max-h-48 space-y-1 overflow-y-auto">
-            {membersList.map((member) => (
-              <div
-                key={member.userId}
-                className={cn(
-                  "flex items-center gap-2 rounded-md px-2 py-1.5",
-                  member.userId === currentUserId && "bg-muted"
-                )}
-              >
-                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs">
-                  {member.name?.[0] || "?"}
+        <div
+          className="absolute top-[calc(100%+8px)] right-0 z-50 w-56 rounded-lg border bg-popover p-2 shadow-lg"
+          style={{ marginTop: 0 }}
+        >
+          {/* 小三角箭头 */}
+          <div className="absolute -top-1.5 right-6 h-3 w-3 rotate-45 border-t border-l bg-popover" />
+          <div className="relative">
+            <div className="mb-2 px-2 py-1 text-xs font-medium text-muted-foreground">
+              在线成员 ({membersList.length})
+            </div>
+            <div className="max-h-48 space-y-1 overflow-y-auto">
+              {membersList.map((member) => (
+                <div
+                  key={member.userId}
+                  className={cn(
+                    "flex items-center gap-2 rounded-md px-2 py-1.5",
+                    member.userId === currentUserId && "bg-muted"
+                  )}
+                >
+                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs">
+                    {member.name?.[0] || "?"}
+                  </div>
+                  <span className="flex-1 truncate text-sm">
+                    {member.name || "匿名用户"}
+                  </span>
+                  {member.userId === currentUserId && (
+                    <span className="text-xs text-muted-foreground">我</span>
+                  )}
                 </div>
-                <span className="flex-1 truncate text-sm">
-                  {member.name || "匿名用户"}
-                </span>
-                {member.userId === currentUserId && (
-                  <span className="text-xs text-muted-foreground">我</span>
-                )}
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
       )}
