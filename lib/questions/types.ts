@@ -333,6 +333,7 @@ export type Survey = {
   title: string
   description: string | null
   published: boolean
+  userId?: string
   questions: Question[]
   settings?: SurveySettings
 }

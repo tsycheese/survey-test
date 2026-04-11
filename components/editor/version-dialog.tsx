@@ -36,6 +36,7 @@ interface VersionDialogProps {
   onOpenChange: (open: boolean) => void
   onPublish: () => Promise<void>
   published: boolean
+  isOwner: boolean
 }
 
 export function VersionDialog({
@@ -44,6 +45,7 @@ export function VersionDialog({
   onOpenChange,
   onPublish,
   published,
+  isOwner,
 }: VersionDialogProps) {
   const [versions, setVersions] = useState<Version[]>([])
   const [loading, setLoading] = useState(false)
@@ -147,22 +149,37 @@ export function VersionDialog({
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* 发布按钮 */}
-          <div className="flex items-center justify-between rounded-lg border bg-muted/50 p-4">
-            <div>
-              <p className="font-medium">
-                {published ? "发布新版本" : "首次发布"}
-              </p>
+          {/* 发布按钮 - 仅所有者可见 */}
+          {isOwner && (
+            <div className="flex items-center justify-between rounded-lg border bg-muted/50 p-4">
+              <div>
+                <p className="font-medium">
+                  {published ? "发布新版本" : "首次发布"}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {published
+                    ? "将当前编辑的内容发布为新版本"
+                    : "发布问卷，生成分享链接"}
+                </p>
+              </div>
+              <Button onClick={handlePublish} disabled={publishing}>
+                {publishing
+                  ? "发布中..."
+                  : published
+                    ? "发布新版本"
+                    : "发布问卷"}
+              </Button>
+            </div>
+          )}
+
+          {/* 非所有者提示 */}
+          {!isOwner && versions.length > 0 && (
+            <div className="rounded-lg border bg-muted/30 p-4">
               <p className="text-sm text-muted-foreground">
-                {published
-                  ? "将当前编辑的内容发布为新版本"
-                  : "发布问卷，生成分享链接"}
+                只有问卷所有者可以发布新版本
               </p>
             </div>
-            <Button onClick={handlePublish} disabled={publishing}>
-              {publishing ? "发布中..." : published ? "发布新版本" : "发布问卷"}
-            </Button>
-          </div>
+          )}
 
           {/* 版本列表 */}
           <div className="space-y-2">

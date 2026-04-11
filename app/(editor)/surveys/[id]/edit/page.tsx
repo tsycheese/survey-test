@@ -402,6 +402,7 @@ export default function EditSurveyPage() {
             title: surveyData.title,
             description: surveyData.description,
             published: surveyData.published,
+            userId: surveyData.userId,
             settings: surveyData.settings,
             questions: (surveyData.questions ?? []).map(
               (q: Record<string, unknown>) => ({
@@ -1068,6 +1069,7 @@ export default function EditSurveyPage() {
           }
         }}
         published={survey.published}
+        isOwner={permission.userId === survey.userId}
       />
     </div>
   )
