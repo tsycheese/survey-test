@@ -182,11 +182,11 @@ function QuestionStats({
 
   return (
     <div className="space-y-2">
-      {displayOptions.map((opt) => {
+      {displayOptions.map((opt, idx) => {
         const count = counts[opt] || 0
         const pct = total > 0 ? (count / total) * 100 : 0
         return (
-          <div key={opt} className="space-y-0.5">
+          <div key={`${opt}-${idx}`} className="space-y-0.5">
             <div className="flex justify-between text-sm">
               <span>{opt}</span>
               <span className="text-muted-foreground">
