@@ -71,9 +71,9 @@ export function OnlineMembers({
       {isExpanded && (
         <div className="absolute top-full right-0 z-50 mt-2 w-56 rounded-lg border bg-popover p-2 shadow-lg">
           <div className="mb-2 px-2 py-1 text-xs font-medium text-muted-foreground">
-            在线成员
+            在线成员 ({membersList.length})
           </div>
-          <div className="space-y-1">
+          <div className="max-h-48 space-y-1 overflow-y-auto">
             {membersList.map((member) => (
               <div
                 key={member.userId}
