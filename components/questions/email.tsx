@@ -15,6 +15,7 @@ function QuestionCard({
   onTitleBlur,
   onDescriptionChange,
   onDescriptionBlur,
+  onFocusQuestion,
 }: {
   question: EmailQuestion
   order: number
@@ -24,6 +25,7 @@ function QuestionCard({
   onTitleBlur?: (title: string) => void
   onDescriptionChange?: (description: string) => void
   onDescriptionBlur?: (description: string) => void
+  onFocusQuestion?: () => void
 }) {
   const { placeholder = "请输入邮箱地址" } = question.config
 
@@ -39,6 +41,7 @@ function QuestionCard({
         onBlur={onTitleBlur}
         onDescriptionChange={onDescriptionChange}
         onDescriptionBlur={onDescriptionBlur}
+        onFocusQuestion={onFocusQuestion}
       />
 
       <Input type="email" placeholder={placeholder} className="mt-3" disabled />

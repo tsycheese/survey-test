@@ -16,6 +16,7 @@ function QuestionCard({
   onTitleBlur,
   onDescriptionChange,
   onDescriptionBlur,
+  onFocusQuestion,
 }: {
   question: CESQuestion
   order: number
@@ -25,6 +26,7 @@ function QuestionCard({
   onTitleBlur?: (title: string) => void
   onDescriptionChange?: (description: string) => void
   onDescriptionBlur?: (description: string) => void
+  onFocusQuestion?: () => void
 }) {
   const {
     max = 5,
@@ -45,6 +47,7 @@ function QuestionCard({
         onBlur={onTitleBlur}
         onDescriptionChange={onDescriptionChange}
         onDescriptionBlur={onDescriptionBlur}
+        onFocusQuestion={onFocusQuestion}
       />
 
       <div className="mt-4">

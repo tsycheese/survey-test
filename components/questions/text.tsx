@@ -155,6 +155,16 @@ export const textDef: QuestionDef<TextQuestion> = {
     onTitleBlur,
     onDescriptionChange,
     onDescriptionBlur,
+    onFocusQuestion,
+  }: {
+    question: TextQuestion
+    order: number
+    showNumber?: boolean
+    onTitleChange?: (title: string) => void
+    onTitleBlur?: (title: string) => void
+    onDescriptionChange?: (description: string) => void
+    onDescriptionBlur?: (description: string) => void
+    onFocusQuestion?: () => void
   }) => {
     const { format = "any", placeholder } = question.config
 
@@ -170,6 +180,7 @@ export const textDef: QuestionDef<TextQuestion> = {
           onBlur={onTitleBlur}
           onDescriptionChange={onDescriptionChange}
           onDescriptionBlur={onDescriptionBlur}
+          onFocusQuestion={onFocusQuestion}
         />
         <Input
           type={format === "number" ? "number" : "text"}

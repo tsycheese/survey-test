@@ -18,6 +18,7 @@ function QuestionCard({
   onDescriptionChange,
   onDescriptionBlur,
   onOptionChange,
+  onFocusQuestion,
 }: {
   question: DropdownQuestion
   order: number
@@ -28,6 +29,7 @@ function QuestionCard({
   onDescriptionChange?: (description: string) => void
   onDescriptionBlur?: (description: string) => void
   onOptionChange?: (question: DropdownQuestion) => void
+  onFocusQuestion?: () => void
 }) {
   const { options } = question.config
 
@@ -43,6 +45,7 @@ function QuestionCard({
         onBlur={onTitleBlur}
         onDescriptionChange={onDescriptionChange}
         onDescriptionBlur={onDescriptionBlur}
+        onFocusQuestion={onFocusQuestion}
       />
 
       <div className="relative mt-3">

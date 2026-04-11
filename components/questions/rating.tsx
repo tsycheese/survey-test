@@ -111,6 +111,16 @@ export const ratingDef: QuestionDef<RatingQuestion> = {
     onTitleBlur,
     onDescriptionChange,
     onDescriptionBlur,
+    onFocusQuestion,
+  }: {
+    question: RatingQuestion
+    order: number
+    showNumber?: boolean
+    onTitleChange?: (title: string) => void
+    onTitleBlur?: (title: string) => void
+    onDescriptionChange?: (description: string) => void
+    onDescriptionBlur?: (description: string) => void
+    onFocusQuestion?: () => void
   }) => {
     const { min, max, minLabel, maxLabel } = question.config
 
@@ -126,6 +136,7 @@ export const ratingDef: QuestionDef<RatingQuestion> = {
           onBlur={onTitleBlur}
           onDescriptionChange={onDescriptionChange}
           onDescriptionBlur={onDescriptionBlur}
+          onFocusQuestion={onFocusQuestion}
         />
         <div className="mt-3 flex items-center gap-2">
           {minLabel && (

@@ -19,6 +19,7 @@ function QuestionCard({
   onTitleBlur,
   onDescriptionChange,
   onDescriptionBlur,
+  onFocusQuestion,
 }: {
   question: MatrixSingleQuestion
   order: number
@@ -27,6 +28,7 @@ function QuestionCard({
   onTitleBlur?: (title: string) => void
   onDescriptionChange?: (description: string) => void
   onDescriptionBlur?: (description: string) => void
+  onFocusQuestion?: () => void
 }) {
   const { rows, columns } = question.config
 
@@ -42,6 +44,7 @@ function QuestionCard({
         onBlur={onTitleBlur}
         onDescriptionChange={onDescriptionChange}
         onDescriptionBlur={onDescriptionBlur}
+        onFocusQuestion={onFocusQuestion}
       />
 
       <div className="mt-4 overflow-hidden rounded-lg border">

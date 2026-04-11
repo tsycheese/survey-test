@@ -15,6 +15,7 @@ function QuestionCard({
   onTitleBlur,
   onDescriptionChange,
   onDescriptionBlur,
+  onFocusQuestion,
 }: {
   question: NumberQuestion
   order: number
@@ -25,6 +26,7 @@ function QuestionCard({
   onDescriptionChange?: (description: string) => void
   onDescriptionBlur?: (description: string) => void
   onOptionChange?: (question: NumberQuestion) => void
+  onFocusQuestion?: () => void
 }) {
   const { placeholder, prefix, suffix } = question.config
 
@@ -40,6 +42,7 @@ function QuestionCard({
         onBlur={onTitleBlur}
         onDescriptionChange={onDescriptionChange}
         onDescriptionBlur={onDescriptionBlur}
+        onFocusQuestion={onFocusQuestion}
       />
 
       <div className="mt-3 flex items-center gap-2">

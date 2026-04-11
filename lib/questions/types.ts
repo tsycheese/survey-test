@@ -313,6 +313,7 @@ export type QuestionDef<Q extends Question = Question> = {
     onDescriptionChange?: (description: string) => void
     onDescriptionBlur?: (description: string) => void
     onOptionChange?: (question: Q) => void
+    onFocusQuestion?: () => void
   }>
   Response: React.FC<{
     question: Q

@@ -205,6 +205,11 @@ function ImageOptionCard({
                     handleTitleBlur()
                   }
                 }}
+                onFocus={(e) => {
+                  // 将光标移动到文本末尾
+                  const length = e.target.value.length
+                  e.target.setSelectionRange(length, length)
+                }}
                 placeholder="添加标题"
               />
             ) : (
@@ -235,6 +240,11 @@ function ImageOptionCard({
                     handleLabelBlur()
                   }
                 }}
+                onFocus={(e) => {
+                  // 将光标移动到文本末尾
+                  const length = e.target.value.length
+                  e.target.setSelectionRange(length, length)
+                }}
                 placeholder="添加选项说明（可选）"
               />
             ) : (
@@ -262,6 +272,7 @@ function QuestionCard({
   onDescriptionChange,
   onDescriptionBlur,
   onOptionChange,
+  onFocusQuestion,
 }: {
   question: ImageSingleChoiceQuestion
   order: number
@@ -272,6 +283,7 @@ function QuestionCard({
   onDescriptionChange?: (description: string) => void
   onDescriptionBlur?: (description: string) => void
   onOptionChange?: (question: ImageSingleChoiceQuestion) => void
+  onFocusQuestion?: () => void
 }) {
   const {
     options,
@@ -298,6 +310,7 @@ function QuestionCard({
         onBlur={onTitleBlur}
         onDescriptionChange={onDescriptionChange}
         onDescriptionBlur={onDescriptionBlur}
+        onFocusQuestion={onFocusQuestion}
       />
 
       <div className="relative mt-4">

@@ -96,6 +96,11 @@ export default function EditSurveyPage() {
     userId: string | null
   }>({ canAccess: false, canEdit: false, isLoading: true, userId: null })
 
+  // 乐观锁定状态：点击题目时立即设置，让UI立即显示"我正在编辑"
+  const [optimisticLockedId, setOptimisticLockedId] = useState<string | null>(
+    null
+  )
+
   // 协作功能（Presence Channel 自动处理加入/离开）
   const {
     members,
@@ -577,25 +582,35 @@ export default function EditSurveyPage() {
   }
 
   // 选中题目时尝试锁定
-  const handleSelectQuestionWithLock = async (questionId: string) => {
-    // 先解锁之前选中的题目
-    if (selectedId && selectedId !== questionId) {
-      const prevLock = lockedQuestions.get(selectedId)
-      if (prevLock?.userId === permission.userId) {
-        await unlockQuestion(selectedId)
-      }
-    }
-
-    // 尝试锁定新选中的题目
-    const lockInfo = lockedQuestions.get(questionId)
-    if (!lockInfo || lockInfo.userId === permission.userId) {
-      const success = await lockQuestion(questionId)
-      if (!success && lockInfo) {
-        toast.warning(`该题目正在被 ${lockInfo.userName || "其他用户"} 编辑`)
-      }
-    }
-
+  const handleSelectQuestionWithLock = (questionId: string) => {
+    // 先立即更新本地状态，让UI立即响应
     handleSelectQuestion(questionId)
+
+    // 乐观更新：立即设置本地锁定状态，显示"我正在编辑"
+    setOptimisticLockedId(questionId)
+
+    // 异步执行锁定操作（不await，让它们在后台执行）
+    const doLock = async () => {
+      // 先解锁之前选中的题目
+      if (selectedId && selectedId !== questionId) {
+        const prevLock = lockedQuestions.get(selectedId)
+        if (prevLock?.userId === permission.userId) {
+          await unlockQuestion(selectedId)
+        }
+      }
+
+      // 尝试锁定新选中的题目
+      const lockInfo = lockedQuestions.get(questionId)
+      if (!lockInfo || lockInfo.userId === permission.userId) {
+        const success = await lockQuestion(questionId)
+        if (!success && lockInfo) {
+          toast.warning(`该题目正在被 ${lockInfo.userName || "其他用户"} 编辑`)
+        }
+      }
+    }
+
+    // 启动异步操作，不阻塞UI
+    doLock()
   }
 
   if (permission.isLoading) {
@@ -839,7 +854,20 @@ export default function EditSurveyPage() {
                       </div>
                     ) : (
                       survey.questions.map((q, idx) => {
-                        const lockInfo = lockedQuestions.get(q.id)
+                        // 乐观锁定：如果当前题目是乐观锁定的，使用乐观锁定状态
+                        const isOptimisticLocked = optimisticLockedId === q.id
+                        const serverLockInfo = lockedQuestions.get(q.id)
+                        // 优先使用服务器锁定状态，如果没有则使用乐观锁定状态
+                        const lockInfo: LockInfo | undefined =
+                          serverLockInfo ??
+                          (isOptimisticLocked
+                            ? {
+                                questionId: q.id,
+                                userId: permission.userId!,
+                                userName: "我",
+                                lockedAt: new Date().toISOString(),
+                              }
+                            : undefined)
                         const isLockedByMe =
                           lockInfo?.userId === permission.userId
                         const isLockedByOther = lockInfo && !isLockedByMe
@@ -1273,8 +1301,33 @@ function SortableQuestionCard({
         </div>
       )}
 
-      {/* 点击区域 */}
-      <div onClick={onSelect} className="relative flex-1 px-12 py-2 text-left">
+      {/* 点击区域 - 使用 mousedown 确保在表单聚焦前触发选中 */}
+      <div
+        onMouseDown={(e) => {
+          // 如果点击的不是表单控件，或者当前题目未被选中，则触发选中
+          const target = e.target as HTMLElement
+          const isFormElement =
+            target.tagName === "INPUT" ||
+            target.tagName === "TEXTAREA" ||
+            target.isContentEditable
+          // 如果点击表单控件但题目未被选中，先选中题目
+          if (isFormElement && selectedId !== question.id) {
+            onSelect()
+          }
+        }}
+        onClick={(e) => {
+          // 避免重复触发（如果已经在 mousedown 中处理了）
+          const target = e.target as HTMLElement
+          const isFormElement =
+            target.tagName === "INPUT" ||
+            target.tagName === "TEXTAREA" ||
+            target.isContentEditable
+          if (!isFormElement) {
+            onSelect()
+          }
+        }}
+        className="relative flex-1 px-12 py-2 text-left"
+      >
         {isLockedByOther ? (
           // 只读模式：使用 Response 组件（仅展示，不能编辑）
           <def.Response
@@ -1297,6 +1350,7 @@ function SortableQuestionCard({
             onDescriptionChange={onDescriptionChange}
             onDescriptionBlur={onDescriptionBlur}
             onOptionChange={onOptionChange}
+            onFocusQuestion={onSelect}
           />
         )}
 

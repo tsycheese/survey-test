@@ -32,12 +32,18 @@ function QuestionCard({
   showNumber = true,
   onTitleChange,
   onTitleBlur,
+  onDescriptionChange,
+  onDescriptionBlur,
+  onFocusQuestion,
 }: {
   question: DateTimeQuestion
   order: number
   showNumber?: boolean
   onTitleChange?: (title: string) => void
   onTitleBlur?: (title: string) => void
+  onDescriptionChange?: (description: string) => void
+  onDescriptionBlur?: (description: string) => void
+  onFocusQuestion?: () => void
 }) {
   const { format = "YYYY-MM-DD HH:mm" } = question.config
 
@@ -58,9 +64,13 @@ function QuestionCard({
         order={order}
         showNumber={showNumber}
         title={question.title}
+        description={question.description}
         required={question.required}
         onChange={onTitleChange}
         onBlur={onTitleBlur}
+        onDescriptionChange={onDescriptionChange}
+        onDescriptionBlur={onDescriptionBlur}
+        onFocusQuestion={onFocusQuestion}
       />
 
       <div className="mt-3 flex flex-wrap items-center gap-2">

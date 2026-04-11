@@ -79,35 +79,49 @@ export function useSurveyCollaboration(
     // Presence Channel: 订阅成功时获取成员列表
     channel.bind(
       "pusher:subscription_succeeded",
-      (members: {
-        members: Record<
-          string,
-          { id: string; info?: { name?: string; image?: string } }
-        >
+      (data: {
+        members: Record<string, { name?: string; image?: string }>
+        myID: string
+        me: { id: string; info?: { name?: string; image?: string } }
       }) => {
         setIsConnected(true)
 
-        // 构建成员列表
-        const membersMap = new Map<string, MemberInfo>()
-        Object.values(members.members).forEach((member) => {
-          if (member.info) {
-            membersMap.set(member.id, {
-              userId: member.id,
-              name: member.info.name ?? null,
-              image: member.info.image ?? null,
-              joinedAt: new Date().toISOString(),
-            })
-          }
+        console.log("[Pusher] subscription_succeeded:", {
+          members: data.members,
+          myID: data.myID,
+          me: data.me,
         })
+
+        // 构建成员列表（包含所有成员，包括自己）
+        // 注意：data.members 的格式是 { [userId]: { name, image } }
+        const membersMap = new Map<string, MemberInfo>()
+        Object.entries(data.members).forEach(([userId, member]) => {
+          membersMap.set(userId, {
+            userId: userId,
+            name: member.name ?? null,
+            image: member.image ?? null,
+            joinedAt: new Date().toISOString(),
+          })
+        })
+
+        // 确保当前用户在列表中（有时候 Pusher 不会包含自己）
+        if (data.me?.info && !membersMap.has(data.myID)) {
+          membersMap.set(data.myID, {
+            userId: data.myID,
+            name: data.me.info.name ?? null,
+            image: data.me.info.image ?? null,
+            joinedAt: new Date().toISOString(),
+          })
+        }
+
         setMembers(membersMap)
 
         // 设置当前用户
-        const me = members.members[userId]
-        if (me?.info) {
+        if (data.me?.info) {
           setCurrentUser({
-            userId: me.id,
-            name: me.info.name ?? null,
-            image: me.info.image ?? null,
+            userId: data.myID,
+            name: data.me.info.name ?? null,
+            image: data.me.info.image ?? null,
             joinedAt: new Date().toISOString(),
           })
         }
@@ -117,6 +131,7 @@ export function useSurveyCollaboration(
     )
 
     // Presence Channel: 新成员加入
+    // 注意：member 的格式是 { id: userId, info: { name, image } }
     channel.bind(
       "pusher:member_added",
       (member: { id: string; info?: { name?: string; image?: string } }) => {

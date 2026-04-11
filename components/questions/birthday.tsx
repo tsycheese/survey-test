@@ -21,6 +21,7 @@ function QuestionCard({
   onTitleBlur,
   onDescriptionChange,
   onDescriptionBlur,
+  onFocusQuestion,
 }: {
   question: BirthdayQuestion
   order: number
@@ -29,6 +30,7 @@ function QuestionCard({
   onTitleBlur?: (title: string) => void
   onDescriptionChange?: (description: string) => void
   onDescriptionBlur?: (description: string) => void
+  onFocusQuestion?: () => void
 }) {
   const { format = "YYYY-MM-DD" } = question.config
   const currentYear = new Date().getFullYear()
@@ -50,6 +52,7 @@ function QuestionCard({
           onBlur={onTitleBlur}
           onDescriptionChange={onDescriptionChange}
           onDescriptionBlur={onDescriptionBlur}
+          onFocusQuestion={onFocusQuestion}
         />
         <div className="mt-3">
           <Select>
@@ -82,6 +85,7 @@ function QuestionCard({
           onBlur={onTitleBlur}
           onDescriptionChange={onDescriptionChange}
           onDescriptionBlur={onDescriptionBlur}
+          onFocusQuestion={onFocusQuestion}
         />
         <div className="mt-3 flex gap-2">
           <Select>

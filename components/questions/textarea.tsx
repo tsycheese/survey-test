@@ -16,6 +16,7 @@ function QuestionCard({
   onTitleBlur,
   onDescriptionChange,
   onDescriptionBlur,
+  onFocusQuestion,
 }: {
   question: TextareaQuestion
   order: number
@@ -26,6 +27,7 @@ function QuestionCard({
   onDescriptionChange?: (description: string) => void
   onDescriptionBlur?: (description: string) => void
   onOptionChange?: (question: TextareaQuestion) => void
+  onFocusQuestion?: () => void
 }) {
   const { placeholder, maxLength, rows = 2 } = question.config
 
@@ -41,6 +43,7 @@ function QuestionCard({
         onBlur={onTitleBlur}
         onDescriptionChange={onDescriptionChange}
         onDescriptionBlur={onDescriptionBlur}
+        onFocusQuestion={onFocusQuestion}
       />
 
       <Textarea

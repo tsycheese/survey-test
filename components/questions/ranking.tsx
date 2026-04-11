@@ -33,6 +33,7 @@ function QuestionCard({
   onDescriptionChange,
   onDescriptionBlur,
   onOptionChange,
+  onFocusQuestion,
 }: {
   question: RankingQuestion
   order: number
@@ -43,6 +44,7 @@ function QuestionCard({
   onDescriptionChange?: (description: string) => void
   onDescriptionBlur?: (description: string) => void
   onOptionChange?: (question: RankingQuestion) => void
+  onFocusQuestion?: () => void
 }) {
   const { options } = question.config
   const [editingOptId, setEditingOptId] = useState<string | null>(null)
@@ -85,6 +87,7 @@ function QuestionCard({
         onBlur={onTitleBlur}
         onDescriptionChange={onDescriptionChange}
         onDescriptionBlur={onDescriptionBlur}
+        onFocusQuestion={onFocusQuestion}
       />
 
       <div className="mt-3 space-y-2">
@@ -119,6 +122,11 @@ function QuestionCard({
                     handleOptUpdate(opt.id, e.currentTarget.value, true)
                     setEditingOptId(null)
                   }
+                }}
+                onFocus={(e) => {
+                  // 将光标移动到文本末尾
+                  const length = e.target.value.length
+                  e.target.setSelectionRange(length, length)
                 }}
               />
             ) : (

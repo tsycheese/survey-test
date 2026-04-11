@@ -21,8 +21,7 @@ export const useEditorStore = create<EditorStore>((set) => ({
   selectedId: null,
   dirty: false,
 
-  setSurvey: (survey) =>
-    set({ survey, selectedId: survey.questions[0]?.id ?? null, dirty: false }),
+  setSurvey: (survey) => set({ survey, selectedId: null, dirty: false }),
 
   selectQuestion: (id) => set({ selectedId: id }),
 
