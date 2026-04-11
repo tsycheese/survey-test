@@ -31,16 +31,29 @@ export async function GET() {
     },
   })
 
-  const result = collaborations.map((collab) => ({
-    id: collab.survey.id,
-    title: collab.survey.title,
-    description: collab.survey.description,
-    published: collab.survey.published,
-    canEdit: collab.canEdit,
-    canViewResults: collab.canViewResults,
-    owner: collab.survey.user,
-    _count: collab.survey._count,
-  }))
+  const result = collaborations.map(
+    (collab: {
+      survey: {
+        id: string
+        title: string
+        description: string | null
+        published: boolean
+        user: { name: string | null; email: string | null }
+        _count: { questions: number; responses: number }
+      }
+      canEdit: boolean
+      canViewResults: boolean
+    }) => ({
+      id: collab.survey.id,
+      title: collab.survey.title,
+      description: collab.survey.description,
+      published: collab.survey.published,
+      canEdit: collab.canEdit,
+      canViewResults: collab.canViewResults,
+      owner: collab.survey.user,
+      _count: collab.survey._count,
+    })
+  )
 
   return NextResponse.json(result)
 }

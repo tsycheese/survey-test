@@ -39,7 +39,9 @@ export async function POST(request: Request) {
     }
 
     const isOwner = survey.userId === session.user.id
-    const isCollaborator = survey.collaborators.some((c) => c.canEdit)
+    const isCollaborator = survey.collaborators.some(
+      (c: { canEdit: boolean }) => c.canEdit
+    )
 
     if (!isOwner && !isCollaborator) {
       return NextResponse.json({ error: "没有编辑权限" }, { status: 403 })

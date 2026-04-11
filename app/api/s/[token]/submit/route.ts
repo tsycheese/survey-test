@@ -19,6 +19,9 @@ export async function POST(
     include: { questions: true },
   })
 
+  // 获取当前版本ID
+  const currentVersionId = survey?.currentVersionId
+
   if (!survey) {
     return NextResponse.json({ error: "问卷不存在或未发布" }, { status: 404 })
   }
@@ -34,12 +37,12 @@ export async function POST(
 
   // 检查必填题
   const requiredIds = survey.questions
-    .filter((q) => q.required)
-    .map((q) => q.id)
+    .filter((q: { required: boolean }) => q.required)
+    .map((q: { id: string }) => q.id)
   const answeredIds = Object.keys(parsed.data.answers).filter(
     (id) => parsed.data.answers[id] !== null && parsed.data.answers[id] !== ""
   )
-  const missing = requiredIds.filter((id) => !answeredIds.includes(id))
+  const missing = requiredIds.filter((id: string) => !answeredIds.includes(id))
   if (missing.length > 0) {
     return NextResponse.json({ error: "请回答所有必填题" }, { status: 400 })
   }
@@ -47,6 +50,7 @@ export async function POST(
   const response = await prisma.response.create({
     data: {
       surveyId: survey.id,
+      versionId: currentVersionId || "",
       answers: {
         create: Object.entries(parsed.data.answers)
           .filter(([, value]) => value !== null)

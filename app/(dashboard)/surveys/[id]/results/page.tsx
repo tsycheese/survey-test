@@ -10,6 +10,7 @@ import {
   Clock,
   Download,
   FileText,
+  History,
   ListTodo,
   MessageSquare,
   Star,
@@ -19,6 +20,13 @@ import {
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 
 type QuestionType =
   | "SINGLE_CHOICE"
@@ -45,9 +53,16 @@ type QuestionStat = {
   answers: { value: unknown; submittedAt?: string }[]
 }
 
+type Version = {
+  id: string
+  version: number
+}
+
 type ResultsData = {
   survey: { title: string; description: string | null }
   totalResponses: number
+  versions: Version[]
+  currentVersionId: string | null
   questions: QuestionStat[]
 }
 
@@ -102,15 +117,24 @@ export default function ResultsPage() {
   const router = useRouter()
   const [data, setData] = useState<ResultsData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [selectedVersionId, setSelectedVersionId] = useState<string | null>(
+    null
+  )
 
   useEffect(() => {
-    fetch(`/api/surveys/${id}/responses`)
+    const url = selectedVersionId
+      ? `/api/surveys/${id}/responses?versionId=${selectedVersionId}`
+      : `/api/surveys/${id}/responses`
+    fetch(url)
       .then((r) => r.json())
       .then((d) => {
         setData(d)
+        if (!selectedVersionId && d.currentVersionId) {
+          setSelectedVersionId(d.currentVersionId)
+        }
         setLoading(false)
       })
-  }, [id])
+  }, [id, selectedVersionId])
 
   if (loading)
     return (
@@ -152,10 +176,32 @@ export default function ResultsPage() {
               )}
             </div>
           </div>
-          <Button variant="outline" size="sm">
-            <Download className="mr-1 h-4 w-4" />
-            导出数据
-          </Button>
+          <div className="flex items-center gap-3">
+            {/* 版本选择器 */}
+            {data.versions.length > 0 && (
+              <Select
+                value={selectedVersionId || ""}
+                onValueChange={setSelectedVersionId}
+              >
+                <SelectTrigger className="w-40">
+                  <History className="mr-2 h-4 w-4" />
+                  <SelectValue placeholder="选择版本" />
+                </SelectTrigger>
+                <SelectContent>
+                  {data.versions.map((v) => (
+                    <SelectItem key={v.id} value={v.id}>
+                      v{v.version}
+                      {v.id === data.currentVersionId && " (当前)"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            <Button variant="outline" size="sm">
+              <Download className="mr-1 h-4 w-4" />
+              导出数据
+            </Button>
+          </div>
         </div>
 
         {/* 概览统计卡片 */}

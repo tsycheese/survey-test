@@ -7,6 +7,7 @@ model Survey {
   settings         Json?
   userId           String
   maxCollaborators Int      @default(10)
+  currentVersionId String?  // 当前发布的版本ID
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -16,6 +17,9 @@ model Survey {
   collaborators SurveyCollaborator[]
   invites       SurveyInvite[]
   logs          SurveyLog[]
+  versions      SurveyVersion[]
+
+  @@index([currentVersionId])
 }
 
 model Question {
@@ -61,11 +65,15 @@ enum QuestionType {
 model Response {
   id         String   @id @default(cuid())
   surveyId   String
+  versionId  String   // 关联到具体版本
   respondent String?
   createdAt  DateTime @default(now())
 
-  survey  Survey   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  survey  Survey        @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  version SurveyVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
   answers Answer[]
+
+  @@index([versionId])
 }
 
 model Answer {
@@ -125,4 +133,23 @@ model SurveyLog {
 
   @@index([surveyId])
   @@index([createdAt])
+}
+
+// 问卷版本管理
+model SurveyVersion {
+  id          String   @id @default(cuid())
+  surveyId    String
+  version     Int      // 版本号 v1, v2, v3...
+  title       String
+  description String?
+  questions   Json     // 完整的题目数据快照
+  publishedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  survey    Survey     @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  responses Response[]
+
+  @@unique([surveyId, version])
+  @@index([surveyId])
+  @@index([publishedAt])
 }

@@ -11,6 +11,7 @@ import {
   Monitor,
   Tablet,
   Smartphone,
+  History,
 } from "lucide-react"
 import { useSurveyCollaboration } from "@/hooks/use-survey-collaboration"
 import { OnlineMembers } from "@/components/collaboration/online-members"
@@ -59,6 +60,7 @@ import { QUESTION_CATEGORIES } from "@/lib/questions/types"
 import { SurveySettingsPanel } from "@/components/editor/survey-settings-panel"
 import { AIChatDialog } from "@/components/ai/ai-chat-dialog"
 import { CollaborationDialog } from "@/components/editor/collaboration-dialog"
+import { VersionDialog } from "@/components/editor/version-dialog"
 import {
   Dialog,
   DialogContent,
@@ -89,6 +91,7 @@ export default function EditSurveyPage() {
   const [draggingType, setDraggingType] = useState<QuestionType | null>(null)
   const [insertIndex, setInsertIndex] = useState<number | null>(null)
   const [isPreviewDialogOpen, setIsPreviewDialogOpen] = useState(false)
+  const [isVersionDialogOpen, setIsVersionDialogOpen] = useState(false)
   const [permission, setPermission] = useState<{
     canAccess: boolean
     canEdit: boolean
@@ -682,6 +685,14 @@ export default function EditSurveyPage() {
           <Button
             variant="outline"
             size="sm"
+            onClick={() => setIsVersionDialogOpen(true)}
+          >
+            <History className="mr-1.5 h-3.5 w-3.5" />
+            版本
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => setIsPreviewDialogOpen(true)}
             disabled={survey.questions.length === 0}
           >
@@ -1024,6 +1035,39 @@ export default function EditSurveyPage() {
         onOpenChange={setIsPreviewDialogOpen}
         surveyId={survey.id}
         shareToken={survey.id} // 使用 survey id 作为预览 token
+      />
+
+      {/* 版本管理弹窗 */}
+      <VersionDialog
+        surveyId={id}
+        open={isVersionDialogOpen}
+        onOpenChange={setIsVersionDialogOpen}
+        onPublish={async () => {
+          // 刷新问卷数据
+          const res = await fetch(`/api/surveys/${id}`)
+          if (res.ok) {
+            const surveyData = await res.json()
+            setSurvey({
+              id: surveyData.id,
+              title: surveyData.title,
+              description: surveyData.description,
+              published: surveyData.published,
+              settings: surveyData.settings,
+              questions: (surveyData.questions ?? []).map(
+                (q: Record<string, unknown>) => ({
+                  id: q.id,
+                  type: q.type,
+                  title: q.title,
+                  description: q.description,
+                  required: q.required,
+                  order: q.order,
+                  config: q.config ?? {},
+                })
+              ),
+            })
+          }
+        }}
+        published={survey.published}
       />
     </div>
   )
