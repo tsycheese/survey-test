@@ -64,12 +64,14 @@ const { handlers, auth, signIn, signOut } = NextAuth({
     async session({ session, token }) {
       if (token.sub && session.user) {
         session.user.id = token.sub
+        session.user.image = token.image as string | undefined
       }
       return session
     },
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id
+        token.image = user.image
       }
       return token
     },

@@ -88,9 +88,18 @@ export function OnlineMembers({
                     member.userId === currentUserId && "bg-muted"
                   )}
                 >
-                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs">
-                    {member.name?.[0] || "?"}
-                  </div>
+                  {member.image ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={member.image}
+                      alt={member.name || "匿名用户"}
+                      className="h-6 w-6 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
+                      {member.name?.[0] || "?"}
+                    </div>
+                  )}
                   <span className="flex-1 truncate text-sm">
                     {member.name || "匿名用户"}
                   </span>
@@ -143,12 +152,21 @@ function MemberAvatar({
     <div
       className={cn(
         "flex h-7 w-7 items-center justify-center rounded-full border-2 border-background text-xs font-medium text-white",
-        bgColor,
+        member.image ? "" : bgColor,
         isCurrentUser && "ring-2 ring-primary ring-offset-1"
       )}
       title={member.name || "匿名用户"}
     >
-      {initials}
+      {member.image ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={member.image}
+          alt={member.name || "匿名用户"}
+          className="h-full w-full rounded-full object-cover"
+        />
+      ) : (
+        initials
+      )}
     </div>
   )
 }

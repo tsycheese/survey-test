@@ -91,9 +91,18 @@ export function Sidebar({ user }: { user: SidebarUser }) {
         <HoverCard openDelay={200} closeDelay={100}>
           <HoverCardTrigger asChild>
             <button className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left transition-colors hover:bg-muted">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10">
-                <User className="h-5 w-5 text-primary" />
-              </div>
+              {user?.image ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={user.image}
+                  alt={user?.name || "用户"}
+                  className="h-9 w-9 shrink-0 rounded-full object-cover"
+                />
+              ) : (
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10">
+                  <User className="h-5 w-5 text-primary" />
+                </div>
+              )}
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">
                   {user?.name || "用户"}
@@ -107,9 +116,18 @@ export function Sidebar({ user }: { user: SidebarUser }) {
           <HoverCardContent className="mb-2 w-64" align="center" side="top">
             <div className="space-y-3">
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
-                  <User className="h-5 w-5 text-primary" />
-                </div>
+                {user?.image ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={user.image}
+                    alt={user?.name || "用户"}
+                    className="h-10 w-10 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+                    <User className="h-5 w-5 text-primary" />
+                  </div>
+                )}
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">
                     {user?.name || "用户"}

@@ -27,6 +27,7 @@ import {
   updateProfileSchema,
   type UpdateProfileInput,
 } from "@/lib/validations/user"
+import { AvatarUploader } from "./avatar-uploader"
 
 type UserProfile = {
   id: string
@@ -51,6 +52,7 @@ export function ProfileForm() {
 
   useEffect(() => {
     fetchUserProfile()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function fetchUserProfile() {
@@ -92,6 +94,10 @@ export function ProfileForm() {
     }
   }
 
+  async function handleAvatarChange(avatarUrl: string | null) {
+    setUser((prev) => (prev ? { ...prev, image: avatarUrl } : null))
+  }
+
   if (loading) {
     return (
       <Card>
@@ -116,6 +122,15 @@ export function ProfileForm() {
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
+        {/* 头像上传 */}
+        <div className="flex justify-center border-b pb-6">
+          <AvatarUploader
+            currentAvatar={user?.image}
+            userName={user?.name}
+            onAvatarChange={handleAvatarChange}
+          />
+        </div>
+
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <FormField
