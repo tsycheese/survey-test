@@ -18,13 +18,18 @@ import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
 interface AIChatDialogProps {
-  onConfirm: (questions: Question[]) => void
+  onConfirm: (
+    questions: Question[],
+    surveyTitle?: string,
+    surveyDescription?: string
+  ) => void
 }
 
 interface GeneratedQuestion {
   id: string
   type: string
   title: string
+  description?: string
   required: boolean
   order: number
   config: Record<string, unknown>
@@ -36,6 +41,8 @@ export function AIChatDialog({ onConfirm }: AIChatDialogProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [generated, setGenerated] = useState<GeneratedQuestion[] | null>(null)
+  const [surveyTitle, setSurveyTitle] = useState<string>("")
+  const [surveyDescription, setSurveyDescription] = useState<string>("")
 
   const handleGenerate = async () => {
     if (!input.trim()) return
@@ -43,6 +50,8 @@ export function AIChatDialog({ onConfirm }: AIChatDialogProps) {
     setLoading(true)
     setError(null)
     setGenerated(null)
+    setSurveyTitle("")
+    setSurveyDescription("")
 
     try {
       const response = await fetch("/api/ai/generate", {
@@ -57,6 +66,8 @@ export function AIChatDialog({ onConfirm }: AIChatDialogProps) {
         throw new Error(data.error || "生成失败")
       }
 
+      setSurveyTitle(data.surveyTitle || "")
+      setSurveyDescription(data.surveyDescription || "")
       setGenerated(data.questions)
     } catch (err) {
       setError(err instanceof Error ? err.message : "生成失败，请稍后重试")
@@ -67,12 +78,18 @@ export function AIChatDialog({ onConfirm }: AIChatDialogProps) {
 
   const handleConfirm = () => {
     if (generated) {
-      onConfirm(generated as Question[])
+      onConfirm(
+        generated as Question[],
+        surveyTitle || undefined,
+        surveyDescription || undefined
+      )
       setOpen(false)
       // 重置状态
       setInput("")
       setGenerated(null)
       setError(null)
+      setSurveyTitle("")
+      setSurveyDescription("")
     }
   }
 
@@ -80,16 +97,82 @@ export function AIChatDialog({ onConfirm }: AIChatDialogProps) {
     setInput("")
     setGenerated(null)
     setError(null)
+    setSurveyTitle("")
+    setSurveyDescription("")
   }
 
   const getQuestionTypeLabel = (type: string) => {
     const map: Record<string, string> = {
       SINGLE_CHOICE: "单选",
       MULTIPLE_CHOICE: "多选",
+      DROPDOWN: "下拉",
+      RANKING: "排序",
+      MATRIX_SINGLE: "矩阵",
       TEXT: "文本",
+      TEXTAREA: "多行文本",
+      NUMBER: "数字",
       RATING: "评分",
+      NPS: "NPS",
+      CES: "CES",
+      NAME: "姓名",
+      GENDER: "性别",
+      BIRTHDAY: "生日",
+      PHONE: "电话",
+      EMAIL: "邮箱",
+      DATETIME: "日期时间",
+      IMAGE_SINGLE_CHOICE: "图片单选",
+      IMAGE_MULTIPLE_CHOICE: "图片多选",
     }
     return map[type] || type
+  }
+
+  const renderQuestionPreview = (q: GeneratedQuestion) => {
+    const config = q.config as Record<string, unknown>
+    const options = config.options as Array<{ label: string }> | undefined
+    const rows = config.rows as Array<{ label: string }> | undefined
+    const columns = config.columns as
+      | Array<{ label: string }>
+      | number
+      | undefined
+    const minLabel = config.minLabel as string | undefined
+    const maxLabel = config.maxLabel as string | undefined
+    const placeholder = config.placeholder as string | undefined
+
+    return (
+      <div className="mt-2 space-y-1.5 text-xs text-muted-foreground">
+        {options && options.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {options.map((opt, i) => (
+              <span
+                key={i}
+                className="rounded bg-muted px-1.5 py-0.5 text-[10px]"
+              >
+                {opt.label}
+              </span>
+            ))}
+          </div>
+        )}
+        {rows && Array.isArray(rows) && (
+          <div className="text-[10px]">
+            矩阵: {rows.length} 行 ×{" "}
+            {(columns as Array<{ label: string }>)?.length || String(columns)}{" "}
+            列
+          </div>
+        )}
+        {(minLabel || maxLabel) && (
+          <div className="text-[10px]">
+            {minLabel && <span>{minLabel}</span>}
+            {minLabel && maxLabel && <span className="mx-1">→</span>}
+            {maxLabel && <span>{maxLabel}</span>}
+          </div>
+        )}
+        {placeholder && (
+          <div className="text-[10px] text-muted-foreground/70">
+            提示: {placeholder}
+          </div>
+        )}
+      </div>
+    )
   }
 
   return (
@@ -100,14 +183,14 @@ export function AIChatDialog({ onConfirm }: AIChatDialogProps) {
           AI 生成问卷
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[600px]">
+      <DialogContent className="sm:max-w-[640px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-primary" />
             AI 生成问卷
           </DialogTitle>
           <DialogDescription>
-            描述你想要的问卷，AI 会自动为你生成题目
+            描述你想要的问卷，AI 会自动为你生成贴合场景的题目
           </DialogDescription>
         </DialogHeader>
 
@@ -169,13 +252,24 @@ export function AIChatDialog({ onConfirm }: AIChatDialogProps) {
                 </Button>
               </div>
 
-              <ScrollArea className="h-[300px] rounded-md border p-4">
-                <div className="space-y-2">
+              {surveyTitle && (
+                <div className="rounded-md border bg-muted/50 px-3 py-2">
+                  <div className="text-sm font-medium">{surveyTitle}</div>
+                  {surveyDescription && (
+                    <div className="text-xs text-muted-foreground">
+                      {surveyDescription}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <ScrollArea className="h-[320px] rounded-md border p-4">
+                <div className="space-y-3">
                   {generated.map((q) => (
                     <Card key={q.id} className="p-3">
                       <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1">
-                          <div className="mb-1 flex items-center gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="mb-1 flex flex-wrap items-center gap-2">
                             <Badge variant="secondary" className="text-xs">
                               {getQuestionTypeLabel(q.type)}
                             </Badge>
@@ -185,9 +279,15 @@ export function AIChatDialog({ onConfirm }: AIChatDialogProps) {
                               </span>
                             )}
                           </div>
-                          <p className="text-sm">{q.title}</p>
+                          <p className="text-sm font-medium">{q.title}</p>
+                          {q.description && (
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                              {q.description}
+                            </p>
+                          )}
+                          {renderQuestionPreview(q)}
                         </div>
-                        <span className="text-xs text-muted-foreground">
+                        <span className="shrink-0 text-xs text-muted-foreground">
                           第 {q.order} 题
                         </span>
                       </div>

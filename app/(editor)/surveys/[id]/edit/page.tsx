@@ -521,10 +521,31 @@ export default function EditSurveyPage() {
     }
   }
 
-  async function handleAddAIQuestions(questions: Question[]) {
+  async function handleAddAIQuestions(
+    questions: Question[],
+    newTitle?: string,
+    newDescription?: string
+  ) {
     if (!survey) return
 
     try {
+      // 如果有新的问卷标题/描述，先更新
+      if (newTitle || newDescription) {
+        const title = newTitle || survey.title
+        const description = newDescription ?? survey.description ?? ""
+        const res = await fetch(`/api/surveys/${id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title,
+            description: description || null,
+          }),
+        })
+        if (res.ok) {
+          updateSurveyInfo(title, description)
+        }
+      }
+
       // 批量添加题目
       for (const q of questions) {
         const res = await fetch(`/api/surveys/${id}/questions`, {
@@ -731,7 +752,15 @@ export default function EditSurveyPage() {
               <span className="text-xs font-medium text-muted-foreground">
                 添加题目
               </span>
-              <AIChatDialog onConfirm={handleAddAIQuestions} />
+              <AIChatDialog
+                onConfirm={
+                  handleAddAIQuestions as (
+                    questions: Question[],
+                    surveyTitle?: string,
+                    surveyDescription?: string
+                  ) => void
+                }
+              />
             </div>
             <div className="flex-1 overflow-y-auto p-2">
               {(
