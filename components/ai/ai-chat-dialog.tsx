@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
+import { experimental_useObject as useObject } from "@ai-sdk/react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -11,11 +12,19 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
-import { Sparkles, Loader2, CheckCircle2, AlertCircle } from "lucide-react"
+import {
+  Sparkles,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
+  Wand2,
+} from "lucide-react"
 import type { Question } from "@/lib/questions/types"
+import { aiGenerateResultSchema } from "@/lib/ai/schema"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { nanoid } from "nanoid"
 
 interface AIChatDialogProps {
   onConfirm: (
@@ -25,7 +34,7 @@ interface AIChatDialogProps {
   ) => void
 }
 
-interface GeneratedQuestion {
+interface StreamQuestion {
   id: string
   type: string
   title: string
@@ -38,67 +47,56 @@ interface GeneratedQuestion {
 export function AIChatDialog({ onConfirm }: AIChatDialogProps) {
   const [open, setOpen] = useState(false)
   const [input, setInput] = useState("")
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [generated, setGenerated] = useState<GeneratedQuestion[] | null>(null)
-  const [surveyTitle, setSurveyTitle] = useState<string>("")
-  const [surveyDescription, setSurveyDescription] = useState<string>("")
+  const [hasStarted, setHasStarted] = useState(false)
 
-  const handleGenerate = async () => {
+  const { object, submit, isLoading, error, stop } = useObject({
+    api: "/api/ai/generate-stream",
+    schema: aiGenerateResultSchema,
+  })
+
+  // 将流式对象转换为带 id/order 的题目列表
+  const generatedQuestions = useMemo<StreamQuestion[]>(() => {
+    if (!object?.questions) return []
+    return object.questions
+      .filter((q): q is Record<string, unknown> => q != null)
+      .map((q, index) => ({
+        ...(q as Record<string, unknown>),
+        id: nanoid(),
+        order: index + 1,
+        config: (q as Record<string, unknown>).config || {},
+      })) as StreamQuestion[]
+  }, [object])
+
+  const surveyTitle = (object?.surveyTitle as string) || ""
+  const surveyDescription = (object?.surveyDescription as string) || ""
+  const isStreaming = isLoading && generatedQuestions.length > 0
+
+  const handleGenerate = () => {
     if (!input.trim()) return
-
-    setLoading(true)
-    setError(null)
-    setGenerated(null)
-    setSurveyTitle("")
-    setSurveyDescription("")
-
-    try {
-      const response = await fetch("/api/ai/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ input }),
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || "生成失败")
-      }
-
-      setSurveyTitle(data.surveyTitle || "")
-      setSurveyDescription(data.surveyDescription || "")
-      setGenerated(data.questions)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "生成失败，请稍后重试")
-    } finally {
-      setLoading(false)
-    }
+    setHasStarted(true)
+    submit({ input })
   }
 
   const handleConfirm = () => {
-    if (generated) {
+    if (generatedQuestions.length > 0) {
       onConfirm(
-        generated as Question[],
+        generatedQuestions as Question[],
         surveyTitle || undefined,
         surveyDescription || undefined
       )
       setOpen(false)
-      // 重置状态
-      setInput("")
-      setGenerated(null)
-      setError(null)
-      setSurveyTitle("")
-      setSurveyDescription("")
+      resetState()
     }
   }
 
   const handleReset = () => {
+    stop()
+    resetState()
+  }
+
+  const resetState = () => {
     setInput("")
-    setGenerated(null)
-    setError(null)
-    setSurveyTitle("")
-    setSurveyDescription("")
+    setHasStarted(false)
   }
 
   const getQuestionTypeLabel = (type: string) => {
@@ -126,8 +124,8 @@ export function AIChatDialog({ onConfirm }: AIChatDialogProps) {
     return map[type] || type
   }
 
-  const renderQuestionPreview = (q: GeneratedQuestion) => {
-    const config = q.config as Record<string, unknown>
+  const renderQuestionPreview = (q: StreamQuestion) => {
+    const config = q.config || {}
     const options = config.options as Array<{ label: string }> | undefined
     const rows = config.rows as Array<{ label: string }> | undefined
     const columns = config.columns as
@@ -175,8 +173,20 @@ export function AIChatDialog({ onConfirm }: AIChatDialogProps) {
     )
   }
 
+  const showResult = hasStarted && (generatedQuestions.length > 0 || !isLoading)
+  const showEmptyLoading = isLoading && generatedQuestions.length === 0
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        if (!v) {
+          stop()
+          resetState()
+        }
+        setOpen(v)
+      }}
+    >
       <DialogTrigger asChild>
         <Button variant="outline" className="gap-2">
           <Sparkles className="h-4 w-4" />
@@ -196,34 +206,34 @@ export function AIChatDialog({ onConfirm }: AIChatDialogProps) {
 
         <div className="space-y-4">
           {/* 输入区域 */}
-          {!generated && (
+          {!showResult && (
             <>
               <Textarea
                 placeholder="例如：我想做一个顾客满意度调查，包含产品质量、服务态度、价格评价等方面的问题"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 className="min-h-[120px]"
-                disabled={loading}
+                disabled={isLoading}
               />
               {error && (
                 <div className="flex items-center gap-2 text-sm text-destructive">
                   <AlertCircle className="h-4 w-4" />
-                  {error}
+                  {error.message || "生成失败，请稍后重试"}
                 </div>
               )}
               <div className="flex justify-end gap-2">
                 <Button
                   variant="outline"
                   onClick={() => setOpen(false)}
-                  disabled={loading}
+                  disabled={isLoading}
                 >
                   取消
                 </Button>
                 <Button
                   onClick={handleGenerate}
-                  disabled={loading || !input.trim()}
+                  disabled={isLoading || !input.trim()}
                 >
-                  {loading ? (
+                  {showEmptyLoading ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       生成中...
@@ -240,12 +250,21 @@ export function AIChatDialog({ onConfirm }: AIChatDialogProps) {
           )}
 
           {/* 结果预览 */}
-          {generated && (
+          {showResult && (
             <>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <CheckCircle2 className="h-4 w-4 text-green-500" />
-                  已生成 {generated.length} 道题目
+                  {isStreaming ? (
+                    <>
+                      <Wand2 className="h-4 w-4 animate-pulse text-primary" />
+                      已生成 {generatedQuestions.length} 道题目...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="h-4 w-4 text-green-500" />
+                      已生成 {generatedQuestions.length} 道题目
+                    </>
+                  )}
                 </div>
                 <Button variant="ghost" size="sm" onClick={handleReset}>
                   重新生成
@@ -263,9 +282,9 @@ export function AIChatDialog({ onConfirm }: AIChatDialogProps) {
                 </div>
               )}
 
-              <ScrollArea className="h-[320px] rounded-md border p-4">
-                <div className="space-y-3">
-                  {generated.map((q) => (
+              <ScrollArea className="h-[320px] rounded-md border">
+                <div className="space-y-3 p-4">
+                  {generatedQuestions.map((q) => (
                     <Card key={q.id} className="p-3">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0 flex-1">
@@ -293,6 +312,12 @@ export function AIChatDialog({ onConfirm }: AIChatDialogProps) {
                       </div>
                     </Card>
                   ))}
+                  {isStreaming && (
+                    <Card className="flex items-center gap-2 border-dashed p-3 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      AI 正在思考下一道题...
+                    </Card>
+                  )}
                 </div>
               </ScrollArea>
 
@@ -300,7 +325,9 @@ export function AIChatDialog({ onConfirm }: AIChatDialogProps) {
                 <Button variant="outline" onClick={handleReset}>
                   重新生成
                 </Button>
-                <Button onClick={handleConfirm}>确认添加</Button>
+                <Button onClick={handleConfirm} disabled={isStreaming}>
+                  {isStreaming ? "生成中..." : "确认添加"}
+                </Button>
               </div>
             </>
           )}
