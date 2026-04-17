@@ -58,7 +58,7 @@ import { COLLABORATION_EVENTS } from "@/lib/pusher"
 import type { QuestionData, SurveyData } from "@/lib/pusher"
 import { QUESTION_CATEGORIES } from "@/lib/questions/types"
 import { SurveySettingsPanel } from "@/components/editor/survey-settings-panel"
-import { AIChatDialog } from "@/components/ai/ai-chat-dialog"
+import { AIClarifyDialog } from "@/components/ai/ai-clarify-dialog"
 import { CollaborationDialog } from "@/components/editor/collaboration-dialog"
 import { VersionDialog } from "@/components/editor/version-dialog"
 import {
@@ -752,15 +752,7 @@ export default function EditSurveyPage() {
               <span className="text-xs font-medium text-muted-foreground">
                 添加题目
               </span>
-              <AIChatDialog
-                onConfirm={
-                  handleAddAIQuestions as (
-                    questions: Question[],
-                    surveyTitle?: string,
-                    surveyDescription?: string
-                  ) => void
-                }
-              />
+              <AIClarifyDialog onConfirm={handleAddAIQuestions} />
             </div>
             <div className="flex-1 overflow-y-auto p-2">
               {(
