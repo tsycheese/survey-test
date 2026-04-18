@@ -1,5 +1,6 @@
 "use client"
 
+import { useState, useCallback } from "react"
 import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import type { NamedCount } from "../types"
@@ -14,6 +15,7 @@ const COLORS = [
 ]
 
 function DonutChart({ title, data }: { title: string; data: NamedCount[] }) {
+  const [activeIndex, setActiveIndex] = useState<number | null>(null)
   const total = data.reduce((sum, d) => sum + d.count, 0)
 
   // 如果没有数据，显示占位
@@ -25,6 +27,21 @@ function DonutChart({ title, data }: { title: string; data: NamedCount[] }) {
           { name: "", count: 0 },
         ]
 
+  const activeItem =
+    activeIndex !== null && total > 0 ? data[activeIndex] : null
+  const activeColor =
+    activeIndex !== null ? COLORS[activeIndex % COLORS.length] : undefined
+
+  const handleMouseEnter = useCallback(
+    (_: unknown, index: number) => {
+      if (total > 0) setActiveIndex(index)
+    },
+    [total]
+  )
+  const handleMouseLeave = useCallback(() => {
+    setActiveIndex(null)
+  }, [])
+
   return (
     <Card>
       <CardHeader className="pb-4">
@@ -32,7 +49,7 @@ function DonutChart({ title, data }: { title: string; data: NamedCount[] }) {
       </CardHeader>
       <CardContent className="space-y-6">
         {/* 环形图 */}
-        <div className="h-[200px] w-full">
+        <div className="relative h-[200px] w-full">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
@@ -40,21 +57,55 @@ function DonutChart({ title, data }: { title: string; data: NamedCount[] }) {
                 cx="50%"
                 cy="50%"
                 innerRadius={70}
-                outerRadius={95}
+                outerRadius={activeIndex !== null ? 95 : 95}
                 paddingAngle={2}
                 dataKey="count"
                 nameKey="name"
                 stroke="none"
+                onMouseEnter={handleMouseEnter}
+                onMouseLeave={handleMouseLeave}
               >
-                {chartData.map((entry, index) => (
+                {chartData.map((_, index) => (
                   <Cell
                     key={`cell-${index}`}
                     fill={total > 0 ? COLORS[index % COLORS.length] : "#e5e7eb"}
+                    style={{
+                      cursor: total > 0 ? "pointer" : "default",
+                      filter:
+                        activeIndex === index
+                          ? "brightness(1.1)"
+                          : activeIndex !== null
+                            ? "brightness(0.85)"
+                            : undefined,
+                      transition: "filter 0.2s ease",
+                    }}
                   />
                 ))}
               </Pie>
             </PieChart>
           </ResponsiveContainer>
+
+          {/* 圆心显示当前项 */}
+          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+            {activeItem ? (
+              <>
+                <span
+                  className="text-sm font-bold"
+                  style={{ color: activeColor }}
+                >
+                  {activeItem.name}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {activeItem.count} (
+                  {((activeItem.count / total) * 100).toFixed(0)}%)
+                </span>
+              </>
+            ) : total > 0 ? (
+              <span className="text-sm text-muted-foreground">总 {total}</span>
+            ) : (
+              <span className="text-sm text-muted-foreground">暂无数据</span>
+            )}
+          </div>
         </div>
 
         {/* 底部图例 */}
@@ -63,10 +114,16 @@ function DonutChart({ title, data }: { title: string; data: NamedCount[] }) {
             data.map((item, index) => {
               const pct =
                 total > 0 ? ((item.count / total) * 100).toFixed(0) : "0"
+              const isActive = activeIndex === index
               return (
                 <div
                   key={item.name}
-                  className="flex flex-col items-center gap-1"
+                  className="flex cursor-pointer flex-col items-center gap-1 transition-opacity"
+                  style={{
+                    opacity: activeIndex === null || isActive ? 1 : 0.4,
+                  }}
+                  onMouseEnter={() => setActiveIndex(index)}
+                  onMouseLeave={() => setActiveIndex(null)}
                 >
                   <div
                     className="h-3 w-3 rounded-full"
