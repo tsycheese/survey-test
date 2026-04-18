@@ -157,7 +157,7 @@ export default function SurveysPage() {
                     复制链接
                   </Button>
                 )}
-                <Link href={`/surveys/${survey.id}/results`}>
+                <Link href={`/surveys/${survey.id}/results/overview`}>
                   <Button variant="outline" size="sm">
                     <BarChart2 className="mr-1 h-3 w-3" />
                     统计
