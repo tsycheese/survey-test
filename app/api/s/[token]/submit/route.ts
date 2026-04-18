@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/prisma"
+import { lookupIP } from "@/lib/geoip"
 import { z } from "zod"
 
 const submitSchema = z.object({
@@ -60,6 +61,11 @@ export async function POST(
   const meta = parsed.data.metadata
   const ip = request.headers.get("x-forwarded-for") || null
 
+  // 解析 IP 地域信息
+  const geo = ip
+    ? await lookupIP(ip)
+    : { country: null, province: null, city: null }
+
   const response = await prisma.response.create({
     data: {
       surveyId: survey.id,
@@ -72,6 +78,9 @@ export async function POST(
       source: meta?.source || null,
       referrer: meta?.referrer || null,
       ip: ip,
+      country: geo.country,
+      province: geo.province,
+      city: geo.city,
       answers: {
         create: Object.entries(parsed.data.answers)
           .filter(([, value]) => value !== null)

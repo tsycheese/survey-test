@@ -55,6 +55,9 @@ export type ResponseItem = {
   source: string | null
   referrer: string | null
   ip: string | null
+  country: string | null
+  province: string | null
+  city: string | null
   answers: { questionId: string; value: unknown }[]
 }
 
@@ -79,6 +82,7 @@ export type ResultsData = {
   osStats: NamedCount[]
   browserStats: NamedCount[]
   sourceStats: NamedCount[]
+  locationStats: NamedCount[]
   dailyTrend: DailyTrend[]
   versions: Version[]
   currentVersionId: string | null

@@ -107,11 +107,12 @@ export async function GET(
         }, 0) / completedResponses.length
       : 0
 
-  // 4. 设备统计
+  // 4. 设备统计 + 地域统计
   const deviceStats: Record<string, number> = {}
   const osStats: Record<string, number> = {}
   const browserStats: Record<string, number> = {}
   const sourceStats: Record<string, number> = {}
+  const locationStats: Record<string, number> = {}
 
   responses.forEach((r) => {
     if (r.deviceType) {
@@ -125,6 +126,9 @@ export async function GET(
     }
     if (r.source) {
       sourceStats[r.source] = (sourceStats[r.source] || 0) + 1
+    }
+    if (r.province) {
+      locationStats[r.province] = (locationStats[r.province] || 0) + 1
     }
   })
 
@@ -186,6 +190,9 @@ export async function GET(
     source: r.source,
     referrer: r.referrer,
     ip: r.ip,
+    country: r.country,
+    province: r.province,
+    city: r.city,
     answers: r.answers.map((a) => ({
       questionId: a.questionId,
       value: a.value,
@@ -214,6 +221,9 @@ export async function GET(
       name,
       count,
     })),
+    locationStats: Object.entries(locationStats)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count),
     dailyTrend,
     versions: survey.versions,
     currentVersionId: versionId || survey.currentVersionId,

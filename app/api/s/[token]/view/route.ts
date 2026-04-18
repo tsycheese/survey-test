@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/prisma"
+import { lookupIP } from "@/lib/geoip"
 
 /**
  * 记录问卷浏览量
@@ -33,10 +34,17 @@ export async function POST(
   })
 
   if (!existing) {
+    const geo =
+      ip !== "unknown"
+        ? await lookupIP(ip)
+        : { country: null, province: null, city: null }
     await prisma.surveyView.create({
       data: {
         surveyId: survey.id,
         ip: ip,
+        country: geo.country,
+        province: geo.province,
+        city: geo.city,
       },
     })
   }

@@ -40,6 +40,8 @@ function downloadCSV(data: ResultsData) {
     "系统",
     "浏览器",
     "来源",
+    "省份",
+    "城市",
     ...data.questions.map((q) => q.title),
   ]
 
@@ -52,6 +54,8 @@ function downloadCSV(data: ResultsData) {
       r.os || "-",
       r.browser || "-",
       r.source || "-",
+      r.province || "-",
+      r.city || "-",
       ...data.questions.map((q) => {
         const val = answerMap.get(q.id)
         if (val === undefined || val === null) return ""
@@ -136,6 +140,8 @@ export function DetailsTab({ data }: { data: ResultsData }) {
               <TableHead className="w-[100px]">系统</TableHead>
               <TableHead className="w-[100px]">浏览器</TableHead>
               <TableHead>来源</TableHead>
+              <TableHead className="w-[80px]">省份</TableHead>
+              <TableHead className="w-[80px]">城市</TableHead>
               {data.questions.map((q) => (
                 <TableHead key={q.id} className="min-w-[120px]">
                   {q.title}
@@ -147,7 +153,7 @@ export function DetailsTab({ data }: { data: ResultsData }) {
             {paginated.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={6 + data.questions.length}
+                  colSpan={8 + data.questions.length}
                   className="h-32 text-center text-muted-foreground"
                 >
                   暂无数据
@@ -174,6 +180,10 @@ export function DetailsTab({ data }: { data: ResultsData }) {
                       {r.browser || "-"}
                     </TableCell>
                     <TableCell className="text-xs">{r.source || "-"}</TableCell>
+                    <TableCell className="text-xs">
+                      {r.province || "-"}
+                    </TableCell>
+                    <TableCell className="text-xs">{r.city || "-"}</TableCell>
                     {data.questions.map((q) => {
                       const val = answerMap.get(q.id)
                       let display = "-"

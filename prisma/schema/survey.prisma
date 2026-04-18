@@ -80,6 +80,11 @@ model Response {
   referrer   String? // HTTP Referer
   ip         String? // IP 地址（用于地域解析）
 
+  // 地域信息
+  country  String? // 国家
+  province String? // 省份/州
+  city     String? // 城市
+
   survey  Survey        @relation(fields: [surveyId], references: [id], onDelete: Cascade)
   version SurveyVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
   answers Answer[]
@@ -174,6 +179,11 @@ model SurveyView {
   deviceType String?
   os         String?
   browser    String?
+
+  // 地域信息
+  country  String?
+  province String?
+  city     String?
 
   survey Survey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
 

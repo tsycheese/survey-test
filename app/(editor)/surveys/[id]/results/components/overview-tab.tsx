@@ -3,6 +3,7 @@
 import { KpiCards } from "./kpi-cards"
 import { TrendChart } from "./trend-chart"
 import { DeviceStats } from "./donut-chart"
+import { LocationStats } from "./location-stats"
 import type { ResultsData } from "../types"
 
 export function OverviewTab({ data }: { data: ResultsData }) {
@@ -16,6 +17,7 @@ export function OverviewTab({ data }: { data: ResultsData }) {
       />
       <TrendChart data={data.dailyTrend} />
       <DeviceStats deviceStats={data.deviceStats} osStats={data.osStats} />
+      <LocationStats data={data.locationStats} />
     </div>
   )
 }
