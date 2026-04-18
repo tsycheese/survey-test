@@ -14,6 +14,7 @@ model Survey {
   user          User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   questions     Question[]
   responses     Response[]
+  views         SurveyView[]
   collaborators SurveyCollaborator[]
   invites       SurveyInvite[]
   logs          SurveyLog[]
@@ -63,17 +64,28 @@ enum QuestionType {
 }
 
 model Response {
-  id         String   @id @default(cuid())
-  surveyId   String
-  versionId  String   // 关联到具体版本
-  respondent String?
-  createdAt  DateTime @default(now())
+  id          String   @id @default(cuid())
+  surveyId    String
+  versionId   String   // 关联到具体版本
+  respondent  String?
+  startedAt   DateTime? // 开始答题时间
+  completedAt DateTime? // 提交时间
+  createdAt   DateTime @default(now())
+
+  // 设备/环境信息
+  deviceType String? // desktop | mobile | tablet
+  os         String? // Windows | macOS | iOS | Android | Linux
+  browser    String? // Chrome | Safari | Firefox | Edge
+  source     String? // 渠道来源参数
+  referrer   String? // HTTP Referer
+  ip         String? // IP 地址（用于地域解析）
 
   survey  Survey        @relation(fields: [surveyId], references: [id], onDelete: Cascade)
   version SurveyVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
   answers Answer[]
 
   @@index([versionId])
+  @@index([createdAt])
 }
 
 model Answer {
@@ -152,4 +164,19 @@ model SurveyVersion {
   @@unique([surveyId, version])
   @@index([surveyId])
   @@index([publishedAt])
+}
+
+model SurveyView {
+  id         String   @id @default(cuid())
+  surveyId   String
+  viewedAt   DateTime @default(now())
+  ip         String?
+  deviceType String?
+  os         String?
+  browser    String?
+
+  survey Survey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+
+  @@index([surveyId])
+  @@index([viewedAt])
 }

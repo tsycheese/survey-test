@@ -7,6 +7,16 @@ const submitSchema = z.object({
     z.string(),
     z.union([z.string(), z.array(z.string()), z.number(), z.null()])
   ),
+  metadata: z
+    .object({
+      startedAt: z.string().datetime().nullable().optional(),
+      deviceType: z.string().nullable().optional(),
+      os: z.string().nullable().optional(),
+      browser: z.string().nullable().optional(),
+      source: z.string().nullable().optional(),
+      referrer: z.string().nullable().optional(),
+    })
+    .optional(),
 })
 
 export async function POST(
@@ -47,10 +57,21 @@ export async function POST(
     return NextResponse.json({ error: "请回答所有必填题" }, { status: 400 })
   }
 
+  const meta = parsed.data.metadata
+  const ip = request.headers.get("x-forwarded-for") || null
+
   const response = await prisma.response.create({
     data: {
       surveyId: survey.id,
       versionId: currentVersionId || "",
+      startedAt: meta?.startedAt ? new Date(meta.startedAt) : null,
+      completedAt: new Date(),
+      deviceType: meta?.deviceType || null,
+      os: meta?.os || null,
+      browser: meta?.browser || null,
+      source: meta?.source || null,
+      referrer: meta?.referrer || null,
+      ip: ip,
       answers: {
         create: Object.entries(parsed.data.answers)
           .filter(([, value]) => value !== null)

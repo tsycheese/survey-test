@@ -5,6 +5,7 @@ import { useParams, useSearchParams } from "next/navigation"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { getQuestionDef } from "@/lib/questions/registry"
+import { parseUA } from "@/lib/ua-parser"
 import type { Question, Survey } from "@/lib/questions/types"
 
 export default function PublicSurveyPage() {
@@ -17,6 +18,7 @@ export default function PublicSurveyPage() {
   const [submitted, setSubmitted] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [answers, setAnswers] = useState<Record<string, unknown>>({})
+  const [startedAt, setStartedAt] = useState<number | null>(null)
 
   useEffect(() => {
     const url = isPreview ? `/api/s/${token}?preview=1` : `/api/s/${token}`
@@ -33,6 +35,22 @@ export default function PublicSurveyPage() {
       })
       setLoading(false)
     })
+
+    // 记录开始时间（使用 sessionStorage 防止刷新重置）
+    const stored = sessionStorage.getItem(`survey_start_${token}`)
+    const startTime = stored ? Number(stored) : Date.now()
+    if (!stored) {
+      sessionStorage.setItem(`survey_start_${token}`, String(startTime))
+    }
+    // 使用 requestAnimationFrame 避免在 effect 中同步 setState
+    requestAnimationFrame(() => setStartedAt(startTime))
+
+    // 非预览模式下记录浏览量
+    if (!isPreview) {
+      fetch(`/api/s/${token}/view`, { method: "POST" }).catch(() => {
+        // 静默失败，不影响用户体验
+      })
+    }
   }, [token, isPreview])
 
   function setAnswer(questionId: string, value: unknown) {
@@ -67,11 +85,23 @@ export default function PublicSurveyPage() {
       return
     }
 
+    // 采集设备信息
+    const ua = parseUA(navigator.userAgent)
+    const metadata = {
+      startedAt: startedAt ? new Date(startedAt).toISOString() : null,
+      deviceType: ua.deviceType,
+      os: ua.os,
+      browser: ua.browser,
+      source:
+        searchParams.get("source") || searchParams.get("utm_source") || null,
+      referrer: document.referrer || null,
+    }
+
     // 真实提交
     const res = await fetch(`/api/s/${token}/submit`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ answers }),
+      body: JSON.stringify({ answers, metadata }),
     })
     if (res.ok) {
       setSubmitted(true)
