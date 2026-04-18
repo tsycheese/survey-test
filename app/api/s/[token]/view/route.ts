@@ -34,10 +34,18 @@ export async function POST(
   })
 
   if (!existing) {
-    const geo =
-      ip !== "unknown"
-        ? await lookupIP(ip)
-        : { country: null, province: null, city: null }
+    let geo: {
+      country: string | null
+      province: string | null
+      city: string | null
+    } = { country: null, province: null, city: null }
+    try {
+      if (ip !== "unknown") {
+        geo = await lookupIP(ip)
+      }
+    } catch {
+      // IP 解析失败，静默忽略
+    }
     await prisma.surveyView.create({
       data: {
         surveyId: survey.id,

@@ -61,10 +61,19 @@ export async function POST(
   const meta = parsed.data.metadata
   const ip = request.headers.get("x-forwarded-for") || null
 
-  // 解析 IP 地域信息
-  const geo = ip
-    ? await lookupIP(ip)
-    : { country: null, province: null, city: null }
+  // 解析 IP 地域信息（失败不阻塞提交）
+  let geo: {
+    country: string | null
+    province: string | null
+    city: string | null
+  } = { country: null, province: null, city: null }
+  try {
+    if (ip) {
+      geo = await lookupIP(ip)
+    }
+  } catch {
+    // IP 解析失败，静默忽略
+  }
 
   const response = await prisma.response.create({
     data: {

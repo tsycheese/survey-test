@@ -41,6 +41,17 @@ export async function lookupIP(ip: string): Promise<GeoIPResult> {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 3000)
 
+    // 本地开发时 ip 可能是 ::1 或 127.0.0.1，ip-api 不支持，直接跳过
+    if (
+      ip === "::1" ||
+      ip.startsWith("127.") ||
+      ip.startsWith("192.168.") ||
+      ip.startsWith("10.")
+    ) {
+      clearTimeout(timeout)
+      return { country: null, province: null, city: null }
+    }
+
     const res = await fetch(
       `http://ip-api.com/json/${ip}?lang=zh-CN&fields=status,message,country,regionName,city`,
       { signal: controller.signal }
