@@ -1,61 +1,91 @@
 "use client"
 
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts"
+import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import type { NamedCount } from "../types"
 
 const COLORS = [
-  "hsl(var(--primary))",
-  "hsl(142, 76%, 36%)",
-  "hsl(38, 92%, 50%)",
-  "hsl(0, 84%, 60%)",
-  "hsl(280, 65%, 60%)",
-  "hsl(199, 89%, 48%)",
+  "#2563eb", // blue-600
+  "#7dd3fc", // sky-300
+  "#4ade80", // green-400
+  "#fbbf24", // amber-400
+  "#a78bfa", // violet-400
+  "#f87171", // red-400
 ]
 
 function DonutChart({ title, data }: { title: string; data: NamedCount[] }) {
-  const chartData = data.length > 0 ? data : [{ name: "暂无数据", count: 1 }]
+  const total = data.reduce((sum, d) => sum + d.count, 0)
+
+  // 如果没有数据，显示占位
+  const chartData =
+    total > 0
+      ? data
+      : [
+          { name: "暂无数据", count: 1 },
+          { name: "", count: 0 },
+        ]
 
   return (
     <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base">{title}</CardTitle>
+      <CardHeader className="pb-4">
+        <CardTitle className="text-base font-semibold">{title}</CardTitle>
       </CardHeader>
-      <CardContent>
-        <div className="h-[220px] w-full">
+      <CardContent className="space-y-6">
+        {/* 环形图 */}
+        <div className="h-[200px] w-full">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
                 data={chartData}
                 cx="50%"
                 cy="50%"
-                innerRadius={60}
-                outerRadius={90}
+                innerRadius={70}
+                outerRadius={95}
                 paddingAngle={2}
                 dataKey="count"
                 nameKey="name"
-                label={({ name, percent }) =>
-                  `${name} ${((percent ?? 0) * 100).toFixed(0)}%`
-                }
-                labelLine={false}
+                stroke="none"
               >
-                {chartData.map((_, index) => (
+                {chartData.map((entry, index) => (
                   <Cell
                     key={`cell-${index}`}
-                    fill={COLORS[index % COLORS.length]}
+                    fill={total > 0 ? COLORS[index % COLORS.length] : "#e5e7eb"}
                   />
                 ))}
               </Pie>
-              <Tooltip
-                contentStyle={{
-                  borderRadius: "8px",
-                  border: "1px solid hsl(var(--border))",
-                  background: "hsl(var(--background))",
-                }}
-                formatter={(value, name) => [String(value), String(name)]}
-              />
             </PieChart>
           </ResponsiveContainer>
+        </div>
+
+        {/* 底部图例 */}
+        <div className="flex items-start justify-center gap-8">
+          {total > 0 ? (
+            data.map((item, index) => {
+              const pct =
+                total > 0 ? ((item.count / total) * 100).toFixed(0) : "0"
+              return (
+                <div
+                  key={item.name}
+                  className="flex flex-col items-center gap-1"
+                >
+                  <div
+                    className="h-3 w-3 rounded-full"
+                    style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                  />
+                  <span className="text-lg font-bold">{pct}%</span>
+                  <span className="text-sm text-muted-foreground">
+                    {item.name}
+                  </span>
+                </div>
+              )
+            })
+          ) : (
+            <div className="flex flex-col items-center gap-1">
+              <div className="h-3 w-3 rounded-full bg-gray-300" />
+              <span className="text-lg font-bold">-</span>
+              <span className="text-sm text-muted-foreground">暂无数据</span>
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>
