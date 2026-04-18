@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import type { NamedCount } from "../types"
 
@@ -13,57 +13,7 @@ const COLORS = [
   "#f87171", // red-400
 ]
 
-function polarToCartesian(cx: number, cy: number, r: number, angleDeg: number) {
-  const angleRad = ((angleDeg - 90) * Math.PI) / 180
-  return {
-    x: cx + r * Math.cos(angleRad),
-    y: cy + r * Math.sin(angleRad),
-  }
-}
-
-function describeArc(
-  cx: number,
-  cy: number,
-  innerR: number,
-  outerR: number,
-  startAngle: number,
-  endAngle: number
-) {
-  const startOuter = polarToCartesian(cx, cy, outerR, endAngle)
-  const endOuter = polarToCartesian(cx, cy, outerR, startAngle)
-  const startInner = polarToCartesian(cx, cy, innerR, endAngle)
-  const endInner = polarToCartesian(cx, cy, innerR, startAngle)
-
-  const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1"
-
-  return [
-    "M",
-    startOuter.x,
-    startOuter.y,
-    "A",
-    outerR,
-    outerR,
-    0,
-    largeArcFlag,
-    0,
-    endOuter.x,
-    endOuter.y,
-    "L",
-    endInner.x,
-    endInner.y,
-    "A",
-    innerR,
-    innerR,
-    0,
-    largeArcFlag,
-    1,
-    startInner.x,
-    startInner.y,
-    "Z",
-  ].join(" ")
-}
-
-function DonutChartSVG({
+function EchartsDonut({
   data,
   activeIndex,
   onHover,
@@ -72,97 +22,122 @@ function DonutChartSVG({
   activeIndex: number | null
   onHover: (index: number | null) => void
 }) {
+  const chartRef = useRef<HTMLDivElement>(null)
+  const chartInstanceRef = useRef<ReturnType<
+    typeof import("echarts").init
+  > | null>(null)
+  const echartsRef = useRef<typeof import("echarts") | null>(null)
+
   const total = data.reduce((sum, d) => sum + d.count, 0)
-  const cx = 150
-  const cy = 100
-  const innerR = 58
-  const baseOuterR = 82
-  const hoverOuterR = 94
-  const gapPx = 3 // 固定像素间隙
 
-  const arcs = useMemo(() => {
-    if (total === 0) return []
-    let currentAngle = 0
-    return data.map((item) => {
-      const angle = (item.count / total) * 360
-      const startAngle = currentAngle
-      const endAngle = currentAngle + angle
-      currentAngle += angle
-      return { startAngle, endAngle, item }
+  useEffect(() => {
+    if (!chartRef.current) return
+
+    let disposed = false
+
+    async function init() {
+      const echarts = await import("echarts")
+      if (disposed) return
+      echartsRef.current = echarts
+
+      const instance = echarts.init(chartRef.current!)
+      chartInstanceRef.current = instance
+
+      instance.on("mouseover", (params: { dataIndex: number }) => {
+        onHover(params.dataIndex)
+      })
+      instance.on("mouseout", () => {
+        onHover(null)
+      })
+
+      const handleResize = () => instance.resize()
+      window.addEventListener("resize", handleResize)
+
+      return () => {
+        window.removeEventListener("resize", handleResize)
+      }
+    }
+
+    const cleanupPromise = init()
+
+    return () => {
+      disposed = true
+      if (chartInstanceRef.current) {
+        chartInstanceRef.current.dispose()
+        chartInstanceRef.current = null
+      }
+    }
+  }, [onHover])
+
+  // Update option when data or activeIndex changes
+  useEffect(() => {
+    const instance = chartInstanceRef.current
+    if (!instance) return
+
+    const chartData =
+      total > 0
+        ? data.map((item, index) => ({
+            name: item.name,
+            value: item.count,
+            itemStyle: {
+              color: COLORS[index % COLORS.length],
+              borderRadius: 4,
+              borderColor: "#fff",
+              borderWidth: 3,
+              shadowBlur: activeIndex === index ? 0 : 0,
+              shadowColor: "transparent",
+            },
+            emphasis: {
+              scale: true,
+              scaleSize: 12,
+              itemStyle: {
+                shadowBlur: 0,
+                shadowColor: "transparent",
+              },
+            },
+          }))
+        : [{ name: "暂无数据", value: 1, itemStyle: { color: "#e5e7eb" } }]
+
+    instance.setOption({
+      tooltip: {
+        trigger: "item",
+        formatter: "{b}: {c} ({d}%)",
+        backgroundColor: "rgba(0,0,0,0.75)",
+        borderColor: "transparent",
+        textStyle: { color: "#fff" },
+        padding: [8, 12],
+      },
+      series: [
+        {
+          type: "pie",
+          radius: ["58%", "82%"],
+          avoidLabelOverlap: false,
+          padAngle: 3,
+          itemStyle: {
+            borderRadius: 4,
+            borderColor: "#fff",
+            borderWidth: 3,
+          },
+          label: {
+            show: false,
+          },
+          emphasis: {
+            scale: true,
+            scaleSize: 12,
+            label: {
+              show: false,
+            },
+          },
+          data: chartData,
+          animationType: "scale",
+          animationEasing: "cubicOut",
+          animationDuration: 300,
+        },
+      ],
     })
-  }, [data, total])
+  }, [data, total, activeIndex])
 
-  if (total === 0) {
-    return (
-      <svg viewBox="0 0 300 200" className="h-full w-full">
-        <path
-          d={describeArc(cx, cy, innerR, baseOuterR, 0, 360)}
-          fill="#e5e7eb"
-        />
-      </svg>
-    )
-  }
-
-  return (
-    <svg viewBox="0 0 300 200" className="h-full w-full">
-      {/* 先画完整圆弧（无间隙） */}
-      {arcs.map((arc, index) => {
-        const isActive = activeIndex === index
-        const isDimmed = activeIndex !== null && !isActive
-        const outerR = isActive ? hoverOuterR : baseOuterR
-
-        return (
-          <path
-            key={`arc-${index}`}
-            d={describeArc(
-              cx,
-              cy,
-              innerR,
-              outerR,
-              arc.startAngle,
-              arc.endAngle
-            )}
-            fill={COLORS[index % COLORS.length]}
-            opacity={isDimmed ? 0.5 : 1}
-            style={{
-              cursor: "pointer",
-              transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
-            }}
-            onMouseEnter={() => onHover(index)}
-            onMouseLeave={() => onHover(null)}
-          />
-        )
-      })}
-
-      {/* 叠加白色分隔线制造固定宽度的间隙 */}
-      {arcs.length > 1 &&
-        arcs.map((arc, index) => {
-          if (index === 0) return null
-          const angle = arc.startAngle
-          const isPrevActive = activeIndex === index - 1
-          const isCurrActive = activeIndex === index
-          // 间隙线长度取相邻两段中较大的外半径
-          const outerR = isPrevActive || isCurrActive ? hoverOuterR : baseOuterR
-
-          return (
-            <line
-              key={`gap-${index}`}
-              x1={cx}
-              y1={cy - innerR + 2}
-              x2={cx}
-              y2={cy - outerR - 2}
-              stroke="white"
-              strokeWidth={gapPx}
-              transform={`rotate(${angle} ${cx} ${cy})`}
-              style={{
-                transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
-                pointerEvents: "none",
-              }}
-            />
-          )
-        })}
-    </svg>
-  )
+  return <div ref={chartRef} className="h-full w-full" />
 }
 
 export function DonutChart({
@@ -188,7 +163,7 @@ export function DonutChart({
       <CardContent className="space-y-6">
         {/* 环形图 */}
         <div className="relative h-[200px] w-full">
-          <DonutChartSVG
+          <EchartsDonut
             data={total > 0 ? data : [{ name: "暂无数据", count: 1 }]}
             activeIndex={activeIndex}
             onHover={setActiveIndex}
