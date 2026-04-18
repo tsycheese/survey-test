@@ -78,22 +78,21 @@ function DonutChartSVG({
   const innerR = 58
   const baseOuterR = 82
   const hoverOuterR = 94
-  const paddingAngle = 2
+  const gapPx = 3 // 固定像素间隙
 
   const arcs = useMemo(() => {
     if (total === 0) return []
     let currentAngle = 0
     return data.map((item) => {
       const angle = (item.count / total) * 360
-      const startAngle = currentAngle + paddingAngle / 2
-      const endAngle = currentAngle + angle - paddingAngle / 2
+      const startAngle = currentAngle
+      const endAngle = currentAngle + angle
       currentAngle += angle
       return { startAngle, endAngle, item }
     })
   }, [data, total])
 
   if (total === 0) {
-    // 空状态：显示灰色圆环
     return (
       <svg viewBox="0 0 300 200" className="h-full w-full">
         <path
@@ -106,6 +105,7 @@ function DonutChartSVG({
 
   return (
     <svg viewBox="0 0 300 200" className="h-full w-full">
+      {/* 先画完整圆弧（无间隙） */}
       {arcs.map((arc, index) => {
         const isActive = activeIndex === index
         const isDimmed = activeIndex !== null && !isActive
@@ -113,7 +113,7 @@ function DonutChartSVG({
 
         return (
           <path
-            key={index}
+            key={`arc-${index}`}
             d={describeArc(
               cx,
               cy,
@@ -133,6 +133,34 @@ function DonutChartSVG({
           />
         )
       })}
+
+      {/* 叠加白色分隔线制造固定宽度的间隙 */}
+      {arcs.length > 1 &&
+        arcs.map((arc, index) => {
+          if (index === 0) return null
+          const angle = arc.startAngle
+          const isPrevActive = activeIndex === index - 1
+          const isCurrActive = activeIndex === index
+          // 间隙线长度取相邻两段中较大的外半径
+          const outerR = isPrevActive || isCurrActive ? hoverOuterR : baseOuterR
+
+          return (
+            <line
+              key={`gap-${index}`}
+              x1={cx}
+              y1={cy - innerR + 2}
+              x2={cx}
+              y2={cy - outerR - 2}
+              stroke="white"
+              strokeWidth={gapPx}
+              transform={`rotate(${angle} ${cx} ${cy})`}
+              style={{
+                transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+                pointerEvents: "none",
+              }}
+            />
+          )
+        })}
     </svg>
   )
 }
