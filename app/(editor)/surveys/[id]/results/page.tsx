@@ -18,7 +18,10 @@ export default function ResultsPage() {
     null
   )
 
-  const { data, loading, error } = useResultsData(id, selectedVersionId)
+  const { data, loading, error, refetch } = useResultsData(
+    id,
+    selectedVersionId
+  )
 
   if (loading)
     return (
@@ -47,7 +50,9 @@ export default function ResultsPage() {
           />
 
           {activeTab === "overview" && <OverviewTab data={data} />}
-          {activeTab === "details" && <DetailsTab data={data} />}
+          {activeTab === "details" && (
+            <DetailsTab data={data} onRefresh={refetch} />
+          )}
           {activeTab === "charts" && (
             <ChartsTab questions={data.questions} total={data.totalResponses} />
           )}
