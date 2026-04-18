@@ -1,6 +1,6 @@
 import { AlignLeft } from "lucide-react"
 import { nanoid } from "nanoid"
-import { useState } from "react"
+import { useRef, useState } from "react"
 import type {
   QuestionDef,
   TextQuestion,
@@ -96,6 +96,7 @@ export const textDef: QuestionDef<TextQuestion> = {
   Editor: ({ question, onChange, onSave }) => {
     const { config } = question
     const { placeholder = "", format = "any" } = config
+    const originalValuesRef = useRef<Map<string, string>>(new Map())
 
     return (
       <div className="space-y-4">
@@ -109,9 +110,18 @@ export const textDef: QuestionDef<TextQuestion> = {
                 config: { ...config, placeholder: e.target.value },
               })
             }
-            onBlur={() => {
-              const updated = { ...question }
-              onSave?.(updated)
+            onFocus={() => {
+              originalValuesRef.current.set(
+                "placeholder",
+                question.config.placeholder || ""
+              )
+            }}
+            onBlur={(e) => {
+              const original = originalValuesRef.current.get("placeholder")
+              if (e.target.value !== original) {
+                const updated = { ...question }
+                onSave?.(updated)
+              }
             }}
             placeholder="请输入..."
             className="h-8 text-sm"

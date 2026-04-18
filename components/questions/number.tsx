@@ -1,5 +1,6 @@
 import { Hash } from "lucide-react"
 import { nanoid } from "nanoid"
+import { useRef } from "react"
 import type { QuestionDef, NumberQuestion } from "@/lib/questions/types"
 import { Input } from "@/components/ui/input"
 import { QuestionTitle } from "@/components/questions/question-title"
@@ -105,6 +106,9 @@ export const numberDef: QuestionDef<NumberQuestion> = {
   },
   Editor: ({ question, onChange, onSave }) => {
     const { placeholder, min, max, prefix, suffix } = question.config
+    const originalValuesRef = useRef<Map<string, string | number | undefined>>(
+      new Map()
+    )
 
     return (
       <div className="space-y-4">
@@ -118,9 +122,18 @@ export const numberDef: QuestionDef<NumberQuestion> = {
                 config: { ...question.config, placeholder: e.target.value },
               })
             }
-            onBlur={() => {
-              const updated = { ...question }
-              onSave?.(updated)
+            onFocus={() => {
+              originalValuesRef.current.set(
+                "placeholder",
+                question.config.placeholder
+              )
+            }}
+            onBlur={(e) => {
+              const original = originalValuesRef.current.get("placeholder")
+              if (e.target.value !== (original || "")) {
+                const updated = { ...question }
+                onSave?.(updated)
+              }
             }}
             className="h-8"
             placeholder="请输入占位文字"
@@ -144,9 +157,18 @@ export const numberDef: QuestionDef<NumberQuestion> = {
                   },
                 })
               }
-              onBlur={() => {
-                const updated = { ...question }
-                onSave?.(updated)
+              onFocus={() => {
+                originalValuesRef.current.set("min", question.config.min)
+              }}
+              onBlur={(e) => {
+                const newMin = e.target.value
+                  ? parseFloat(e.target.value)
+                  : undefined
+                const original = originalValuesRef.current.get("min")
+                if (newMin !== original) {
+                  const updated = { ...question }
+                  onSave?.(updated)
+                }
               }}
               className="h-8"
             />
@@ -168,9 +190,18 @@ export const numberDef: QuestionDef<NumberQuestion> = {
                   },
                 })
               }
-              onBlur={() => {
-                const updated = { ...question }
-                onSave?.(updated)
+              onFocus={() => {
+                originalValuesRef.current.set("max", question.config.max)
+              }}
+              onBlur={(e) => {
+                const newMax = e.target.value
+                  ? parseFloat(e.target.value)
+                  : undefined
+                const original = originalValuesRef.current.get("max")
+                if (newMax !== original) {
+                  const updated = { ...question }
+                  onSave?.(updated)
+                }
               }}
               className="h-8"
             />
@@ -188,9 +219,15 @@ export const numberDef: QuestionDef<NumberQuestion> = {
                   config: { ...question.config, prefix: e.target.value },
                 })
               }
-              onBlur={() => {
-                const updated = { ...question }
-                onSave?.(updated)
+              onFocus={() => {
+                originalValuesRef.current.set("prefix", question.config.prefix)
+              }}
+              onBlur={(e) => {
+                const original = originalValuesRef.current.get("prefix")
+                if (e.target.value !== (original || "")) {
+                  const updated = { ...question }
+                  onSave?.(updated)
+                }
               }}
               className="h-8"
               placeholder="¥"
@@ -207,9 +244,15 @@ export const numberDef: QuestionDef<NumberQuestion> = {
                   config: { ...question.config, suffix: e.target.value },
                 })
               }
-              onBlur={() => {
-                const updated = { ...question }
-                onSave?.(updated)
+              onFocus={() => {
+                originalValuesRef.current.set("suffix", question.config.suffix)
+              }}
+              onBlur={(e) => {
+                const original = originalValuesRef.current.get("suffix")
+                if (e.target.value !== (original || "")) {
+                  const updated = { ...question }
+                  onSave?.(updated)
+                }
               }}
               className="h-8"
               placeholder="元"

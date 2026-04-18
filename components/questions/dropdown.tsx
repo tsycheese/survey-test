@@ -1,6 +1,6 @@
 import { CircleDot } from "lucide-react"
 import { nanoid } from "nanoid"
-import { useState } from "react"
+import { useRef, useState } from "react"
 import type { QuestionDef, DropdownQuestion } from "@/lib/questions/types"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -94,6 +94,7 @@ export const dropdownDef: QuestionDef<DropdownQuestion> = {
   },
   Editor: ({ question, onChange, onSave }) => {
     const { options } = question.config
+    const originalLabelsRef = useRef<Map<string, string>>(new Map())
 
     function updateOption(id: string, label: string) {
       onChange({
@@ -145,15 +146,21 @@ export const dropdownDef: QuestionDef<DropdownQuestion> = {
               <Input
                 value={opt.label}
                 onChange={(e) => updateOption(opt.id, e.target.value)}
-                onBlur={() => {
-                  const updated = {
-                    ...question,
-                    config: {
-                      ...question.config,
-                      options: [...options],
-                    },
+                onFocus={() => {
+                  originalLabelsRef.current.set(opt.id, opt.label)
+                }}
+                onBlur={(e) => {
+                  const original = originalLabelsRef.current.get(opt.id)
+                  if (e.target.value !== original) {
+                    const updated = {
+                      ...question,
+                      config: {
+                        ...question.config,
+                        options: [...options],
+                      },
+                    }
+                    onSave?.(updated)
                   }
-                  onSave?.(updated)
                 }}
                 className="h-8 border-none bg-transparent px-0 text-sm focus-visible:ring-0 dark:bg-transparent"
                 placeholder="选项内容"

@@ -1,5 +1,6 @@
 import { Type } from "lucide-react"
 import { nanoid } from "nanoid"
+import { useRef } from "react"
 import type { QuestionDef, TextareaQuestion } from "@/lib/questions/types"
 import { Textarea } from "@/components/ui/textarea"
 import { QuestionTitle } from "@/components/questions/question-title"
@@ -107,6 +108,9 @@ export const textareaDef: QuestionDef<TextareaQuestion> = {
   },
   Editor: ({ question, onChange, onSave }) => {
     const { placeholder, maxLength, rows = 4 } = question.config
+    const originalValuesRef = useRef<Map<string, string | number | undefined>>(
+      new Map()
+    )
 
     return (
       <div className="space-y-4">
@@ -120,9 +124,18 @@ export const textareaDef: QuestionDef<TextareaQuestion> = {
                 config: { ...question.config, placeholder: e.target.value },
               })
             }
-            onBlur={() => {
-              const updated = { ...question }
-              onSave?.(updated)
+            onFocus={() => {
+              originalValuesRef.current.set(
+                "placeholder",
+                question.config.placeholder
+              )
+            }}
+            onBlur={(e) => {
+              const original = originalValuesRef.current.get("placeholder")
+              if (e.target.value !== (original || "")) {
+                const updated = { ...question }
+                onSave?.(updated)
+              }
             }}
             className="h-8"
             placeholder="请输入占位文字"
@@ -145,9 +158,16 @@ export const textareaDef: QuestionDef<TextareaQuestion> = {
                 },
               })
             }
-            onBlur={() => {
-              const updated = { ...question }
-              onSave?.(updated)
+            onFocus={() => {
+              originalValuesRef.current.set("rows", question.config.rows)
+            }}
+            onBlur={(e) => {
+              const newRows = parseInt(e.target.value) || 2
+              const original = originalValuesRef.current.get("rows")
+              if (newRows !== original) {
+                const updated = { ...question }
+                onSave?.(updated)
+              }
             }}
             className="h-8"
           />
@@ -170,9 +190,19 @@ export const textareaDef: QuestionDef<TextareaQuestion> = {
                 },
               })
             }
-            onBlur={() => {
-              const updated = { ...question }
-              onSave?.(updated)
+            onFocus={() => {
+              originalValuesRef.current.set(
+                "maxLength",
+                question.config.maxLength
+              )
+            }}
+            onBlur={(e) => {
+              const newMaxLength = parseInt(e.target.value) || undefined
+              const original = originalValuesRef.current.get("maxLength")
+              if (newMaxLength !== original) {
+                const updated = { ...question }
+                onSave?.(updated)
+              }
             }}
             className="h-8"
             placeholder="不限制留空"

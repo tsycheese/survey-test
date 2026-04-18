@@ -32,6 +32,8 @@ export function QuestionTitle({
   const [descValue, setDescValue] = useState(description || "")
   const titleRef = useRef<HTMLTextAreaElement>(null)
   const descRef = useRef<HTMLTextAreaElement>(null)
+  const originalTitleRef = useRef(title)
+  const originalDescRef = useRef(description || "")
 
   // 当外部 description 变化时，同步更新内部状态
   React.useEffect(() => {
@@ -46,7 +48,9 @@ export function QuestionTitle({
 
   const handleTitleBlur = (value: string) => {
     setEditingTitle(false)
-    onBlur?.(value)
+    if (value !== originalTitleRef.current) {
+      onBlur?.(value)
+    }
   }
 
   // 将光标移动到文本末尾
@@ -62,7 +66,9 @@ export function QuestionTitle({
 
   const handleDescBlur = (value: string) => {
     setEditingDesc(false)
-    onDescriptionBlur?.(value)
+    if (value !== originalDescRef.current) {
+      onDescriptionBlur?.(value)
+    }
   }
 
   return (
@@ -96,6 +102,7 @@ export function QuestionTitle({
                 onBlur={(e) => handleTitleBlur(e.target.value)}
                 onClick={(e) => e.stopPropagation()}
                 onFocus={(e) => {
+                  originalTitleRef.current = title
                   // 延迟执行，确保在 autoFocus 之后
                   setTimeout(() => moveCursorToEnd(e.target), 0)
                 }}
@@ -140,6 +147,7 @@ export function QuestionTitle({
             onBlur={(e) => handleDescBlur(e.target.value)}
             onClick={(e) => e.stopPropagation()}
             onFocus={(e) => {
+              originalDescRef.current = description || ""
               // 延迟执行，确保在 autoFocus 之后
               setTimeout(() => moveCursorToEnd(e.target), 0)
             }}

@@ -615,6 +615,9 @@ export const imageMultipleChoiceDef: QuestionDef<ImageMultipleChoiceQuestion> =
         showTitles = true,
         aspectRatio = "3:4",
       } = question.config
+      const originalValuesRef = useRef<
+        Map<string, { title?: string; label?: string }>
+      >(new Map())
 
       function updateOptionTitle(id: string, title: string) {
         onChange({
@@ -809,15 +812,17 @@ export const imageMultipleChoiceDef: QuestionDef<ImageMultipleChoiceQuestion> =
                       onChange={(e) =>
                         updateOptionTitle(opt.id, e.target.value)
                       }
-                      onBlur={() => {
-                        const updated = {
-                          ...question,
-                          config: {
-                            ...question.config,
-                            options: [...question.config.options],
-                          },
+                      onBlur={(e) => {
+                        if (e.target.value !== (opt.title || "")) {
+                          const updated = {
+                            ...question,
+                            config: {
+                              ...question.config,
+                              options: [...question.config.options],
+                            },
+                          }
+                          onSave?.(updated)
                         }
-                        onSave?.(updated)
                       }}
                       className="min-h-[32px] resize-none border-b border-dashed border-border bg-transparent px-0 text-sm font-medium outline-none focus-visible:ring-0 dark:bg-transparent"
                       rows={1}
@@ -829,15 +834,17 @@ export const imageMultipleChoiceDef: QuestionDef<ImageMultipleChoiceQuestion> =
                       onChange={(e) =>
                         updateOptionLabel(opt.id, e.target.value)
                       }
-                      onBlur={() => {
-                        const updated = {
-                          ...question,
-                          config: {
-                            ...question.config,
-                            options: [...question.config.options],
-                          },
+                      onBlur={(e) => {
+                        if (e.target.value !== (opt.label || "")) {
+                          const updated = {
+                            ...question,
+                            config: {
+                              ...question.config,
+                              options: [...question.config.options],
+                            },
+                          }
+                          onSave?.(updated)
                         }
-                        onSave?.(updated)
                       }}
                       className="min-h-[40px] resize-none border-none bg-transparent px-0 text-sm text-muted-foreground outline-none focus-visible:ring-0 dark:bg-transparent"
                       rows={1}

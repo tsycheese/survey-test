@@ -1,6 +1,6 @@
 import { CalendarClock } from "lucide-react"
 import { nanoid } from "nanoid"
-import { useState } from "react"
+import { useRef, useState } from "react"
 import type { QuestionDef, DateTimeQuestion } from "@/lib/questions/types"
 import { QuestionTitle } from "@/components/questions/question-title"
 import { QuestionTitleReadonly } from "@/components/questions/question-title-readonly"
@@ -368,6 +368,7 @@ export const dateTimeDef: QuestionDef<DateTimeQuestion> = {
   },
   Editor: ({ question, onChange, onSave }) => {
     const { format = "YYYY-MM-DD HH:mm", minDate, maxDate } = question.config
+    const originalValuesRef = useRef<Map<string, string>>(new Map())
 
     const showDate = format.includes("YYYY")
     const showTime = format.includes("HH")
@@ -411,9 +412,18 @@ export const dateTimeDef: QuestionDef<DateTimeQuestion> = {
                     config: { ...question.config, minDate: e.target.value },
                   })
                 }
-                onBlur={() => {
-                  const updated = { ...question }
-                  onSave?.(updated)
+                onFocus={() => {
+                  originalValuesRef.current.set(
+                    "minDate",
+                    question.config.minDate || ""
+                  )
+                }}
+                onBlur={(e) => {
+                  const original = originalValuesRef.current.get("minDate")
+                  if (e.target.value !== original) {
+                    const updated = { ...question }
+                    onSave?.(updated)
+                  }
                 }}
                 className="h-8"
               />
@@ -430,9 +440,18 @@ export const dateTimeDef: QuestionDef<DateTimeQuestion> = {
                     config: { ...question.config, maxDate: e.target.value },
                   })
                 }
-                onBlur={() => {
-                  const updated = { ...question }
-                  onSave?.(updated)
+                onFocus={() => {
+                  originalValuesRef.current.set(
+                    "maxDate",
+                    question.config.maxDate || ""
+                  )
+                }}
+                onBlur={(e) => {
+                  const original = originalValuesRef.current.get("maxDate")
+                  if (e.target.value !== original) {
+                    const updated = { ...question }
+                    onSave?.(updated)
+                  }
                 }}
                 className="h-8"
               />

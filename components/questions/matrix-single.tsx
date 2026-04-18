@@ -1,6 +1,6 @@
 import { Table } from "lucide-react"
 import { nanoid } from "nanoid"
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { cn } from "@/lib/utils"
 import type { QuestionDef, MatrixSingleQuestion } from "@/lib/questions/types"
 import { Input } from "@/components/ui/input"
@@ -172,6 +172,7 @@ export const matrixSingleDef: QuestionDef<MatrixSingleQuestion> = {
   },
   Editor: ({ question, onChange, onSave }) => {
     const { rows, columns } = question.config
+    const originalLabelsRef = useRef<Map<string, string>>(new Map())
 
     const updateRow = (id: string, label: string) => {
       const newRows = rows.map((r) => (r.id === id ? { ...r, label } : r))
@@ -234,12 +235,18 @@ export const matrixSingleDef: QuestionDef<MatrixSingleQuestion> = {
               <Input
                 value={row.label}
                 onChange={(e) => updateRow(row.id, e.target.value)}
-                onBlur={() =>
-                  onSave?.({
-                    ...question,
-                    config: { ...question.config, rows: [...rows] },
-                  })
-                }
+                onFocus={() => {
+                  originalLabelsRef.current.set(row.id, row.label)
+                }}
+                onBlur={(e) => {
+                  const original = originalLabelsRef.current.get(row.id)
+                  if (e.target.value !== original) {
+                    onSave?.({
+                      ...question,
+                      config: { ...question.config, rows: [...rows] },
+                    })
+                  }
+                }}
                 className="h-8 border-none bg-transparent px-0 text-sm focus-visible:ring-0 dark:bg-transparent"
                 placeholder="行内容"
               />
@@ -274,12 +281,18 @@ export const matrixSingleDef: QuestionDef<MatrixSingleQuestion> = {
               <Input
                 value={col.label}
                 onChange={(e) => updateColumn(col.id, e.target.value)}
-                onBlur={() =>
-                  onSave?.({
-                    ...question,
-                    config: { ...question.config, columns: [...columns] },
-                  })
-                }
+                onFocus={() => {
+                  originalLabelsRef.current.set(col.id, col.label)
+                }}
+                onBlur={(e) => {
+                  const original = originalLabelsRef.current.get(col.id)
+                  if (e.target.value !== original) {
+                    onSave?.({
+                      ...question,
+                      config: { ...question.config, columns: [...columns] },
+                    })
+                  }
+                }}
                 className="h-8 border-none bg-transparent px-0 text-sm focus-visible:ring-0 dark:bg-transparent"
                 placeholder="列内容"
               />

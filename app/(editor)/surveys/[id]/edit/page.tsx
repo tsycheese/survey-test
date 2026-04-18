@@ -87,6 +87,8 @@ export default function EditSurveyPage() {
   const [activeTab, setActiveTab] = useState<"survey" | "question">("survey")
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [isEditingDesc, setIsEditingDesc] = useState(false)
+  const titleOriginalRef = useRef(survey?.title ?? "")
+  const descOriginalRef = useRef(survey?.description ?? "")
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [draggingType, setDraggingType] = useState<QuestionType | null>(null)
   const [insertIndex, setInsertIndex] = useState<number | null>(null)
@@ -689,9 +691,14 @@ export default function EditSurveyPage() {
             onChange={(e) =>
               updateSurveyInfo(e.target.value, survey.description ?? "")
             }
+            onFocus={() => {
+              titleOriginalRef.current = survey.title
+            }}
             onBlur={(e) => {
               const newTitle = e.target.value
-              handleSaveTitleDesc(newTitle, survey.description ?? "")
+              if (newTitle !== titleOriginalRef.current) {
+                handleSaveTitleDesc(newTitle, survey.description ?? "")
+              }
             }}
             placeholder="未命名问卷"
           />
@@ -821,9 +828,17 @@ export default function EditSurveyPage() {
                           survey.description ?? ""
                         )
                       }
+                      onFocus={() => {
+                        titleOriginalRef.current = survey.title
+                      }}
                       onBlur={(e) => {
                         const newTitle = e.target.value
-                        handleSaveTitleDesc(newTitle, survey.description ?? "")
+                        if (newTitle !== titleOriginalRef.current) {
+                          handleSaveTitleDesc(
+                            newTitle,
+                            survey.description ?? ""
+                          )
+                        }
                         setIsEditingTitle(false)
                       }}
                     />
@@ -848,9 +863,14 @@ export default function EditSurveyPage() {
                         onChange={(e) =>
                           updateSurveyInfo(survey.title, e.target.value)
                         }
+                        onFocus={() => {
+                          descOriginalRef.current = survey.description ?? ""
+                        }}
                         onBlur={(e) => {
                           const newDesc = e.target.value
-                          handleSaveTitleDesc(survey.title, newDesc)
+                          if (newDesc !== descOriginalRef.current) {
+                            handleSaveTitleDesc(survey.title, newDesc)
+                          }
                           setIsEditingDesc(false)
                         }}
                       />
@@ -1227,7 +1247,7 @@ function QuestionEditor({
             onChange={(e) =>
               handleUpdate({ ...question, title: e.target.value })
             }
-            onBlur={() => handleSave({ ...question })}
+            onBlur={() => handleSave()}
           />
         </div>
 
@@ -1243,9 +1263,7 @@ function QuestionEditor({
             onChange={(e) =>
               handleUpdate({ ...question, description: e.target.value })
             }
-            onBlur={(e) =>
-              handleSave({ ...question, description: e.target.value })
-            }
+            onBlur={() => handleSave()}
             placeholder="添加题目描述，帮助用户理解题目..."
           />
         </div>

@@ -1,5 +1,6 @@
 import { User } from "lucide-react"
 import { nanoid } from "nanoid"
+import { useRef } from "react"
 import type { QuestionDef, NameQuestion } from "@/lib/questions/types"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -124,6 +125,7 @@ export const nameDef: QuestionDef<NameQuestion> = {
       firstName = false,
       lastName = false,
     } = question.config
+    const originalValuesRef = useRef<Map<string, string>>(new Map())
 
     return (
       <div className="space-y-4">
@@ -137,12 +139,21 @@ export const nameDef: QuestionDef<NameQuestion> = {
                 config: { ...question.config, placeholder: e.target.value },
               })
             }
-            onBlur={() =>
-              onSave?.({
-                ...question,
-                config: { ...question.config, placeholder },
-              })
-            }
+            onFocus={() => {
+              originalValuesRef.current.set(
+                "placeholder",
+                question.config.placeholder || ""
+              )
+            }}
+            onBlur={(e) => {
+              const original = originalValuesRef.current.get("placeholder")
+              if (e.target.value !== original) {
+                onSave?.({
+                  ...question,
+                  config: { ...question.config, placeholder: e.target.value },
+                })
+              }
+            }}
             placeholder="请输入..."
             className="h-8 text-sm"
           />

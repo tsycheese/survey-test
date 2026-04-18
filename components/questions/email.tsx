@@ -1,5 +1,6 @@
 import { Mail } from "lucide-react"
 import { nanoid } from "nanoid"
+import { useRef } from "react"
 import type { QuestionDef, EmailQuestion } from "@/lib/questions/types"
 import { Input } from "@/components/ui/input"
 import { QuestionTitle } from "@/components/questions/question-title"
@@ -71,6 +72,7 @@ export const emailDef: QuestionDef<EmailQuestion> = {
   },
   Editor: ({ question, onChange, onSave }) => {
     const { placeholder = "请输入邮箱地址" } = question.config
+    const originalValuesRef = useRef<Map<string, string>>(new Map())
 
     return (
       <div className="space-y-4">
@@ -84,9 +86,18 @@ export const emailDef: QuestionDef<EmailQuestion> = {
                 config: { ...question.config, placeholder: e.target.value },
               })
             }
-            onBlur={() => {
-              const updated = { ...question }
-              onSave?.(updated)
+            onFocus={() => {
+              originalValuesRef.current.set(
+                "placeholder",
+                question.config.placeholder || ""
+              )
+            }}
+            onBlur={(e) => {
+              const original = originalValuesRef.current.get("placeholder")
+              if (e.target.value !== original) {
+                const updated = { ...question }
+                onSave?.(updated)
+              }
             }}
             className="h-8"
             placeholder="请输入占位文字"

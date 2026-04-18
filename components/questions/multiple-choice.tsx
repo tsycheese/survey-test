@@ -1,6 +1,6 @@
 import { CheckSquare } from "lucide-react"
 import { nanoid } from "nanoid"
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { cn } from "@/lib/utils"
 import type { QuestionDef, MultipleChoiceQuestion } from "@/lib/questions/types"
 import { Input } from "@/components/ui/input"
@@ -42,6 +42,7 @@ function QuestionCard({
 }) {
   const { options, columns = 1 } = question.config
   const [editingOptId, setEditingOptId] = useState<string | null>(null)
+  const originalLabelRef = useRef<string>("")
 
   const handleOptClick = (optId: string) => {
     setEditingOptId(optId)
@@ -123,17 +124,22 @@ function QuestionCard({
                   }
                   onClick={(e) => e.stopPropagation()}
                   onBlur={(e) => {
-                    handleOptUpdate(opt.id, e.target.value, true)
+                    if (e.target.value !== originalLabelRef.current) {
+                      handleOptUpdate(opt.id, e.target.value, true)
+                    }
                     setEditingOptId(null)
                   }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault()
-                      handleOptUpdate(opt.id, e.currentTarget.value, true)
+                      if (e.currentTarget.value !== originalLabelRef.current) {
+                        handleOptUpdate(opt.id, e.currentTarget.value, true)
+                      }
                       setEditingOptId(null)
                     }
                   }}
                   onFocus={(e) => {
+                    originalLabelRef.current = opt.label
                     // 将光标移动到文本末尾
                     const length = e.target.value.length
                     e.target.setSelectionRange(length, length)
@@ -258,6 +264,7 @@ export const multipleChoiceDef: QuestionDef<MultipleChoiceQuestion> = {
   },
   Editor: ({ question, onChange, onSave }) => {
     const { options, columns = 1 } = question.config
+    const originalLabelsRef = useRef<Map<string, string>>(new Map())
 
     function updateOption(id: string, label: string) {
       onChange({
@@ -330,15 +337,21 @@ export const multipleChoiceDef: QuestionDef<MultipleChoiceQuestion> = {
                 <Input
                   value={opt.label}
                   onChange={(e) => updateOption(opt.id, e.target.value)}
-                  onBlur={() => {
-                    const updated = {
-                      ...question,
-                      config: {
-                        ...question.config,
-                        options: [...options],
-                      },
+                  onFocus={() => {
+                    originalLabelsRef.current.set(opt.id, opt.label)
+                  }}
+                  onBlur={(e) => {
+                    const original = originalLabelsRef.current.get(opt.id)
+                    if (e.target.value !== original) {
+                      const updated = {
+                        ...question,
+                        config: {
+                          ...question.config,
+                          options: [...options],
+                        },
+                      }
+                      onSave?.(updated)
                     }
-                    onSave?.(updated)
                   }}
                   className="h-8 border-none bg-transparent px-0 text-sm focus-visible:ring-0 dark:bg-transparent"
                   placeholder="选项内容"

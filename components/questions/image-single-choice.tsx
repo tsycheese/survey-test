@@ -579,6 +579,9 @@ export const imageSingleChoiceDef: QuestionDef<ImageSingleChoiceQuestion> = {
       showTitles = true,
       aspectRatio = "3:4",
     } = question.config
+    const originalValuesRef = useRef<
+      Map<string, { title?: string; label?: string }>
+    >(new Map())
 
     function updateOptionTitle(id: string, title: string) {
       onChange({
@@ -769,15 +772,26 @@ export const imageSingleChoiceDef: QuestionDef<ImageSingleChoiceQuestion> = {
                   <Textarea
                     value={opt.title || ""}
                     onChange={(e) => updateOptionTitle(opt.id, e.target.value)}
-                    onBlur={() => {
-                      const updated = {
-                        ...question,
-                        config: {
-                          ...question.config,
-                          options: [...question.config.options],
-                        },
+                    onFocus={() => {
+                      originalValuesRef.current.set(opt.id, {
+                        ...originalValuesRef.current.get(opt.id),
+                        title: opt.title || "",
+                      })
+                    }}
+                    onBlur={(e) => {
+                      const original = originalValuesRef.current.get(
+                        opt.id
+                      )?.title
+                      if (e.target.value !== original) {
+                        const updated = {
+                          ...question,
+                          config: {
+                            ...question.config,
+                            options: [...question.config.options],
+                          },
+                        }
+                        onSave?.(updated)
                       }
-                      onSave?.(updated)
                     }}
                     className="min-h-[32px] resize-none border-b border-dashed border-border bg-transparent px-0 text-sm font-medium outline-none focus-visible:ring-0 dark:bg-transparent"
                     rows={1}
@@ -787,15 +801,26 @@ export const imageSingleChoiceDef: QuestionDef<ImageSingleChoiceQuestion> = {
                   <Textarea
                     value={opt.label || ""}
                     onChange={(e) => updateOptionLabel(opt.id, e.target.value)}
-                    onBlur={() => {
-                      const updated = {
-                        ...question,
-                        config: {
-                          ...question.config,
-                          options: [...question.config.options],
-                        },
+                    onFocus={() => {
+                      originalValuesRef.current.set(opt.id, {
+                        ...originalValuesRef.current.get(opt.id),
+                        label: opt.label || "",
+                      })
+                    }}
+                    onBlur={(e) => {
+                      const original = originalValuesRef.current.get(
+                        opt.id
+                      )?.label
+                      if (e.target.value !== original) {
+                        const updated = {
+                          ...question,
+                          config: {
+                            ...question.config,
+                            options: [...question.config.options],
+                          },
+                        }
+                        onSave?.(updated)
                       }
-                      onSave?.(updated)
                     }}
                     className="min-h-[40px] resize-none border-none bg-transparent px-0 text-sm text-muted-foreground outline-none focus-visible:ring-0 dark:bg-transparent"
                     rows={1}

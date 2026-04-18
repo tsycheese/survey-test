@@ -1,6 +1,6 @@
 import { Target } from "lucide-react"
 import { nanoid } from "nanoid"
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { cn } from "@/lib/utils"
 import type { QuestionDef, CESQuestion } from "@/lib/questions/types"
 import { QuestionTitle } from "@/components/questions/question-title"
@@ -136,6 +136,9 @@ export const cesDef: QuestionDef<CESQuestion> = {
       lowLabel = "非常困难",
       highLabel = "非常容易",
     } = question.config
+    const originalValuesRef = useRef<Map<string, string | number | undefined>>(
+      new Map()
+    )
 
     return (
       <div className="space-y-4">
@@ -155,9 +158,16 @@ export const cesDef: QuestionDef<CESQuestion> = {
                 },
               })
             }
-            onBlur={() => {
-              const updated = { ...question }
-              onSave?.(updated)
+            onFocus={() => {
+              originalValuesRef.current.set("max", question.config.max)
+            }}
+            onBlur={(e) => {
+              const newMax = parseInt(e.target.value) || 5
+              const original = originalValuesRef.current.get("max")
+              if (newMax !== original) {
+                const updated = { ...question }
+                onSave?.(updated)
+              }
             }}
             className="h-8"
           />
@@ -174,9 +184,18 @@ export const cesDef: QuestionDef<CESQuestion> = {
                   config: { ...question.config, lowLabel: e.target.value },
                 })
               }
-              onBlur={() => {
-                const updated = { ...question }
-                onSave?.(updated)
+              onFocus={() => {
+                originalValuesRef.current.set(
+                  "lowLabel",
+                  question.config.lowLabel
+                )
+              }}
+              onBlur={(e) => {
+                const original = originalValuesRef.current.get("lowLabel")
+                if (e.target.value !== original) {
+                  const updated = { ...question }
+                  onSave?.(updated)
+                }
               }}
               className="h-8"
             />
@@ -192,9 +211,18 @@ export const cesDef: QuestionDef<CESQuestion> = {
                   config: { ...question.config, highLabel: e.target.value },
                 })
               }
-              onBlur={() => {
-                const updated = { ...question }
-                onSave?.(updated)
+              onFocus={() => {
+                originalValuesRef.current.set(
+                  "highLabel",
+                  question.config.highLabel
+                )
+              }}
+              onBlur={(e) => {
+                const original = originalValuesRef.current.get("highLabel")
+                if (e.target.value !== original) {
+                  const updated = { ...question }
+                  onSave?.(updated)
+                }
               }}
               className="h-8"
             />

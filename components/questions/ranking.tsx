@@ -1,6 +1,6 @@
 import { ListOrdered } from "lucide-react"
 import { nanoid } from "nanoid"
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { cn } from "@/lib/utils"
 import type { QuestionDef, RankingQuestion } from "@/lib/questions/types"
 import { Button } from "@/components/ui/button"
@@ -48,6 +48,7 @@ function QuestionCard({
 }) {
   const { options } = question.config
   const [editingOptId, setEditingOptId] = useState<string | null>(null)
+  const originalLabelRef = useRef<string>("")
 
   const handleOptUpdate = (
     optId: string,
@@ -113,17 +114,22 @@ function QuestionCard({
                 onChange={(e) => handleOptUpdate(opt.id, e.target.value, false)}
                 onClick={(e) => e.stopPropagation()}
                 onBlur={(e) => {
-                  handleOptUpdate(opt.id, e.target.value, true)
+                  if (e.target.value !== originalLabelRef.current) {
+                    handleOptUpdate(opt.id, e.target.value, true)
+                  }
                   setEditingOptId(null)
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     e.preventDefault()
-                    handleOptUpdate(opt.id, e.currentTarget.value, true)
+                    if (e.currentTarget.value !== originalLabelRef.current) {
+                      handleOptUpdate(opt.id, e.currentTarget.value, true)
+                    }
                     setEditingOptId(null)
                   }
                 }}
                 onFocus={(e) => {
+                  originalLabelRef.current = opt.label
                   // 将光标移动到文本末尾
                   const length = e.target.value.length
                   e.target.setSelectionRange(length, length)
