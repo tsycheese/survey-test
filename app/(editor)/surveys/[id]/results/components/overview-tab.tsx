@@ -15,12 +15,7 @@ export function OverviewTab({ data }: { data: ResultsData }) {
         avgCompletionTime={data.avgCompletionTime}
       />
       <TrendChart data={data.dailyTrend} />
-      <DeviceStats
-        deviceStats={data.deviceStats}
-        osStats={data.osStats}
-        browserStats={data.browserStats}
-        sourceStats={data.sourceStats}
-      />
+      <DeviceStats deviceStats={data.deviceStats} osStats={data.osStats} />
     </div>
   )
 }

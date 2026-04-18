@@ -65,20 +65,14 @@ function DonutChart({ title, data }: { title: string; data: NamedCount[] }) {
 export function DeviceStats({
   deviceStats,
   osStats,
-  browserStats,
-  sourceStats,
 }: {
   deviceStats: NamedCount[]
   osStats: NamedCount[]
-  browserStats: NamedCount[]
-  sourceStats: NamedCount[]
 }) {
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-4 sm:grid-cols-2">
       <DonutChart title="常用设备" data={deviceStats} />
       <DonutChart title="常用系统" data={osStats} />
-      <DonutChart title="常用浏览器" data={browserStats} />
-      <DonutChart title="渠道来源" data={sourceStats} />
     </div>
   )
 }
