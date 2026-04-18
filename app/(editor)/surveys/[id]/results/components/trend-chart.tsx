@@ -1,76 +1,143 @@
 "use client"
 
-import {
-  ComposedChart,
-  Bar,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from "recharts"
+import { useEffect, useRef } from "react"
+import * as echarts from "echarts"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import type { DailyTrend } from "../types"
 
 export function TrendChart({ data }: { data: DailyTrend[] }) {
+  const chartRef = useRef<HTMLDivElement>(null)
+  const chartInstanceRef = useRef<echarts.ECharts | null>(null)
+
+  useEffect(() => {
+    if (!chartRef.current) return
+
+    const instance = echarts.init(chartRef.current)
+    chartInstanceRef.current = instance
+
+    const handleResize = () => instance.resize()
+    window.addEventListener("resize", handleResize)
+
+    return () => {
+      window.removeEventListener("resize", handleResize)
+      instance.dispose()
+      chartInstanceRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    const instance = chartInstanceRef.current
+    if (!instance) return
+
+    const dates = data.map((d) => {
+      const date = new Date(d.date)
+      return `${date.getMonth() + 1}/${date.getDate()}`
+    })
+
+    instance.setOption({
+      tooltip: {
+        trigger: "axis",
+        axisPointer: {
+          type: "shadow",
+        },
+        backgroundColor: "rgba(0,0,0,0.75)",
+        borderColor: "transparent",
+        textStyle: { color: "#fff" },
+        padding: [8, 12],
+        formatter: (
+          params: Array<{
+            name: string
+            seriesName: string
+            value: number
+            marker: string
+          }>
+        ) => {
+          if (!params.length) return ""
+          const fullDate = data.find((d) => {
+            const date = new Date(d.date)
+            const label = `${date.getMonth() + 1}/${date.getDate()}`
+            return label === params[0].name
+          })
+          const dateStr = fullDate ? fullDate.date : params[0].name
+          const rows = params.map(
+            (p) => `${p.marker} ${p.seriesName}: ${p.value}`
+          )
+          return `<div style="font-weight:600;margin-bottom:4px">${dateStr}</div>${rows.join("<br/>")}`
+        },
+      },
+      legend: {
+        data: ["浏览量", "回收量"],
+        bottom: 0,
+        textStyle: {
+          fontSize: 12,
+        },
+      },
+      grid: {
+        left: "3%",
+        right: "4%",
+        bottom: "10%",
+        top: "10%",
+        containLabel: true,
+      },
+      xAxis: {
+        type: "category",
+        data: dates,
+        axisLine: {
+          lineStyle: { color: "#e5e7eb" },
+        },
+        axisTick: { show: false },
+        axisLabel: {
+          fontSize: 12,
+          color: "#6b7280",
+        },
+      },
+      yAxis: {
+        type: "value",
+        axisLine: { show: false },
+        axisTick: { show: false },
+        splitLine: {
+          lineStyle: {
+            color: "#f3f4f6",
+            type: "dashed",
+          },
+        },
+        axisLabel: {
+          fontSize: 12,
+          color: "#6b7280",
+        },
+      },
+      series: [
+        {
+          name: "浏览量",
+          type: "bar",
+          data: data.map((d) => d.views),
+          itemStyle: {
+            color: "#3b82f6",
+            borderRadius: [4, 4, 0, 0],
+          },
+          barWidth: 16,
+        },
+        {
+          name: "回收量",
+          type: "bar",
+          data: data.map((d) => d.responses),
+          itemStyle: {
+            color: "#22c55e",
+            borderRadius: [4, 4, 0, 0],
+          },
+          barWidth: 16,
+        },
+      ],
+    })
+  }, [data])
+
   return (
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="text-base">回收趋势</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="h-[320px] w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={data}>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-              <XAxis
-                dataKey="date"
-                tick={{ fontSize: 12 }}
-                tickFormatter={(value: string) => {
-                  const d = new Date(value)
-                  return `${d.getMonth() + 1}/${d.getDate()}`
-                }}
-              />
-              <YAxis tick={{ fontSize: 12 }} allowDecimals={false} />
-              <Tooltip
-                contentStyle={{
-                  borderRadius: "8px",
-                  border: "1px solid hsl(var(--border))",
-                  background: "hsl(var(--background))",
-                }}
-                labelFormatter={(label) => {
-                  const d = new Date(label)
-                  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
-                }}
-              />
-              <Legend />
-              <Bar
-                dataKey="views"
-                name="浏览量"
-                fill="hsl(var(--primary))"
-                radius={[4, 4, 0, 0]}
-                barSize={20}
-              />
-              <Bar
-                dataKey="responses"
-                name="回收量"
-                fill="hsl(142, 76%, 36%)"
-                radius={[4, 4, 0, 0]}
-                barSize={20}
-              />
-              <Line
-                type="monotone"
-                dataKey="responses"
-                name="回收量趋势"
-                stroke="hsl(38, 92%, 50%)"
-                strokeWidth={2}
-                dot={{ r: 3 }}
-              />
-            </ComposedChart>
-          </ResponsiveContainer>
-        </div>
+        <div ref={chartRef} className="h-[320px] w-full" />
       </CardContent>
     </Card>
   )
