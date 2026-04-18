@@ -113,6 +113,7 @@ export async function GET(
   const browserStats: Record<string, number> = {}
   const sourceStats: Record<string, number> = {}
   const locationStats: Record<string, number> = {}
+  const countryStats: Record<string, number> = {}
 
   responses.forEach((r) => {
     if (r.deviceType) {
@@ -129,6 +130,9 @@ export async function GET(
     }
     if (r.province) {
       locationStats[r.province] = (locationStats[r.province] || 0) + 1
+    }
+    if (r.country) {
+      countryStats[r.country] = (countryStats[r.country] || 0) + 1
     }
   })
 
@@ -222,6 +226,9 @@ export async function GET(
       count,
     })),
     locationStats: Object.entries(locationStats)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count),
+    countryStats: Object.entries(countryStats)
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count),
     dailyTrend,

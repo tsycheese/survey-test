@@ -83,6 +83,7 @@ export type ResultsData = {
   browserStats: NamedCount[]
   sourceStats: NamedCount[]
   locationStats: NamedCount[]
+  countryStats: NamedCount[]
   dailyTrend: DailyTrend[]
   versions: Version[]
   currentVersionId: string | null

@@ -17,7 +17,7 @@ export function OverviewTab({ data }: { data: ResultsData }) {
       />
       <TrendChart data={data.dailyTrend} />
       <DeviceStats deviceStats={data.deviceStats} osStats={data.osStats} />
-      <LocationStats data={data.locationStats} />
+      <LocationStats provinceData={data.locationStats} />
     </div>
   )
 }
