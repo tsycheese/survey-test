@@ -1,5 +1,6 @@
 "use client"
 
+import { useParams, useRouter } from "next/navigation"
 import { LayoutDashboard, Table2, BarChart3, GitCompare } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { ResultsTab } from "../types"
@@ -12,13 +13,10 @@ const TABS: { id: ResultsTab; label: string; icon: typeof LayoutDashboard }[] =
     { id: "cross", label: "交叉分析", icon: GitCompare },
   ]
 
-export function ResultsSidebar({
-  activeTab,
-  onTabChange,
-}: {
-  activeTab: ResultsTab
-  onTabChange: (tab: ResultsTab) => void
-}) {
+export function ResultsSidebar({ activeTab }: { activeTab: ResultsTab }) {
+  const { id } = useParams<{ id: string }>()
+  const router = useRouter()
+
   return (
     <aside className="fixed top-0 left-0 h-svh w-56 border-r bg-background">
       <div className="flex h-14 items-center border-b px-4">
@@ -31,7 +29,7 @@ export function ResultsSidebar({
           return (
             <button
               key={tab.id}
-              onClick={() => onTabChange(tab.id)}
+              onClick={() => router.push(`/surveys/${id}/results/${tab.id}`)}
               className={cn(
                 "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                 isActive

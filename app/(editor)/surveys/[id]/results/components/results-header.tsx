@@ -17,15 +17,11 @@ export function ResultsHeader({
   description,
   versions,
   currentVersionId,
-  selectedVersionId,
-  onVersionChange,
 }: {
   title: string
   description: string | null
   versions: Version[]
   currentVersionId: string | null
-  selectedVersionId: string | null
-  onVersionChange: (versionId: string) => void
 }) {
   const router = useRouter()
 
@@ -49,23 +45,10 @@ export function ResultsHeader({
       </div>
       <div className="flex items-center gap-3">
         {versions.length > 0 && (
-          <Select
-            value={selectedVersionId || ""}
-            onValueChange={onVersionChange}
-          >
-            <SelectTrigger className="w-44">
-              <History className="mr-2 h-4 w-4" />
-              <SelectValue placeholder="选择版本" />
-            </SelectTrigger>
-            <SelectContent>
-              {versions.map((v) => (
-                <SelectItem key={v.id} value={v.id}>
-                  v{v.version}
-                  {v.id === currentVersionId && " (当前)"}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <History className="h-4 w-4" />
+            <span>共 {versions.length} 个版本</span>
+          </div>
         )}
       </div>
     </div>
