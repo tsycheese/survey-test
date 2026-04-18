@@ -2,7 +2,7 @@
 
 import { KpiCards } from "./kpi-cards"
 import { TrendChart } from "./trend-chart"
-import { DeviceStats } from "./device-stats"
+import { DeviceStats } from "./donut-chart"
 import type { ResultsData } from "../types"
 
 export function OverviewTab({ data }: { data: ResultsData }) {
