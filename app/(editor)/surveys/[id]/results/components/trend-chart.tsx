@@ -83,12 +83,12 @@ export function TrendChart({ data }: { data: DailyTrend[] }) {
         type: "category",
         data: dates,
         axisLine: {
-          lineStyle: { color: "hsl(var(--border))" },
+          lineStyle: { color: "#e5e7eb" },
         },
         axisTick: { show: false },
         axisLabel: {
           fontSize: 12,
-          color: "hsl(var(--muted-foreground))",
+          color: "#6b7280",
         },
       },
       yAxis: {
@@ -97,13 +97,13 @@ export function TrendChart({ data }: { data: DailyTrend[] }) {
         axisTick: { show: false },
         splitLine: {
           lineStyle: {
-            color: "rgba(150, 150, 150, 0.15)",
+            color: "#f3f4f6",
             type: "dashed",
           },
         },
         axisLabel: {
           fontSize: 12,
-          color: "hsl(var(--muted-foreground))",
+          color: "#6b7280",
         },
       },
       series: [
