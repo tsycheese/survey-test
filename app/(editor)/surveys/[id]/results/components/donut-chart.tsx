@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import * as echarts from "echarts"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import type { NamedCount } from "../types"
 
@@ -15,61 +16,41 @@ const COLORS = [
 
 function EchartsDonut({
   data,
-  activeIndex,
   onHover,
 }: {
   data: NamedCount[]
-  activeIndex: number | null
   onHover: (index: number | null) => void
 }) {
   const chartRef = useRef<HTMLDivElement>(null)
-  const chartInstanceRef = useRef<ReturnType<
-    typeof import("echarts").init
-  > | null>(null)
-  const echartsRef = useRef<typeof import("echarts") | null>(null)
+  const chartInstanceRef = useRef<echarts.ECharts | null>(null)
 
   const total = data.reduce((sum, d) => sum + d.count, 0)
 
+  // 初始化图表（只执行一次）
   useEffect(() => {
     if (!chartRef.current) return
 
-    let disposed = false
+    const instance = echarts.init(chartRef.current)
+    chartInstanceRef.current = instance
 
-    async function init() {
-      const echarts = await import("echarts")
-      if (disposed) return
-      echartsRef.current = echarts
+    instance.on("mouseover", (params: { dataIndex: number }) => {
+      onHover(params.dataIndex)
+    })
+    instance.on("mouseout", () => {
+      onHover(null)
+    })
 
-      const instance = echarts.init(chartRef.current!)
-      chartInstanceRef.current = instance
-
-      instance.on("mouseover", (params: { dataIndex: number }) => {
-        onHover(params.dataIndex)
-      })
-      instance.on("mouseout", () => {
-        onHover(null)
-      })
-
-      const handleResize = () => instance.resize()
-      window.addEventListener("resize", handleResize)
-
-      return () => {
-        window.removeEventListener("resize", handleResize)
-      }
-    }
-
-    const cleanupPromise = init()
+    const handleResize = () => instance.resize()
+    window.addEventListener("resize", handleResize)
 
     return () => {
-      disposed = true
-      if (chartInstanceRef.current) {
-        chartInstanceRef.current.dispose()
-        chartInstanceRef.current = null
-      }
+      window.removeEventListener("resize", handleResize)
+      instance.dispose()
+      chartInstanceRef.current = null
     }
   }, [onHover])
 
-  // Update option when data or activeIndex changes
+  // 只在 data 变化时更新 option
   useEffect(() => {
     const instance = chartInstanceRef.current
     if (!instance) return
@@ -81,19 +62,6 @@ function EchartsDonut({
             value: item.count,
             itemStyle: {
               color: COLORS[index % COLORS.length],
-              borderRadius: 4,
-              borderColor: "#fff",
-              borderWidth: 3,
-              shadowBlur: activeIndex === index ? 0 : 0,
-              shadowColor: "transparent",
-            },
-            emphasis: {
-              scale: true,
-              scaleSize: 12,
-              itemStyle: {
-                shadowBlur: 0,
-                shadowColor: "transparent",
-              },
             },
           }))
         : [{ name: "暂无数据", value: 1, itemStyle: { color: "#e5e7eb" } }]
@@ -129,13 +97,10 @@ function EchartsDonut({
             },
           },
           data: chartData,
-          animationType: "scale",
-          animationEasing: "cubicOut",
-          animationDuration: 300,
         },
       ],
     })
-  }, [data, total, activeIndex])
+  }, [data, total])
 
   return <div ref={chartRef} className="h-full w-full" />
 }
@@ -165,7 +130,6 @@ export function DonutChart({
         <div className="relative h-[200px] w-full">
           <EchartsDonut
             data={total > 0 ? data : [{ name: "暂无数据", count: 1 }]}
-            activeIndex={activeIndex}
             onHover={setActiveIndex}
           />
 
