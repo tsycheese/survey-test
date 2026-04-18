@@ -1,40 +1,33 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useCallback } from "react"
 import * as echarts from "echarts"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import type { DailyTrend } from "../types"
+
+function getGridColor() {
+  return document.documentElement.classList.contains("dark")
+    ? "#374151"
+    : "#e5e7eb"
+}
+
+function getAxisLabelColor() {
+  return document.documentElement.classList.contains("dark")
+    ? "#9ca3af"
+    : "#6b7280"
+}
 
 export function TrendChart({ data }: { data: DailyTrend[] }) {
   const chartRef = useRef<HTMLDivElement>(null)
   const chartInstanceRef = useRef<echarts.ECharts | null>(null)
 
-  useEffect(() => {
-    if (!chartRef.current) return
-
-    const instance = echarts.init(chartRef.current)
-    chartInstanceRef.current = instance
-
-    const handleResize = () => instance.resize()
-    window.addEventListener("resize", handleResize)
-
-    return () => {
-      window.removeEventListener("resize", handleResize)
-      instance.dispose()
-      chartInstanceRef.current = null
-    }
-  }, [])
-
-  useEffect(() => {
-    const instance = chartInstanceRef.current
-    if (!instance) return
-
+  const buildOption = useCallback(() => {
     const dates = data.map((d) => {
       const date = new Date(d.date)
       return `${date.getMonth() + 1}/${date.getDate()}`
     })
 
-    instance.setOption({
+    return {
       tooltip: {
         trigger: "axis",
         axisPointer: {
@@ -83,12 +76,12 @@ export function TrendChart({ data }: { data: DailyTrend[] }) {
         type: "category",
         data: dates,
         axisLine: {
-          lineStyle: { color: "#e5e7eb" },
+          lineStyle: { color: getGridColor() },
         },
         axisTick: { show: false },
         axisLabel: {
           fontSize: 12,
-          color: "#6b7280",
+          color: getAxisLabelColor(),
         },
       },
       yAxis: {
@@ -97,13 +90,13 @@ export function TrendChart({ data }: { data: DailyTrend[] }) {
         axisTick: { show: false },
         splitLine: {
           lineStyle: {
-            color: "#f3f4f6",
+            color: getGridColor(),
             type: "dashed",
           },
         },
         axisLabel: {
           fontSize: 12,
-          color: "#6b7280",
+          color: getAxisLabelColor(),
         },
       },
       series: [
@@ -128,8 +121,49 @@ export function TrendChart({ data }: { data: DailyTrend[] }) {
           barWidth: 16,
         },
       ],
-    })
+    }
   }, [data])
+
+  // 初始化图表
+  useEffect(() => {
+    if (!chartRef.current) return
+
+    const instance = echarts.init(chartRef.current)
+    chartInstanceRef.current = instance
+    instance.setOption(buildOption())
+
+    const handleResize = () => instance.resize()
+    window.addEventListener("resize", handleResize)
+
+    return () => {
+      window.removeEventListener("resize", handleResize)
+      instance.dispose()
+      chartInstanceRef.current = null
+    }
+  }, [buildOption])
+
+  // 数据变化时更新
+  useEffect(() => {
+    const instance = chartInstanceRef.current
+    if (!instance) return
+    instance.setOption(buildOption(), true)
+  }, [buildOption])
+
+  // 监听主题切换
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      const instance = chartInstanceRef.current
+      if (!instance) return
+      instance.setOption(buildOption(), true)
+    })
+
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    })
+
+    return () => observer.disconnect()
+  }, [buildOption])
 
   return (
     <Card>
