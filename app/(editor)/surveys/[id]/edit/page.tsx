@@ -1252,7 +1252,7 @@ function ShareDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Share2 className="h-5 w-5" />
@@ -1270,13 +1270,16 @@ function ShareDialog({
           </div>
         ) : (
           <div className="space-y-4 py-4">
-            <div className="flex items-center gap-2 rounded-lg border bg-muted/50 px-3 py-2">
-              <span className="flex-1 truncate text-sm">{shareUrl}</span>
+            <div className="flex min-w-0 items-center gap-2 rounded-lg border bg-muted/50 px-3 py-2">
+              <span className="min-w-0 flex-1 truncate text-sm">
+                {shareUrl}
+              </span>
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={copyLink}
                 title="复制链接"
+                className="shrink-0"
               >
                 <Copy className="h-4 w-4" />
               </Button>
@@ -1285,6 +1288,7 @@ function ShareDialog({
                 size="icon"
                 onClick={openLink}
                 title="打开链接"
+                className="shrink-0"
               >
                 <ExternalLink className="h-4 w-4" />
               </Button>
