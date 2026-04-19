@@ -1,0 +1,178 @@
+% ============================================
+% 第2章 相关技术介绍
+% ============================================
+\section{相关技术介绍}
+
+本章介绍系统开发所涉及的主要技术栈，包括前端框架、后端服务、数据库、实时通信和人工智能等方面的技术选型及其在系统中的应用。
+
+\subsection{Next.js 全栈框架}
+
+\subsubsection{框架概述}
+
+Next.js 是由 Vercel 开发的 React 全栈框架，基于 React 构建，提供了服务端渲染（SSR）、静态站点生成（SSG）、增量静态再生（ISR）等多种渲染策略。本文采用的 Next.js 15 版本引入了 App Router 架构，将页面路由与布局系统进行了重新设计。
+
+\subsubsection{App Router 架构}
+
+App Router 是 Next.js 13+ 引入的新路由系统，基于 React Server Components（RSC）构建。与传统 Pages Router 相比，App Router 具有以下优势：
+
+\begin{enumerate}[label=(\arabic*)]
+  \item \textbf{Server Components}：默认情况下组件在服务端渲染，减少客户端 JavaScript 体积，提升首屏加载速度。
+  \item \textbf{嵌套布局}：支持通过 \texttt{layout.tsx} 文件定义共享布局，实现更灵活的页面结构组织。
+  \item \textbf{流式传输}：支持渐进式页面加载，优先渲染关键内容。
+  \item \textbf{Server Actions}：允许在服务端直接处理表单提交，简化数据变更流程。
+\end{enumerate}
+
+\subsubsection{在系统中的应用}
+
+本系统充分利用了 Next.js 的以下特性：
+
+\begin{itemize}
+  \item 使用 App Router 组织路由，将认证、仪表盘、编辑器、结果页等模块分组管理
+  \item 利用 Server Components 渲染问卷列表、统计概览等数据展示页面
+  \item 使用 Server Actions 处理问卷创建、题目更新等数据变更操作
+  \item 通过 API Routes 提供 RESTful 接口供客户端调用
+\end{itemize}
+
+\subsection{React 与前端生态}
+
+\subsubsection{React 19}
+
+React 是 Meta 开发的前端 UI 库，采用组件化开发模式和虚拟 DOM 技术。本系统使用 React 19 版本，该版本引入了以下新特性：
+
+\begin{itemize}
+  \item \textbf{Actions}：简化异步状态更新和表单处理
+  \item \textbf{use} API：支持在组件中直接读取 Promise 和 Context
+  \item \textbf{改进的 Ref 处理}：ref 可作为常规 prop 传递
+\end{itemize}
+
+\subsubsection{状态管理}
+
+系统采用 Zustand 作为全局状态管理方案。Zustand 是一个轻量级的状态管理库，相比 Redux 具有更简单的 API 和更小的包体积。在问卷编辑器中，Zustand Store 管理着题目列表、当前选中题目、编辑器设置等状态。
+
+\subsubsection{UI 组件库}
+
+系统使用 shadcn/ui 作为基础组件库。shadcn/ui 是一套基于 Radix UI 和 Tailwind CSS 的组件集合，具有以下特点：
+
+\begin{itemize}
+  \item 组件代码直接复制到项目中，可完全自定义
+  \item 基于 Tailwind CSS，样式灵活可控
+  \item 内置无障碍支持（ARIA）
+  \item 与 React Hook Form、Zod 等库良好集成
+\end{itemize}
+
+\subsection{Prisma ORM 与数据库}
+
+\subsubsection{Prisma 概述}
+
+Prisma 是新一代 Node.js 和 TypeScript 的 ORM 工具，由以下三部分组成：
+
+\begin{itemize}
+  \item \textbf{Prisma Client}：类型安全的自动生成的数据库客户端
+  \item \textbf{Prisma Schema}：声明式数据模型定义语言
+  \item \textbf{Prisma Migrate}：数据库迁移系统
+\end{itemize}
+
+\subsubsection{Schema 定义}
+
+Prisma Schema 使用声明式语法定义数据模型，例如：
+
+\begin{lstlisting}[language=TypeScript, caption={Prisma Schema 示例}]
+model Survey {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  published   Boolean  @default(false)
+  shareToken  String?  @unique
+  userId      String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user       User        @relation(fields: [userId], references: [id])
+  questions  Question[]
+  responses  Response[]
+  versions   SurveyVersion[]
+}
+\end{lstlisting}
+
+\subsubsection{数据库选型}
+
+系统选用 PostgreSQL 作为关系型数据库。PostgreSQL 是功能强大的开源数据库，支持 JSON 字段、全文搜索、地理数据等高级特性。本系统使用 Neon 提供的托管 PostgreSQL 服务，支持无服务器架构和自动扩展。
+
+\subsection{实时通信技术}
+
+\subsubsection{Pusher}
+
+Pusher 是一个托管的实时通信服务，基于 WebSocket 技术，提供以下核心功能：
+
+\begin{itemize}
+  \item \textbf{Channels}：发布/订阅消息通道
+  \item \textbf{Presence Channels}：支持在线状态检测和成员信息
+  \item \textbf{Private Channels}：支持通道级别的权限控制
+  \item \textbf{Webhooks}：服务端事件回调
+\end{itemize}
+
+\subsubsection{在协作编辑中的应用}
+
+本系统利用 Pusher 的 Presence Channel 实现多人实时协作编辑：
+
+\begin{itemize}
+  \item 每个问卷对应一个 Presence Channel
+  \item 成员加入/离开时自动更新在线列表
+  \item 题目锁定状态通过通道事件广播
+  \item 题目内容变更实时同步给所有在线成员
+\end{itemize}
+
+\subsection{人工智能集成}
+
+\subsubsection{DeepSeek API}
+
+DeepSeek 是国产大语言模型，提供与 OpenAI 兼容的 API 接口。本系统通过 Vercel AI SDK 调用 DeepSeek API，实现以下功能：
+
+\begin{itemize}
+  \item \textbf{问卷生成}：根据用户需求描述自动生成问卷题目
+  \item \textbf{需求澄清}：在信息不足时提出追问，引导用户明确需求
+  \item \textbf{数据分析}：基于问卷回答数据生成分析总结报告
+\end{itemize}
+
+\subsubsection{Vercel AI SDK}
+
+Vercel AI SDK 是一个用于构建 AI 驱动应用的开发工具包，提供：
+
+\begin{itemize}
+  \item \texttt{streamText}：流式文本生成
+  \item \texttt{generateObject}：结构化对象生成（基于 Zod Schema）
+  \item 统一的 Provider 接口，支持多种大模型
+\end{itemize}
+
+\subsection{数据可视化}
+
+\subsubsection{ECharts}
+
+ECharts 是百度开源的数据可视化库，支持丰富的图表类型和灵活的配置选项。本系统使用 ECharts 6.0 版本，在结果统计页面展示：
+
+\begin{itemize}
+  \item 回收趋势折线图
+  \item 设备/OS 分布饼图
+  \item 地域分布柱状图
+  \item 逐题统计图表（饼图/柱状图/折线图切换）
+\end{itemize}
+
+\subsection{其他关键技术}
+
+\subsubsection{身份认证}
+
+系统使用 Auth.js（NextAuth v5）处理用户认证，支持：
+
+\begin{itemize}
+  \item 邮箱密码认证（bcrypt 加密）
+  \item Google OAuth 2.0
+  \item GitHub OAuth
+\end{itemize}
+
+\subsubsection{表单校验}
+
+使用 Zod 进行运行时类型校验和表单验证。Zod 是一个 TypeScript 优先的 schema 声明和验证库，与 React Hook Form 配合实现表单的双向绑定和自动校验。
+
+\subsubsection{代码规范}
+
+系统配置 ESLint 和 Prettier 保障代码质量，使用 Husky 和 lint-staged 在提交前自动执行代码检查和格式化。

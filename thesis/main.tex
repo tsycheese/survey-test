@@ -1,0 +1,125 @@
+% ============================================
+% 毕业设计论文主文件
+% 基于 ctexart 文档类，支持中文
+% ============================================
+\documentclass[12pt,a4paper,fontset=windows]{ctexart}
+
+% ---------- 页面设置 ----------
+\usepackage{geometry}
+\geometry{
+  top=2.54cm, bottom=2.54cm,
+  left=3.17cm, right=3.17cm,
+  headheight=15pt
+}
+
+% ---------- 基础包 ----------
+\usepackage{graphicx}          % 图片插入
+\usepackage{xcolor}            % 颜色
+\usepackage{amsmath,amssymb}   % 数学公式
+\usepackage{booktabs}          % 专业表格
+\usepackage{longtable}         % 跨页表格
+\usepackage{multirow}          % 合并单元格
+\usepackage{array}             % 表格增强
+\usepackage{enumitem}          % 列表定制
+\usepackage{float}             % 浮动体控制
+\usepackage{caption}           % 图表标题
+\usepackage{subcaption}        % 子图标题
+\usepackage{listings}          % 代码高亮
+\usepackage{hyperref}          % 超链接
+\usepackage{bookmark}          % PDF 书签
+\usepackage{fancyhdr}          % 页眉页脚
+\usepackage{setspace}          % 行距设置
+\usepackage{tocloft}           % 目录格式
+
+% ---------- 代码高亮设置 ----------
+\lstset{
+  language=TypeScript,
+  basicstyle=\small\ttfamily,
+  keywordstyle=\color{blue}\bfseries,
+  commentstyle=\color{gray}\itshape,
+  stringstyle=\color{orange},
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  numbersep=8pt,
+  frame=single,
+  breaklines=true,
+  showstringspaces=false,
+  tabsize=2,
+  captionpos=b,
+  xleftmargin=2em,
+  framexleftmargin=1.5em
+}
+
+% ---------- 超链接设置 ----------
+\hypersetup{
+  colorlinks=true,
+  linkcolor=black,
+  citecolor=blue,
+  urlcolor=blue,
+  bookmarksnumbered=true,
+  pdfborder={0 0 0}
+}
+
+% ---------- 页眉页脚 ----------
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[C]{\small 基于 Next.js 的在线问卷系统设计与实现}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% ---------- 图表标题格式 ----------
+\captionsetup{font=small, labelsep=space}
+\renewcommand{\thefigure}{\arabic{chapter}-\arabic{figure}}
+\renewcommand{\thetable}{\arabic{chapter}-\arabic{table}}
+\renewcommand{\theequation}{\arabic{chapter}-\arabic{equation}}
+
+% ---------- 章节编号深度 ----------
+\setcounter{secnumdepth}{3}
+\setcounter{tocdepth}{3}
+
+% ---------- 自定义命令 ----------
+\newcommand{\figref}[1]{图~\ref{#1}}
+\newcommand{\tabref}[1]{表~\ref{#1}}
+\newcommand{\eqref}[1]{式~(\ref{#1})}
+
+% ---------- 封面信息 ----------
+\title{\textbf{基于 Next.js 的在线问卷系统\\设计与实现}}
+\author{作者姓名}
+\date{\today}
+
+% ============================================
+% 正文开始
+% ============================================
+\begin{document}
+
+% ---------- 封面 ----------
+\input{chapters/cover}
+
+% ---------- 摘要 ----------
+\input{chapters/abstract}
+
+% ---------- 目录 ----------
+\tableofcontents
+\newpage
+
+% ---------- 正文 ----------
+\onehalfspacing  % 1.5倍行距
+
+\input{chapters/chapter1}
+\input{chapters/chapter2}
+\input{chapters/chapter3}
+\input{chapters/chapter4}
+\input{chapters/chapter5}
+\input{chapters/chapter6}
+
+% ---------- 参考文献 ----------
+\input{chapters/references}
+
+% ---------- 致谢 ----------
+\input{chapters/acknowledgement}
+
+% ---------- 附录 ----------
+\appendix
+\input{chapters/appendix}
+
+\end{document}

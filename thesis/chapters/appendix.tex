@@ -1,0 +1,166 @@
+% ============================================
+% 附录
+% ============================================
+\section{附录 A：核心数据模型定义}
+
+\begin{lstlisting}[language=TypeScript, caption={完整 Prisma Schema（核心部分）}]
+// 用户认证模型
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?
+  accounts      Account[]
+  sessions      Session[]
+  surveys       Survey[]
+  collaborators SurveyCollaborator[]
+}
+
+// 问卷模型
+model Survey {
+  id               String   @id @default(cuid())
+  title            String
+  description      String?
+  published        Boolean  @default(false)
+  shareToken       String?  @unique
+  currentVersionId String?
+  userId           String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user          User                 @relation(fields: [userId], references: [id])
+  questions     Question[]
+  responses     Response[]
+  versions      SurveyVersion[]
+  collaborators SurveyCollaborator[]
+  invites       SurveyInvite[]
+  logs          SurveyLog[]
+  views         SurveyView[]
+}
+
+// 题目模型
+model Question {
+  id       String @id @default(cuid())
+  surveyId String
+  type     String
+  title    String
+  required Boolean @default(false)
+  order    Int
+  config   Json?
+
+  survey  Survey   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  options Option[]
+  answers Answer[]
+}
+
+// 选项模型
+model Option {
+  id         String @id @default(cuid())
+  questionId String
+  label      String
+  value      String?
+  order      Int
+
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+}
+
+// 回答模型
+model Response {
+  id         String   @id @default(cuid())
+  surveyId   String
+  versionId  String?
+  createdAt  DateTime @default(now())
+
+  survey  Survey       @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  version SurveyVersion? @relation(fields: [versionId], references: [id])
+  answers Answer[]
+}
+
+// 答案模型
+model Answer {
+  id         String @id @default(cuid())
+  responseId String
+  questionId String
+  value      Json
+
+  response Response @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  question Question @relation(fields: [questionId], references: [id])
+}
+
+// 版本模型
+model SurveyVersion {
+  id        String   @id @default(cuid())
+  surveyId  String
+  version   Int
+  title     String
+  questions Json
+  createdAt DateTime @default(now())
+
+  survey    Survey     @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  responses Response[]
+}
+\end{lstlisting}
+
+\section{附录 B：系统界面截图}
+
+\begin{figure}[H]
+\centering
+\fbox{\parbox{0.9\textwidth}{\centering\vspace{4cm}\textit{登录页面截图}\vspace{4cm}}}
+\caption{登录页面}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\fbox{\parbox{0.9\textwidth}{\centering\vspace{4cm}\textit{问卷列表页面截图}\vspace{4cm}}}
+\caption{问卷列表页面}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\fbox{\parbox{0.9\textwidth}{\centering\vspace{4cm}\textit{问卷编辑器截图}\vspace{4cm}}}
+\caption{问卷编辑器}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\fbox{\parbox{0.9\textwidth}{\centering\vspace{4cm}\textit{公开问卷填写页面截图}\vspace{4cm}}}
+\caption{公开问卷填写页面}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\fbox{\parbox{0.9\textwidth}{\centering\vspace{4cm}\textit{结果统计页面截图}\vspace{4cm}}}
+\caption{结果统计页面}
+\end{figure}
+
+\section{附录 C：项目结构}
+
+\begin{lstlisting}[language=bash, caption={项目目录结构}]
+survey-test/
+├── app/                    # Next.js App Router
+│   ├── (auth)/            # 认证路由组
+│   ├── (dashboard)/       # 仪表盘路由组
+│   ├── (editor)/          # 编辑器路由组
+│   ├── api/               # API 路由
+│   ├── s/[token]/         # 公开问卷页面
+│   └── invite/            # 邀请页面
+├── components/            # React 组件
+│   ├── auth/              # 认证组件
+│   ├── editor/            # 编辑器组件
+│   ├── questions/         # 题型组件
+│   ├── ai/                # AI 组件
+│   └── collaboration/     # 协作组件
+├── lib/                   # 工具库
+│   ├── auth.ts            # 认证配置
+│   ├── editor-store.ts    # 编辑器状态
+│   ├── questions/         # 题型系统
+│   └── ai/                # AI 相关
+├── hooks/                 # 自定义 Hooks
+├── prisma/                # Prisma 配置
+│   └── schema/            # 数据模型
+├── docs/                  # 项目文档
+├── thesis/                # 毕业论文
+└── package.json           # 项目配置
+\end{lstlisting}

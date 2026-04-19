@@ -1,0 +1,318 @@
+% ============================================
+% 第3章 系统需求分析与设计
+% ============================================
+\section{系统需求分析与设计}
+
+本章从需求分析入手，明确系统的功能需求和非功能需求，进而设计系统整体架构、数据库模型和接口规范。
+
+\subsection{需求分析}
+
+\subsubsection{功能需求}
+
+通过对现有问卷平台的调研和用户访谈，本系统的功能需求可归纳为以下六大模块：
+
+\textbf{(1) 用户认证模块}
+
+系统需要支持多种认证方式，包括邮箱密码注册登录、Google OAuth 和 GitHub OAuth。用户认证是系统的基础功能，为后续的问卷管理和协作提供身份识别基础。
+
+\textbf{(2) 问卷管理模块}
+
+用户应能够创建、查看、编辑和删除问卷。问卷列表需要展示问卷的基本信息（标题、题目数、回答数、发布状态），并支持快速操作。
+
+\textbf{(3) 问卷编辑模块}
+
+编辑器是系统的核心功能，需要支持：
+
+\begin{itemize}
+  \item 可视化拖拽编辑界面
+  \item 丰富的题型支持（至少 15 种以上）
+  \item 题目增删改查和拖拽排序
+  \item 问卷基本信息设置（标题、描述、设置项）
+  \item 实时预览和试答功能
+\end{itemize}
+
+\textbf{(4) 问卷发布与收集模块}
+
+系统需要支持问卷发布、版本管理和公开填写：
+
+\begin{itemize}
+  \item 发布问卷生成分享链接
+  \item 版本快照和回滚
+  \item 公开问卷页面渲染
+  \item 答案收集和验证
+  \item 设备信息和地理位置采集
+\end{itemize}
+
+\textbf{(5) 结果统计模块}
+
+系统需要提供多维度的数据统计和可视化：
+
+\begin{itemize}
+  \item 数据概览（回收量、完成率、趋势图）
+  \item 逐题统计图表
+  \item 数据详情表格（搜索、筛选、分页、导出）
+  \item 交叉分析
+  \item AI 智能总结
+\end{itemize}
+
+\textbf{(6) 协作模块}
+
+系统需要支持多人协作编辑问卷：
+
+\begin{itemize}
+  \item 邀请码/邀请链接加入协作
+  \item 协作者权限管理（查看/编辑/查看结果）
+  \item 多人实时同步编辑
+  \item 题目级乐观锁定
+\end{itemize}
+
+\subsubsection{非功能需求}
+
+\begin{table}[H]
+\centering
+\caption{系统非功能需求}
+\label{tab:non-functional-requirements}
+\begin{tabular}{lp{10cm}}
+\toprule
+\textbf{需求类型} & \textbf{具体要求} \\
+\midrule
+性能 & 页面首屏加载时间 < 3s，API 响应时间 < 500ms \\
+可用性 & 系统可用性 > 99\%，支持并发用户访问 \\
+安全性 & 用户密码加密存储，API 鉴权，SQL 注入防护 \\
+可扩展性 & 模块化架构，支持新题型和功能的灵活扩展 \\
+兼容性 & 支持主流浏览器（Chrome、Firefox、Safari、Edge） \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{系统架构设计}
+
+\subsubsection{整体架构}
+
+本系统采用前后端一体化的全栈架构，基于 Next.js App Router 构建。\figref{fig:architecture} 展示了系统的整体架构。
+
+\begin{figure}[H]
+\centering
+\fbox{\parbox{0.9\textwidth}{\centering\vspace{3cm}\textit{系统架构图（见 docs/diagrams/system-architecture.md）}\vspace{3cm}}}
+\caption{系统整体架构图}
+\label{fig:architecture}
+\end{figure}
+
+系统分为四个层次：
+
+\textbf{(1) 客户端层}
+
+浏览器端运行 React 应用，负责 UI 渲染和用户交互。根据功能划分为多个路由组：
+
+\begin{itemize}
+  \item \texttt{(auth)}：登录、注册页面
+  \item \texttt{(dashboard)}：问卷列表、个人设置
+  \item \texttt{(editor)}：问卷编辑器、结果统计
+  \item \texttt{s/}：公开问卷填写页面
+  \item \texttt{invite/}：协作邀请页面
+\end{itemize}
+
+\textbf{(2) Next.js 服务端层}
+
+服务端承担渲染、API 和工具三层职责：
+
+\begin{itemize}
+  \item \textbf{Server Components}：服务端渲染页面组件，直接查询数据库
+  \item \textbf{Server Actions}：处理表单提交等数据变更
+  \item \textbf{API Routes}：提供 RESTful API 供客户端调用
+  \item \textbf{工具库}：数据库操作、认证、文件上传等公共功能
+\end{itemize}
+
+\textbf{(3) 外部服务层}
+
+系统依赖的外部服务包括：
+
+\begin{itemize}
+  \item \textbf{PostgreSQL}：关系型数据持久化
+  \item \textbf{Pusher}：实时通信服务
+  \item \textbf{DeepSeek API}：AI 生成服务
+  \item \textbf{Cloudinary}：图片存储服务
+  \item \textbf{ip-api}：IP 地理位置解析
+\end{itemize}
+
+\subsubsection{技术架构图}
+
+\begin{table}[H]
+\centering
+\caption{系统技术栈}
+\label{tab:tech-stack}
+\begin{tabular}{lll}
+\toprule
+\textbf{层级} & \textbf{技术选型} & \textbf{版本} \\
+\midrule
+前端框架 & Next.js + React & 16.x / 19.x \\
+开发语言 & TypeScript & 5.x \\
+样式方案 & Tailwind CSS & 4.x \\
+UI 组件 & shadcn/ui & latest \\
+状态管理 & Zustand & 5.x \\
+数据库 & PostgreSQL & 15+ \\
+ORM & Prisma & 6.x \\
+认证 & Auth.js (NextAuth) & 5.x \\
+实时通信 & Pusher & latest \\
+图表 & ECharts & 6.x \\
+AI SDK & Vercel AI SDK & latest \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{数据库设计}
+
+\subsubsection{E-R 模型设计}
+
+系统数据库包含 14 个实体，涵盖用户认证、问卷业务、协作管理和日志记录等方面。\figref{fig:er-diagram} 展示了数据库的 E-R 关系。
+
+\begin{figure}[H]
+\centering
+\fbox{\parbox{0.9\textwidth}{\centering\vspace{3cm}\textit{数据库 E-R 图（见 docs/diagrams/database-er.md）}\vspace{3cm}}}
+\caption{数据库 E-R 图}
+\label{fig:er-diagram}
+\end{figure}
+
+\subsubsection{核心实体说明}
+
+\textbf{(1) Survey（问卷）}
+
+问卷是系统的核心实体，包含基本信息、发布状态和关联关系：
+
+\begin{lstlisting}[language=TypeScript, caption={Survey 模型定义}]
+model Survey {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  published   Boolean  @default(false)
+  shareToken  String?  @unique
+  currentVersionId String?
+  userId      String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user         User        @relation(fields: [userId], references: [id])
+  questions    Question[]
+  responses    Response[]
+  versions     SurveyVersion[]
+  collaborators SurveyCollaborator[]
+  invites      SurveyInvite[]
+  logs         SurveyLog[]
+  views        SurveyView[]
+}
+\end{lstlisting}
+
+\textbf{(2) Question（题目）}
+
+题目实体存储问卷中的各个问题：
+
+\begin{lstlisting}[language=TypeScript, caption={Question 模型定义}]
+model Question {
+  id       String @id @default(cuid())
+  surveyId String
+  type     String // 题型标识
+  title    String
+  required Boolean @default(false)
+  order    Int
+  config   Json?   // 题型特定配置
+
+  survey  Survey   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  options Option[]
+  answers Answer[]
+}
+\end{lstlisting}
+
+\textbf{(3) Response（回答）与 Answer（答案）}
+
+Response 记录一次完整的问卷提交，Answer 记录每道题的具体答案：
+
+\begin{lstlisting}[language=TypeScript, caption={Response 与 Answer 模型}]
+model Response {
+  id        String   @id @default(cuid())
+  surveyId  String
+  versionId String?
+  createdAt DateTime @default(now())
+
+  survey  Survey   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  version SurveyVersion? @relation(fields: [versionId], references: [id])
+  answers Answer[]
+}
+
+model Answer {
+  id         String @id @default(cuid())
+  responseId String
+  questionId String
+  value      Json   // 答案值（支持多种类型）
+
+  response Response @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  question Question @relation(fields: [questionId], references: [id])
+}
+\end{lstlisting}
+
+\textbf{(4) SurveyVersion（版本）}
+
+版本实体记录问卷每次发布时的内容快照：
+
+\begin{lstlisting}[language=TypeScript, caption={SurveyVersion 模型定义}]
+model SurveyVersion {
+  id        String   @id @default(cuid())
+  surveyId  String
+  version   Int      // 版本号
+  title     String
+  questions Json     // 题目快照
+  createdAt DateTime @default(now())
+
+  survey    Survey     @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  responses Response[]
+}
+\end{lstlisting}
+
+\subsubsection{索引设计}
+
+为提升查询性能，系统在关键字段上建立了索引：
+
+\begin{table}[H]
+\centering
+\caption{数据库索引设计}
+\label{tab:indexes}
+\begin{tabular}{lll}
+\toprule
+\textbf{表} & \textbf{索引字段} & \textbf{用途} \\
+\midrule
+Survey & shareToken (unique) & 通过分享链接查询问卷 \\
+Survey & userId & 查询用户的问卷列表 \\
+Question & surveyId + order & 按顺序获取问卷题目 \\
+Response & surveyId + createdAt & 按时间获取回答列表 \\
+Answer & responseId & 获取一次回答的所有答案 \\
+SurveyVersion & surveyId + version & 获取问卷的版本历史 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{接口设计}
+
+系统采用 RESTful API 设计风格，接口路径按功能模块组织。\tabref{tab:api-overview} 列出了主要接口。
+
+\begin{table}[H]
+\centering
+\caption{主要 API 接口一览}
+\label{tab:api-overview}
+\begin{tabular}{lll}
+\toprule
+\textbf{接口路径} & \textbf{方法} & \textbf{功能} \\
+\midrule
+/api/auth/{[}...nextauth{]} & ALL & NextAuth 认证路由 \\
+/api/surveys & GET/POST & 问卷列表/创建 \\
+/api/surveys/{[}id{]} & GET/PUT/DELETE & 单问卷操作 \\
+/api/surveys/{[}id{]}/questions & GET/POST & 题目列表/创建 \\
+/api/surveys/{[}id{]}/publish & POST & 发布/取消发布 \\
+/api/surveys/{[}id{]}/versions & GET/POST & 版本列表/创建 \\
+/api/surveys/{[}id{]}/responses & GET & 回答统计数据 \\
+/api/s/{[}token{]} & GET & 获取公开问卷 \\
+/api/s/{[}token{]}/submit & POST & 提交答案 \\
+/api/ai/generate & POST & AI 生成问卷 \\
+/api/ai/summarize & POST & AI 数据总结 \\
+/api/pusher/auth & POST & Pusher 鉴权 \\
+\bottomrule
+\end{tabular}
+\end{table}
