@@ -1,13 +1,7 @@
 "use client"
 
 import { useParams, useRouter } from "next/navigation"
-import {
-  LayoutDashboard,
-  Table2,
-  BarChart3,
-  GitCompare,
-  Sparkles,
-} from "lucide-react"
+import { LayoutDashboard, Table2, BarChart3, GitCompare } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { ResultsTab } from "../types"
 
@@ -17,7 +11,6 @@ const TABS: { id: ResultsTab; label: string; icon: typeof LayoutDashboard }[] =
     { id: "details", label: "数据详情", icon: Table2 },
     { id: "charts", label: "统计图表", icon: BarChart3 },
     { id: "cross", label: "交叉分析", icon: GitCompare },
-    { id: "summary", label: "AI 总结", icon: Sparkles },
   ]
 
 export function ResultsSidebar({ activeTab }: { activeTab: ResultsTab }) {
