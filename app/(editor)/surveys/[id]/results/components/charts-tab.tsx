@@ -375,7 +375,7 @@ function ChoiceStats({
 
   const chartData = displayOptions.map((opt) => ({
     name: opt.label || "(未命名选项)",
-    count: counts[opt.id] || 0,
+    count: counts[opt.label] || 0,
   }))
 
   return (
@@ -383,7 +383,7 @@ function ChoiceStats({
       {/* 数据表格 */}
       <div className="space-y-3">
         {displayOptions.map((opt) => {
-          const count = counts[opt.id] || 0
+          const count = counts[opt.label] || 0
           const pct = total > 0 ? (count / total) * 100 : 0
           const isTop = count === maxCount && count > 0
           return (
