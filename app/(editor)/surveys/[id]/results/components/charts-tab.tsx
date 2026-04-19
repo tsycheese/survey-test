@@ -23,6 +23,7 @@ import {
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import type { QuestionStat, QuestionType } from "../types"
+import { ChoiceChartView } from "./question-chart"
 
 const TYPE_CONFIG: Record<
   QuestionType,
@@ -405,42 +406,59 @@ function QuestionStats({
         : Object.keys(counts).map((id) => ({ id, label: id }))
     const maxCount = Math.max(...Object.values(counts), 1)
 
+    const chartData = displayOptions.map((opt) => ({
+      name:
+        (opt as { title?: string; label?: string }).title ||
+        (opt as { title?: string; label?: string }).label ||
+        "(未命名选项)",
+      count: counts[opt.id] || 0,
+    }))
+
     return (
-      <div className="space-y-3">
-        {displayOptions.map((opt) => {
-          const count = counts[opt.id] || 0
-          const pct = total > 0 ? (count / total) * 100 : 0
-          const isTop = count === maxCount && count > 0
-          return (
-            <div key={opt.id} className="space-y-1">
-              <div className="flex items-center justify-between text-sm">
-                <div className="flex items-center gap-2">
-                  <span className="line-clamp-1 flex-1">
-                    {(opt as { title?: string; label?: string }).title ||
-                      (opt as { title?: string; label?: string }).label ||
-                      "(未命名选项)"}
-                  </span>
-                  {isTop && count > 0 && (
-                    <span className="rounded-full bg-yellow-100 px-1.5 py-0.5 text-xs font-medium text-yellow-700">
-                      TOP
+      <div className="space-y-4">
+        {/* 数据表格 */}
+        <div className="space-y-3">
+          {displayOptions.map((opt) => {
+            const count = counts[opt.id] || 0
+            const pct = total > 0 ? (count / total) * 100 : 0
+            const isTop = count === maxCount && count > 0
+            return (
+              <div key={opt.id} className="space-y-1">
+                <div className="flex items-center justify-between text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="line-clamp-1 flex-1">
+                      {(opt as { title?: string; label?: string }).title ||
+                        (opt as { title?: string; label?: string }).label ||
+                        "(未命名选项)"}
                     </span>
-                  )}
+                    {isTop && count > 0 && (
+                      <span className="rounded-full bg-yellow-100 px-1.5 py-0.5 text-xs font-medium text-yellow-700">
+                        TOP
+                      </span>
+                    )}
+                  </div>
+                  <span className="ml-2 whitespace-nowrap text-muted-foreground">
+                    {count} ({pct.toFixed(0)}%)
+                  </span>
                 </div>
-                <span className="ml-2 whitespace-nowrap text-muted-foreground">
-                  {count} ({pct.toFixed(0)}%)
-                </span>
+                <div className="h-2.5 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      isTop ? "bg-primary" : "bg-primary/60"
+                    }`}
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
               </div>
-              <div className="h-2.5 overflow-hidden rounded-full bg-muted">
-                <div
-                  className={`h-full rounded-full transition-all ${
-                    isTop ? "bg-primary" : "bg-primary/60"
-                  }`}
-                  style={{ width: `${pct}%` }}
-                />
-              </div>
-            </div>
-          )
-        })}
+            )
+          })}
+        </div>
+        {/* 图表 */}
+        <ChoiceChartView
+          data={chartData}
+          total={total}
+          title={question.title}
+        />
       </div>
     )
   }
@@ -459,38 +477,52 @@ function QuestionStats({
 
     const maxCount = Math.max(...Object.values(counts), 1)
 
+    const chartData = genderOptions.map((opt) => ({
+      name: opt.label,
+      count: counts[opt.id] || 0,
+    }))
+
     return (
-      <div className="space-y-3">
-        {genderOptions.map((opt) => {
-          const count = counts[opt.id] || 0
-          const pct = total > 0 ? (count / total) * 100 : 0
-          const isTop = count === maxCount && count > 0
-          return (
-            <div key={opt.id} className="space-y-1">
-              <div className="flex items-center justify-between text-sm">
-                <div className="flex items-center gap-2">
-                  <span>{opt.label}</span>
-                  {isTop && count > 0 && (
-                    <span className="rounded-full bg-yellow-100 px-1.5 py-0.5 text-xs font-medium text-yellow-700">
-                      TOP
-                    </span>
-                  )}
+      <div className="space-y-4">
+        {/* 数据表格 */}
+        <div className="space-y-3">
+          {genderOptions.map((opt) => {
+            const count = counts[opt.id] || 0
+            const pct = total > 0 ? (count / total) * 100 : 0
+            const isTop = count === maxCount && count > 0
+            return (
+              <div key={opt.id} className="space-y-1">
+                <div className="flex items-center justify-between text-sm">
+                  <div className="flex items-center gap-2">
+                    <span>{opt.label}</span>
+                    {isTop && count > 0 && (
+                      <span className="rounded-full bg-yellow-100 px-1.5 py-0.5 text-xs font-medium text-yellow-700">
+                        TOP
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-muted-foreground">
+                    {count} ({pct.toFixed(0)}%)
+                  </span>
                 </div>
-                <span className="text-muted-foreground">
-                  {count} ({pct.toFixed(0)}%)
-                </span>
+                <div className="h-2.5 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      isTop ? "bg-primary" : "bg-primary/60"
+                    }`}
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
               </div>
-              <div className="h-2.5 overflow-hidden rounded-full bg-muted">
-                <div
-                  className={`h-full rounded-full transition-all ${
-                    isTop ? "bg-primary" : "bg-primary/60"
-                  }`}
-                  style={{ width: `${pct}%` }}
-                />
-              </div>
-            </div>
-          )
-        })}
+            )
+          })}
+        </div>
+        {/* 图表 */}
+        <ChoiceChartView
+          data={chartData}
+          total={total}
+          title={question.title}
+        />
       </div>
     )
   }
@@ -522,40 +554,50 @@ function QuestionStats({
     optionLabels.length > 0 ? optionLabels : Object.keys(counts)
   const maxCount = Math.max(...Object.values(counts), 1)
 
+  const chartData = displayOptions.map((opt) => ({
+    name: opt || "(未命名选项)",
+    count: counts[opt] || 0,
+  }))
+
   return (
-    <div className="space-y-3">
-      {displayOptions.map((opt, idx) => {
-        const count = counts[opt] || 0
-        const pct = total > 0 ? (count / total) * 100 : 0
-        const isTop = count === maxCount && count > 0
-        return (
-          <div key={`${opt}-${idx}`} className="space-y-1">
-            <div className="flex items-center justify-between text-sm">
-              <div className="flex items-center gap-2">
-                <span className="line-clamp-1 flex-1">
-                  {opt || "(未命名选项)"}
-                </span>
-                {isTop && count > 0 && (
-                  <span className="rounded-full bg-yellow-100 px-1.5 py-0.5 text-xs font-medium text-yellow-700">
-                    TOP
+    <div className="space-y-4">
+      {/* 数据表格 */}
+      <div className="space-y-3">
+        {displayOptions.map((opt, idx) => {
+          const count = counts[opt] || 0
+          const pct = total > 0 ? (count / total) * 100 : 0
+          const isTop = count === maxCount && count > 0
+          return (
+            <div key={`${opt}-${idx}`} className="space-y-1">
+              <div className="flex items-center justify-between text-sm">
+                <div className="flex items-center gap-2">
+                  <span className="line-clamp-1 flex-1">
+                    {opt || "(未命名选项)"}
                   </span>
-                )}
+                  {isTop && count > 0 && (
+                    <span className="rounded-full bg-yellow-100 px-1.5 py-0.5 text-xs font-medium text-yellow-700">
+                      TOP
+                    </span>
+                  )}
+                </div>
+                <span className="ml-2 whitespace-nowrap text-muted-foreground">
+                  {count} ({pct.toFixed(0)}%)
+                </span>
               </div>
-              <span className="ml-2 whitespace-nowrap text-muted-foreground">
-                {count} ({pct.toFixed(0)}%)
-              </span>
+              <div className="h-2.5 overflow-hidden rounded-full bg-muted">
+                <div
+                  className={`h-full rounded-full transition-all ${
+                    isTop ? "bg-primary" : "bg-primary/60"
+                  }`}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
             </div>
-            <div className="h-2.5 overflow-hidden rounded-full bg-muted">
-              <div
-                className={`h-full rounded-full transition-all ${
-                  isTop ? "bg-primary" : "bg-primary/60"
-                }`}
-                style={{ width: `${pct}%` }}
-              />
-            </div>
-          </div>
-        )
-      })}
+          )
+        })}
+      </div>
+      {/* 图表 */}
+      <ChoiceChartView data={chartData} total={total} title={question.title} />
     </div>
   )
 }
