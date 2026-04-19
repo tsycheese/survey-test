@@ -342,7 +342,7 @@ function ChoiceStats({
   question: QuestionStat
   total: number
 }) {
-  const { answers } = question
+  const { type, answers } = question
   const options = question.config?.options ?? []
   const counts: Record<string, number> = {}
 
@@ -373,9 +373,12 @@ function ChoiceStats({
 
   const maxCount = Math.max(...Object.values(counts), 1)
 
+  // GENDER 类型的 answer value 存的是 option id，其他类型存的是 label
+  const matchKey = type === "GENDER" ? "id" : "label"
+
   const chartData = displayOptions.map((opt) => ({
     name: opt.label || "(未命名选项)",
-    count: counts[opt.label] || 0,
+    count: counts[opt[matchKey]] || 0,
   }))
 
   return (
@@ -383,7 +386,7 @@ function ChoiceStats({
       {/* 数据表格 */}
       <div className="space-y-3">
         {displayOptions.map((opt) => {
-          const count = counts[opt.label] || 0
+          const count = counts[opt[matchKey]] || 0
           const pct = total > 0 ? (count / total) * 100 : 0
           const isTop = count === maxCount && count > 0
           return (
