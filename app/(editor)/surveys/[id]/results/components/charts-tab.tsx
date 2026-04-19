@@ -128,7 +128,13 @@ function TextAnswerList({
   )
 }
 
-function ScoreDistribution({ question }: { question: QuestionStat }) {
+function ScoreDistribution({
+  question,
+  total,
+}: {
+  question: QuestionStat
+  total: number
+}) {
   const { type, answers } = question
   const scores = answers.map((a) => Number(a.value)).filter((n) => !isNaN(n))
   if (scores.length === 0)
@@ -148,6 +154,14 @@ function ScoreDistribution({ question }: { question: QuestionStat }) {
   }
   scores.forEach((s) => {
     dist[s] = (dist[s] || 0) + 1
+  })
+
+  const chartData = Array.from({ length: maxScore - minScore + 1 }, (_, i) => {
+    const score = minScore + i
+    return {
+      name: String(score),
+      count: dist[score] || 0,
+    }
   })
 
   return (
@@ -194,6 +208,14 @@ function ScoreDistribution({ question }: { question: QuestionStat }) {
           )
         })}
       </div>
+      {/* 图表 */}
+      <ChoiceChartView
+        data={chartData}
+        total={total}
+        title={question.title}
+        defaultType="bar"
+        availableTypes={["bar", "line"]}
+      />
     </div>
   )
 }
@@ -459,7 +481,7 @@ function QuestionContent({
     type === "CES" ||
     type === "NUMBER"
   ) {
-    return <ScoreDistribution question={question} />
+    return <ScoreDistribution question={question} total={total} />
   }
 
   // 日期时间

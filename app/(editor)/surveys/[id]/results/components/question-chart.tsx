@@ -283,15 +283,20 @@ export function QuestionChart({
 export function ChartTypeToggle({
   value,
   onChange,
+  availableTypes,
 }: {
   value: ChartType
   onChange: (type: ChartType) => void
+  availableTypes?: ChartType[]
 }) {
-  const tabs: { type: ChartType; label: string; icon: typeof PieChart }[] = [
+  const allTabs: { type: ChartType; label: string; icon: typeof PieChart }[] = [
     { type: "pie", label: "饼图", icon: PieChart },
     { type: "bar", label: "柱状图", icon: BarChart3 },
     { type: "line", label: "折线图", icon: TrendingUp },
   ]
+  const tabs = availableTypes
+    ? allTabs.filter((t) => availableTypes.includes(t.type))
+    : allTabs
 
   return (
     <div className="inline-flex rounded-lg border bg-muted p-0.5">
@@ -358,12 +363,16 @@ export function ChoiceChartView({
   data,
   total,
   title,
+  defaultType = "pie",
+  availableTypes,
 }: {
   data: { name: string; count: number }[]
   total: number
   title: string
+  defaultType?: ChartType
+  availableTypes?: ChartType[]
 }) {
-  const [chartType, setChartType] = useState<ChartType>("pie")
+  const [chartType, setChartType] = useState<ChartType>(defaultType)
   const chartWrapperRef = useRef<HTMLDivElement>(null)
 
   if (data.length === 0) {
@@ -378,7 +387,11 @@ export function ChoiceChartView({
     <div className="space-y-4">
       {/* 图表控制栏 */}
       <div className="flex items-center justify-between">
-        <ChartTypeToggle value={chartType} onChange={setChartType} />
+        <ChartTypeToggle
+          value={chartType}
+          onChange={setChartType}
+          availableTypes={availableTypes}
+        />
         <ExportImageButton chartRef={chartWrapperRef} filename={title} />
       </div>
 
