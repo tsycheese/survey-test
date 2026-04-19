@@ -1,13 +1,30 @@
 "use client"
 
 import { useParams } from "next/navigation"
+import { useState, useEffect } from "react"
 import { useResultsData } from "../hooks/use-results-data"
 import { ResultsHeader } from "../components/results-header"
 import { DetailsTab } from "../components/details-tab"
 
 export default function DetailsPage() {
   const { id } = useParams<{ id: string }>()
-  const { data, loading, error, refetch } = useResultsData(id)
+  const [selectedVersionId, setSelectedVersionId] = useState<string | null>(
+    null
+  )
+
+  const { data, loading, error, refetch } = useResultsData(
+    id,
+    selectedVersionId
+  )
+
+  useEffect(() => {
+    if (data && data.versions.length > 0 && !selectedVersionId) {
+      const latest = data.versions.reduce((max, v) =>
+        v.version > max.version ? v : max
+      )
+      setSelectedVersionId(latest.id)
+    }
+  }, [data, selectedVersionId])
 
   if (loading)
     return (
@@ -27,7 +44,8 @@ export default function DetailsPage() {
         title={data.survey.title}
         description={data.survey.description}
         versions={data.versions}
-        currentVersionId={data.currentVersionId}
+        currentVersionId={selectedVersionId}
+        onVersionChange={setSelectedVersionId}
       />
       <DetailsTab data={data} onRefresh={refetch} />
     </div>

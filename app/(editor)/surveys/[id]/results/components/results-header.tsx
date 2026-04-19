@@ -17,13 +17,17 @@ export function ResultsHeader({
   description,
   versions,
   currentVersionId,
+  onVersionChange,
 }: {
   title: string
   description: string | null
   versions: Version[]
   currentVersionId: string | null
+  onVersionChange?: (versionId: string | null) => void
 }) {
   const router = useRouter()
+
+  const selectedVersion = versions.find((v) => v.id === currentVersionId)
 
   return (
     <div className="flex items-start justify-between gap-4">
@@ -45,9 +49,27 @@ export function ResultsHeader({
       </div>
       <div className="flex items-center gap-3">
         {versions.length > 0 && (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <History className="h-4 w-4" />
-            <span>共 {versions.length} 个版本</span>
+          <div className="flex items-center gap-2">
+            <History className="h-4 w-4 text-muted-foreground" />
+            <Select
+              value={currentVersionId || "all"}
+              onValueChange={(value) =>
+                onVersionChange?.(value === "all" ? null : value)
+              }
+            >
+              <SelectTrigger className="h-8 w-[180px] text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部版本</SelectItem>
+                {versions.map((v) => (
+                  <SelectItem key={v.id} value={v.id}>
+                    版本 {v.version}
+                    {v.id === currentVersionId ? " (当前)" : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         )}
       </div>

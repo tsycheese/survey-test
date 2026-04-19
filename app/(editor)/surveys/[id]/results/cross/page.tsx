@@ -1,13 +1,27 @@
 "use client"
 
 import { useParams } from "next/navigation"
+import { useState, useEffect } from "react"
 import { useResultsData } from "../hooks/use-results-data"
 import { ResultsHeader } from "../components/results-header"
 import { CrossTab } from "../components/cross-tab"
 
 export default function CrossPage() {
   const { id } = useParams<{ id: string }>()
-  const { data, loading, error } = useResultsData(id)
+  const [selectedVersionId, setSelectedVersionId] = useState<string | null>(
+    null
+  )
+
+  const { data, loading, error } = useResultsData(id, selectedVersionId)
+
+  useEffect(() => {
+    if (data && data.versions.length > 0 && !selectedVersionId) {
+      const latest = data.versions.reduce((max, v) =>
+        v.version > max.version ? v : max
+      )
+      setSelectedVersionId(latest.id)
+    }
+  }, [data, selectedVersionId])
 
   if (loading)
     return (
@@ -27,7 +41,8 @@ export default function CrossPage() {
         title={data.survey.title}
         description={data.survey.description}
         versions={data.versions}
-        currentVersionId={data.currentVersionId}
+        currentVersionId={selectedVersionId}
+        onVersionChange={setSelectedVersionId}
       />
       <CrossTab data={data} />
     </div>

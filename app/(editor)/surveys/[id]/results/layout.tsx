@@ -1,7 +1,9 @@
 "use client"
 
+import { useParams } from "next/navigation"
 import { usePathname } from "next/navigation"
 import { ResultsSidebar } from "./components/results-sidebar"
+import { VersionProvider } from "./components/version-provider"
 import type { ResultsTab } from "./types"
 
 function getTabFromPathname(pathname: string): ResultsTab {
