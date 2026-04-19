@@ -21,10 +21,10 @@ export function VersionProvider({
   defaultVersionId,
 }: {
   children: React.ReactNode
-  defaultVersionId: string | null
+  defaultVersionId?: string | null
 }) {
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(
-    defaultVersionId
+    defaultVersionId ?? null
   )
 
   return (
