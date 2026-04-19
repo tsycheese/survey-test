@@ -140,13 +140,15 @@ export default function SurveysPage() {
                     编辑
                   </Button>
                 </Link>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleTogglePublish(survey)}
-                >
-                  {survey.published ? "取消发布" : "发布"}
-                </Button>
+                {survey.published && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleTogglePublish(survey)}
+                  >
+                    取消发布
+                  </Button>
+                )}
                 {survey.published && (
                   <Button
                     variant="outline"
