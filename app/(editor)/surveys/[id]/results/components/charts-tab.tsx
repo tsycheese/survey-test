@@ -22,6 +22,13 @@ import {
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import type { QuestionStat, QuestionType } from "../types"
 import { ChoiceChartView } from "./question-chart"
 
@@ -86,10 +93,12 @@ function TextAnswerList({
   answers,
   icon: Icon,
   emptyText,
+  title,
 }: {
   answers: { value: unknown }[]
   icon: typeof MessageSquare
   emptyText: string
+  title: string
 }) {
   const texts = answers.map((a) => String(a.value)).filter(Boolean)
   if (texts.length === 0)
@@ -104,9 +113,32 @@ function TextAnswerList({
     <div className="space-y-3">
       <div className="flex items-center justify-between text-sm">
         <span className="text-muted-foreground">共 {texts.length} 条回答</span>
-        <Button variant="ghost" size="sm">
-          查看全部
-        </Button>
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button variant="ghost" size="sm">
+              查看全部
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-h-[80vh] max-w-2xl overflow-hidden p-0">
+            <DialogHeader className="px-6 pt-6 pb-2">
+              <DialogTitle className="text-base">{title}</DialogTitle>
+              <p className="text-sm text-muted-foreground">
+                共 {texts.length} 条回答
+              </p>
+            </DialogHeader>
+            <div className="max-h-[60vh] space-y-2 overflow-y-auto px-6 pb-6">
+              {texts.map((t, i) => (
+                <div
+                  key={i}
+                  className="rounded-lg border bg-muted/50 px-4 py-3 text-sm"
+                >
+                  <span className="text-muted-foreground">#{i + 1}</span>{" "}
+                  <span>{t}</span>
+                </div>
+              ))}
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
       <div className="max-h-48 space-y-2 overflow-y-auto">
         {texts.slice(0, 5).map((t, i) => (
@@ -470,6 +502,7 @@ function QuestionContent({
                 : MessageSquare
         }
         emptyText="暂无回答"
+        title={question.title}
       />
     )
   }
@@ -487,7 +520,12 @@ function QuestionContent({
   // 日期时间
   if (type === "DATETIME" || type === "BIRTHDAY") {
     return (
-      <TextAnswerList answers={answers} icon={Calendar} emptyText="暂无回答" />
+      <TextAnswerList
+        answers={answers}
+        icon={Calendar}
+        emptyText="暂无回答"
+        title={question.title}
+      />
     )
   }
 
