@@ -6,7 +6,13 @@ import { z } from "zod"
 const submitSchema = z.object({
   answers: z.record(
     z.string(),
-    z.union([z.string(), z.array(z.string()), z.number(), z.null()])
+    z.union([
+      z.string(),
+      z.array(z.string()),
+      z.number(),
+      z.null(),
+      z.record(z.string(), z.string()), // MATRIX_SINGLE
+    ])
   ),
   metadata: z
     .object({
