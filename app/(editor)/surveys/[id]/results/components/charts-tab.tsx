@@ -612,7 +612,7 @@ export function ChartsTab({
   return (
     <div className="space-y-4">
       <h2 className="text-lg font-semibold">题目统计详情</h2>
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="grid gap-4">
         {questions.map((q, index) => (
           <QuestionCard key={q.id} question={q} index={index} total={total} />
         ))}
