@@ -12,6 +12,9 @@ import {
   Tablet,
   Smartphone,
   History,
+  Share2,
+  Copy,
+  ExternalLink,
 } from "lucide-react"
 import { useSurveyCollaboration } from "@/hooks/use-survey-collaboration"
 import { OnlineMembers } from "@/components/collaboration/online-members"
@@ -94,6 +97,7 @@ export default function EditSurveyPage() {
   const [insertIndex, setInsertIndex] = useState<number | null>(null)
   const [isPreviewDialogOpen, setIsPreviewDialogOpen] = useState(false)
   const [isVersionDialogOpen, setIsVersionDialogOpen] = useState(false)
+  const [isShareDialogOpen, setIsShareDialogOpen] = useState(false)
   const [permission, setPermission] = useState<{
     canAccess: boolean
     canEdit: boolean
@@ -728,6 +732,16 @@ export default function EditSurveyPage() {
             <Play className="mr-1.5 h-3.5 w-3.5" />
             试答
           </Button>
+          {survey.published && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsShareDialogOpen(true)}
+            >
+              <Share2 className="mr-1.5 h-3.5 w-3.5" />
+              分享
+            </Button>
+          )}
           {!permission.canEdit && (
             <span className="rounded-md bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
               只读模式
@@ -1079,6 +1093,13 @@ export default function EditSurveyPage() {
         shareToken={survey.id} // 使用 survey id 作为预览 token
       />
 
+      {/* 分享弹窗 */}
+      <ShareDialog
+        open={isShareDialogOpen}
+        onOpenChange={setIsShareDialogOpen}
+        surveyId={id}
+      />
+
       {/* 版本管理弹窗 */}
       <VersionDialog
         surveyId={id}
@@ -1181,6 +1202,99 @@ function PreviewDialog({
             </button>
           ))}
         </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function ShareDialog({
+  open,
+  onOpenChange,
+  surveyId,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  surveyId: string
+}) {
+  const [survey, setSurvey] = useState<{
+    shareToken: string
+    published: boolean
+  } | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!open) return
+    setLoading(true)
+    fetch(`/api/surveys/${surveyId}`)
+      .then((r) => r.json())
+      .then((data) => {
+        setSurvey({
+          shareToken: data.shareToken,
+          published: data.published,
+        })
+      })
+      .catch(() => toast.error("加载失败"))
+      .finally(() => setLoading(false))
+  }, [open, surveyId])
+
+  const shareUrl = survey?.shareToken
+    ? `${window.location.origin}/s/${survey.shareToken}`
+    : ""
+
+  function copyLink() {
+    navigator.clipboard.writeText(shareUrl)
+    toast.success("链接已复制")
+  }
+
+  function openLink() {
+    window.open(shareUrl, "_blank")
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Share2 className="h-5 w-5" />
+            分享问卷
+          </DialogTitle>
+          <DialogDescription>复制下方链接分享给答题者</DialogDescription>
+        </DialogHeader>
+        {loading ? (
+          <div className="py-8 text-center text-sm text-muted-foreground">
+            加载中...
+          </div>
+        ) : !survey?.published ? (
+          <div className="py-4 text-center text-sm text-muted-foreground">
+            问卷未发布，请先发布后再分享
+          </div>
+        ) : (
+          <div className="space-y-4 py-4">
+            <div className="flex items-center gap-2 rounded-lg border bg-muted/50 px-3 py-2">
+              <span className="flex-1 truncate text-sm">{shareUrl}</span>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={copyLink}
+                title="复制链接"
+              >
+                <Copy className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={openLink}
+                title="打开链接"
+              >
+                <ExternalLink className="h-4 w-4" />
+              </Button>
+            </div>
+            <Button className="w-full" onClick={copyLink}>
+              <Copy className="mr-2 h-4 w-4" />
+              复制分享链接
+            </Button>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   )
