@@ -733,14 +733,37 @@ export default function EditSurveyPage() {
             试答
           </Button>
           {survey.published && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsShareDialogOpen(true)}
-            >
-              <Share2 className="mr-1.5 h-3.5 w-3.5" />
-              分享
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsShareDialogOpen(true)}
+              >
+                <Share2 className="mr-1.5 h-3.5 w-3.5" />
+                分享
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-red-600 hover:text-red-700"
+                onClick={async () => {
+                  if (!confirm("确定要取消发布吗？取消后答题者将无法访问问卷"))
+                    return
+                  const res = await fetch(`/api/surveys/${id}/publish`, {
+                    method: "POST",
+                  })
+                  if (res.ok) {
+                    const updated = await res.json()
+                    setSurvey({ ...survey, published: updated.published })
+                    toast.success("已取消发布")
+                  } else {
+                    toast.error("操作失败")
+                  }
+                }}
+              >
+                取消发布
+              </Button>
+            </>
           )}
           {!permission.canEdit && (
             <span className="rounded-md bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
