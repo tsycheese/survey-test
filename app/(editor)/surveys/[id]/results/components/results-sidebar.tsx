@@ -10,8 +10,6 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { ResultsTab } from "../types"
-import { AISummaryDialog } from "./ai-summary-dialog"
-import { useResultsDataContext } from "./results-data-provider"
 
 const TABS: { id: ResultsTab; label: string; icon: typeof LayoutDashboard }[] =
   [
@@ -19,12 +17,12 @@ const TABS: { id: ResultsTab; label: string; icon: typeof LayoutDashboard }[] =
     { id: "details", label: "数据详情", icon: Table2 },
     { id: "charts", label: "统计图表", icon: BarChart3 },
     { id: "cross", label: "交叉分析", icon: GitCompare },
+    { id: "summary", label: "AI 总结", icon: Sparkles },
   ]
 
 export function ResultsSidebar({ activeTab }: { activeTab: ResultsTab }) {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
-  const { data } = useResultsDataContext()
 
   return (
     <aside className="fixed top-0 left-0 h-svh w-56 border-r bg-background">
@@ -51,9 +49,6 @@ export function ResultsSidebar({ activeTab }: { activeTab: ResultsTab }) {
             </button>
           )
         })}
-        <div className="mt-2 border-t pt-2">
-          <AISummaryDialog data={data} />
-        </div>
       </nav>
     </aside>
   )

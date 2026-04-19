@@ -1,14 +1,14 @@
 "use client"
 
-import { usePathname, useParams } from "next/navigation"
+import { usePathname } from "next/navigation"
 import { ResultsSidebar } from "./components/results-sidebar"
-import { ResultsDataProvider } from "./components/results-data-provider"
 import type { ResultsTab } from "./types"
 
 function getTabFromPathname(pathname: string): ResultsTab {
   if (pathname.endsWith("/details")) return "details"
   if (pathname.endsWith("/charts")) return "charts"
   if (pathname.endsWith("/cross")) return "cross"
+  if (pathname.endsWith("/summary")) return "summary"
   return "overview"
 }
 
@@ -19,14 +19,11 @@ export default function ResultsLayout({
 }) {
   const pathname = usePathname()
   const activeTab = getTabFromPathname(pathname || "")
-  const { id } = useParams<{ id: string }>()
 
   return (
-    <ResultsDataProvider surveyId={id}>
-      <div className="flex min-h-svh">
-        <ResultsSidebar activeTab={activeTab} />
-        <main className="ml-56 flex-1 bg-muted/30">{children}</main>
-      </div>
-    </ResultsDataProvider>
+    <div className="flex min-h-svh">
+      <ResultsSidebar activeTab={activeTab} />
+      <main className="ml-56 flex-1 bg-muted/30">{children}</main>
+    </div>
   )
 }

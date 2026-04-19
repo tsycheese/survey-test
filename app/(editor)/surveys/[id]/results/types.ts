@@ -91,4 +91,4 @@ export type ResultsData = {
   responses: ResponseItem[]
 }
 
-export type ResultsTab = "overview" | "details" | "charts" | "cross"
+export type ResultsTab = "overview" | "details" | "charts" | "cross" | "summary"
