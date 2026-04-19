@@ -1182,7 +1182,7 @@ function PreviewDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>选择试答设备</DialogTitle>
           <DialogDescription>选择要模拟的设备类型开始试答</DialogDescription>
