@@ -52,20 +52,16 @@ export function ResultsHeader({
           <div className="flex items-center gap-2">
             <History className="h-4 w-4 text-muted-foreground" />
             <Select
-              value={currentVersionId || "all"}
-              onValueChange={(value) =>
-                onVersionChange?.(value === "all" ? null : value)
-              }
+              value={currentVersionId || ""}
+              onValueChange={(value) => onVersionChange?.(value || null)}
             >
               <SelectTrigger className="h-8 w-[180px] text-xs">
-                <SelectValue />
+                <SelectValue placeholder="选择版本" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">全部版本</SelectItem>
                 {versions.map((v) => (
                   <SelectItem key={v.id} value={v.id}>
                     版本 {v.version}
-                    {v.id === currentVersionId ? " (当前)" : ""}
                   </SelectItem>
                 ))}
               </SelectContent>
