@@ -77,6 +77,18 @@ function QuestionCard({
   }
   const TypeIcon = typeConfig.icon
 
+  // 计算填写率和有效回答数
+  const answeredCount = question.answers.filter((a) => {
+    const v = a.value
+    if (v === undefined || v === null || v === "") return false
+    if (Array.isArray(v) && v.length === 0) return false
+    if (typeof v === "object" && v !== null && Object.keys(v).length === 0)
+      return false
+    return true
+  }).length
+  const fillRate =
+    total > 0 ? ((answeredCount / total) * 100).toFixed(1) : "0.0"
+
   return (
     <Card className="overflow-hidden">
       <div className="border-b bg-muted/50 p-6">
@@ -95,7 +107,7 @@ function QuestionCard({
               </span>
               <span className="text-xs text-muted-foreground">·</span>
               <span className="text-xs text-muted-foreground">
-                {question.answers.length} 个回答
+                填写率 {fillRate}% / 填写 {answeredCount}
               </span>
             </div>
           </div>
