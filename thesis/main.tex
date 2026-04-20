@@ -69,9 +69,9 @@
 
 % ---------- 图表标题格式 ----------
 \captionsetup{font=small, labelsep=space}
-\renewcommand{\thefigure}{\arabic{chapter}-\arabic{figure}}
-\renewcommand{\thetable}{\arabic{chapter}-\arabic{table}}
-\renewcommand{\theequation}{\arabic{chapter}-\arabic{equation}}
+\renewcommand{\thefigure}{\arabic{section}-\arabic{figure}}
+\renewcommand{\thetable}{\arabic{section}-\arabic{table}}
+\renewcommand{\theequation}{\arabic{section}-\arabic{equation}}
 
 % ---------- 章节编号深度 ----------
 \setcounter{secnumdepth}{3}
@@ -80,7 +80,7 @@
 % ---------- 自定义命令 ----------
 \newcommand{\figref}[1]{图~\ref{#1}}
 \newcommand{\tabref}[1]{表~\ref{#1}}
-\newcommand{\eqref}[1]{式~(\ref{#1})}
+\newcommand{\eqreff}[1]{式~(\ref{#1})}
 
 % ---------- 封面信息 ----------
 \title{\textbf{基于 Next.js 的在线问卷系统\\设计与实现}}
