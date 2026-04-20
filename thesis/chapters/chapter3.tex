@@ -179,7 +179,7 @@ AI SDK & Vercel AI SDK & latest \\
 
 问卷是系统的核心实体，包含基本信息、发布状态和关联关系：
 
-\begin{lstlisting}[language=TypeScript, caption={Survey 模型定义}]
+\begin{minted}[linenos]{typescript}
 model Survey {
   id          String   @id @default(cuid())
   title       String
@@ -200,13 +200,14 @@ model Survey {
   logs         SurveyLog[]
   views        SurveyView[]
 }
-\end{lstlisting}
+\end{minted}
+\captionof{listing}{Survey 模型定义}
 
 \textbf{(2) Question（题目）}
 
 题目实体存储问卷中的各个问题：
 
-\begin{lstlisting}[language=TypeScript, caption={Question 模型定义}]
+\begin{minted}[linenos]{typescript}
 model Question {
   id       String @id @default(cuid())
   surveyId String
@@ -220,13 +221,14 @@ model Question {
   options Option[]
   answers Answer[]
 }
-\end{lstlisting}
+\end{minted}
+\captionof{listing}{Question 模型定义}
 
 \textbf{(3) Response（回答）与 Answer（答案）}
 
 Response 记录一次完整的问卷提交，Answer 记录每道题的具体答案：
 
-\begin{lstlisting}[language=TypeScript, caption={Response 与 Answer 模型}]
+\begin{minted}[linenos]{typescript}
 model Response {
   id        String   @id @default(cuid())
   surveyId  String
@@ -247,13 +249,14 @@ model Answer {
   response Response @relation(fields: [responseId], references: [id], onDelete: Cascade)
   question Question @relation(fields: [questionId], references: [id])
 }
-\end{lstlisting}
+\end{minted}
+\captionof{listing}{Response 与 Answer 模型}
 
 \textbf{(4) SurveyVersion（版本）}
 
 版本实体记录问卷每次发布时的内容快照：
 
-\begin{lstlisting}[language=TypeScript, caption={SurveyVersion 模型定义}]
+\begin{minted}[linenos]{typescript}
 model SurveyVersion {
   id        String   @id @default(cuid())
   surveyId  String
@@ -265,7 +268,8 @@ model SurveyVersion {
   survey    Survey     @relation(fields: [surveyId], references: [id], onDelete: Cascade)
   responses Response[]
 }
-\end{lstlisting}
+\end{minted}
+\captionof{listing}{SurveyVersion 模型定义}
 
 \subsubsection{索引设计}
 

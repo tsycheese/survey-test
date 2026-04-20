@@ -24,7 +24,7 @@
 \usepackage{float}             % 浮动体控制
 \usepackage{caption}           % 图表标题
 \usepackage{subcaption}        % 子图标题
-\usepackage{listings}          % 代码高亮
+\usepackage[section]{minted}   % 代码高亮（基于 pygments）
 \usepackage{hyperref}          % 超链接
 \usepackage{bookmark}          % PDF 书签
 \usepackage{fancyhdr}          % 页眉页脚
@@ -32,23 +32,17 @@
 \usepackage{tocloft}           % 目录格式
 
 % ---------- 代码高亮设置 ----------
-\lstset{
-  language=TypeScript,
-  basicstyle=\small\ttfamily,
-  keywordstyle=\color{blue}\bfseries,
-  commentstyle=\color{gray}\itshape,
-  stringstyle=\color{orange},
-  numbers=left,
-  numberstyle=\tiny\color{gray},
+\setminted{
+  fontsize=\small,
+  linenos=true,
   numbersep=8pt,
   frame=single,
   breaklines=true,
-  showstringspaces=false,
   tabsize=2,
-  captionpos=b,
   xleftmargin=2em,
-  framexleftmargin=1.5em
+  autogobble=true
 }
+\usemintedstyle{friendly}  % 配色方案
 
 % ---------- 超链接设置 ----------
 \hypersetup{
@@ -106,10 +100,15 @@
 \onehalfspacing  % 1.5倍行距
 
 \input{chapters/chapter1}
+\newpage
 \input{chapters/chapter2}
+\newpage
 \input{chapters/chapter3}
+\newpage
 \input{chapters/chapter4}
+\newpage
 \input{chapters/chapter5}
+\newpage
 \input{chapters/chapter6}
 
 % ---------- 参考文献 ----------
