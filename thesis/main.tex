@@ -74,6 +74,21 @@
 \setcounter{secnumdepth}{3}
 \setcounter{tocdepth}{3}
 
+% ---------- 章节标题格式（一级标题用中文数字） ----------
+\ctexset{
+  section = {
+    name = {第,章},
+    number = \chinese{section},
+    format = \heiti \zihao{-2} \centering
+  },
+  subsection = {
+    format = \heiti \zihao{-3} \raggedright
+  },
+  subsubsection = {
+    format = \heiti \zihao{4} \raggedright
+  }
+}
+
 % ---------- 自定义命令 ----------
 \newcommand{\figref}[1]{图~\ref{#1}}
 \newcommand{\tabref}[1]{表~\ref{#1}}
