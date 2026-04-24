@@ -13,8 +13,13 @@
 }
 
 % ---------- 英文字体（Times New Roman） ----------
-\usepackage{mathptmx}          % 兼容 pdfLaTeX
-\setmainfont{Times New Roman}  % XeLaTeX 下显式指定系统字体
+\usepackage{ifxetex}
+\ifxetex
+  \setmainfont{Times New Roman}
+  \setmonofont{Consolas}  % Windows 自带，支持 Unicode 制表符
+\else
+  \usepackage{mathptmx}
+\fi
 
 % ---------- 基础包 ----------
 \usepackage{graphicx}          % 图片插入
