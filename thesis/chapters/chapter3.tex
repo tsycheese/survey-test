@@ -179,6 +179,7 @@ AI SDK & Vercel AI SDK & latest \\
 
 问卷是系统的核心实体，包含基本信息、发布状态和关联关系：
 
+\begin{listing}[H]
 \begin{minted}[linenos]{typescript}
 model Survey {
   id          String   @id @default(cuid())
@@ -201,12 +202,14 @@ model Survey {
   views        SurveyView[]
 }
 \end{minted}
-\captionof{listing}{Survey 模型定义}
+\caption{Survey 模型定义}
+\end{listing}
 
 \textbf{(2) Question（题目）}
 
 题目实体存储问卷中的各个问题：
 
+\begin{listing}[H]
 \begin{minted}[linenos]{typescript}
 model Question {
   id       String @id @default(cuid())
@@ -222,12 +225,14 @@ model Question {
   answers Answer[]
 }
 \end{minted}
-\captionof{listing}{Question 模型定义}
+\caption{Question 模型定义}
+\end{listing}
 
 \textbf{(3) Response（回答）与 Answer（答案）}
 
 Response 记录一次完整的问卷提交，Answer 记录每道题的具体答案：
 
+\begin{listing}[H]
 \begin{minted}[linenos]{typescript}
 model Response {
   id        String   @id @default(cuid())
@@ -250,12 +255,14 @@ model Answer {
   question Question @relation(fields: [questionId], references: [id])
 }
 \end{minted}
-\captionof{listing}{Response 与 Answer 模型}
+\caption{Response 与 Answer 模型}
+\end{listing}
 
 \textbf{(4) SurveyVersion（版本）}
 
 版本实体记录问卷每次发布时的内容快照：
 
+\begin{listing}[H]
 \begin{minted}[linenos]{typescript}
 model SurveyVersion {
   id        String   @id @default(cuid())
@@ -269,7 +276,8 @@ model SurveyVersion {
   responses Response[]
 }
 \end{minted}
-\captionof{listing}{SurveyVersion 模型定义}
+\caption{SurveyVersion 模型定义}
+\end{listing}
 
 \subsubsection{索引设计}
 

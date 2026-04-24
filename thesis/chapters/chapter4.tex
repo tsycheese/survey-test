@@ -22,6 +22,7 @@
 
 编辑器使用 Zustand 管理全局状态。Store 的核心结构如下：
 
+\begin{listing}[H]
 \begin{minted}[linenos]{typescript}
 interface EditorState {
   // 问卷基本信息
@@ -47,10 +48,12 @@ interface EditorState {
   selectQuestion: (id: string | null) => void
 }
 \end{minted}
-\captionof{listing}{编辑器 Zustand Store 结构}
+\caption{编辑器 Zustand Store 结构}
+\end{listing}
 
 Zustand 的不可变更新模式确保了 React 组件能够正确响应状态变化。以题目更新为例：
 
+\begin{listing}[H]
 \begin{minted}[linenos]{typescript}
 updateQuestion: (id, data) => set((state) => ({
   questions: state.questions.map((q) =>
@@ -59,7 +62,8 @@ updateQuestion: (id, data) => set((state) => ({
   hasUnsavedChanges: true,
 })),
 \end{minted}
-\captionof{listing}{题目更新 Action 实现}
+\caption{题目更新 Action 实现}
+\end{listing}
 
 \subsubsection{题型系统}
 
@@ -74,6 +78,7 @@ updateQuestion: (id, data) => set((state) => ({
 
 题型通过注册中心统一管理：
 
+\begin{listing}[H]
 \begin{minted}[linenos]{typescript}
 const questionRegistry: Record<QuestionType, QuestionDef> = {
   SINGLE_CHOICE: {
@@ -89,12 +94,14 @@ const questionRegistry: Record<QuestionType, QuestionDef> = {
   // ... 其他题型
 }
 \end{minted}
-\captionof{listing}{题型注册中心}
+\caption{题型注册中心}
+\end{listing}
 
 \subsubsection{拖拽排序实现}
 
 题目排序采用 HTML5 Drag and Drop API 实现。拖拽过程中需要处理以下事件：
 
+\begin{listing}[H]
 \begin{minted}[linenos]{typescript}
 const handleDragStart = (e: DragEvent, index: number) => {
   e.dataTransfer?.setData('text/plain', String(index))
@@ -114,7 +121,8 @@ const handleDrop = (e: DragEvent, targetIndex: number) => {
   })
 }
 \end{minted}
-\captionof{listing}{拖拽排序核心逻辑}
+\caption{拖拽排序核心逻辑}
+\end{listing}
 
 \subsubsection{行内编辑高度跳变问题}
 
@@ -124,13 +132,15 @@ const handleDrop = (e: DragEvent, targetIndex: number) => {
 
 \textbf{解决方案}：将 \texttt{textarea} 显式设置为 \texttt{display: block}，彻底脱离行内布局的基线对齐规则。
 
+\begin{listing}[H]
 \begin{minted}[linenos]{css}
 textarea.block {
   display: block;
   width: 100%;
 }
 \end{minted}
-\captionof{listing}{高度跳变问题修复}
+\caption{高度跳变问题修复}
+\end{listing}
 
 \subsection{问卷发布与版本管理}
 
@@ -150,6 +160,7 @@ textarea.block {
 
 每次发布时，系统将问卷的完整状态序列化为 JSON 存储：
 
+\begin{listing}[H]
 \begin{minted}[linenos]{typescript}
 const version = await prisma.surveyVersion.create({
   data: {
@@ -173,12 +184,14 @@ await prisma.survey.update({
   data: { currentVersionId: version.id, published: true },
 })
 \end{minted}
-\captionof{listing}{版本快照创建}
+\caption{版本快照创建}
+\end{listing}
 
 \subsubsection{版本回滚}
 
 版本回滚将问卷内容恢复到指定版本的状态：
 
+\begin{listing}[H]
 \begin{minted}[linenos]{typescript}
 const rollbackVersion = async (surveyId: string, versionId: string) => {
   const version = await prisma.surveyVersion.findUnique({
@@ -205,7 +218,8 @@ const rollbackVersion = async (surveyId: string, versionId: string) => {
   })
 }
 \end{minted}
-\captionof{listing}{版本回滚实现}
+\caption{版本回滚实现}
+\end{listing}
 
 \subsubsection{已知问题与处理}
 
@@ -255,6 +269,7 @@ GENDER & 字符串（选项 ID） & \texttt{"male"} \\
 
 提交 API 使用 Zod 进行严格的类型校验。由于答案格式多样，Schema 需要支持多种类型：
 
+\begin{listing}[H]
 \begin{minted}[linenos]{typescript}
 const submitSchema = z.object({
   answers: z.record(z.string(), z.union([
@@ -266,7 +281,8 @@ const submitSchema = z.object({
   ])),
 })
 \end{minted}
-\captionof{listing}{提交 API Zod Schema}
+\caption{提交 API Zod Schema}
+\end{listing}
 
 \textbf{矩阵单选题的特殊处理}：矩阵单选题的答案是一个对象（\texttt{\{rowId: colId\}}），因此在 Zod Schema 中需要额外添加 \texttt{z.record(z.string(), z.string())} 类型支持。
 
@@ -300,6 +316,7 @@ const submitSchema = z.object({
 
 逐题统计根据题型选择不同的展示方式：
 
+\begin{listing}[H]
 \begin{minted}[linenos]{typescript}
 const QuestionStats = ({ question, responses }: Props) => {
   switch (question.type) {
@@ -318,7 +335,8 @@ const QuestionStats = ({ question, responses }: Props) => {
   }
 }
 \end{minted}
-\captionof{listing}{逐题统计组件}
+\caption{逐题统计组件}
+\end{listing}
 
 \subsubsection{GENDER 题型计数逻辑}
 
@@ -328,11 +346,13 @@ const QuestionStats = ({ question, responses }: Props) => {
 
 \textbf{修复}：在统计组件中增加类型判断：
 
+\begin{listing}[H]
 \begin{minted}[linenos]{typescript}
 const matchKey = type === 'GENDER' ? 'id' : 'label'
 const count = counts[opt[matchKey]] || 0
 \end{minted}
-\captionof{listing}{GENDER 计数修复}
+\caption{GENDER 计数修复}
+\end{listing}
 
 \subsection{AI 辅助模块}
 
@@ -344,6 +364,7 @@ AI 问卷生成采用「需求澄清 → 结构化生成」的两阶段流程：
 
 系统首先判断用户提供的信息是否足够生成问卷。如果信息不足，返回 1-3 个追问问题：
 
+\begin{listing}[H]
 \begin{minted}[linenos]{typescript}
 const clarifyResult = await generateObject({
   model: deepseek('deepseek-chat'),
@@ -356,12 +377,14 @@ if (!clarifyResult.object.isSufficient) {
   return { questions: clarifyResult.object.followUpQuestions }
 }
 \end{minted}
-\captionof{listing}{需求澄清流程}
+\caption{需求澄清流程}
+\end{listing}
 
 \textbf{阶段二：结构化生成}
 
 信息充足后，调用 \texttt{generateObject} 生成结构化的问卷数据：
 
+\begin{listing}[H]
 \begin{minted}[linenos]{typescript}
 const result = await generateObject({
   model: deepseek('deepseek-chat'),
@@ -373,12 +396,14 @@ const result = await generateObject({
   - 选项覆盖全面`,
 })
 \end{minted}
-\captionof{listing}{问卷生成实现}
+\caption{问卷生成实现}
+\end{listing}
 
 \subsubsection{AI 数据总结}
 
 AI 数据总结基于问卷回答数据生成分析报告：
 
+\begin{listing}[H]
 \begin{minted}[linenos]{typescript}
 // 1. 格式化数据为自然语言文本
 const formattedData = formatSurveyData(survey, responses)
@@ -393,12 +418,14 @@ const result = streamText({
 // 3. 返回流式响应
 return result.toDataStreamResponse()
 \end{minted}
-\captionof{listing}{AI 数据总结流程}
+\caption{AI 数据总结流程}
+\end{listing}
 
 \subsubsection{本地缓存策略}
 
 为避免重复调用 AI API，系统实现了本地缓存：
 
+\begin{listing}[H]
 \begin{minted}[linenos]{typescript}
 const useSummaryCache = (surveyId: string) => {
   const key = `ai-summary:${surveyId}`
@@ -421,7 +448,8 @@ const useSummaryCache = (surveyId: string) => {
   return { get, set }
 }
 \end{minted}
-\captionof{listing}{AI 总结缓存实现}
+\caption{AI 总结缓存实现}
+\end{listing}
 
 \textbf{当前状态}：AI 总结页面功能完整，但鉴于数据量较小时生成质量不稳定，已暂时从侧边栏隐藏入口，保留页面代码供后续优化。
 
@@ -442,6 +470,7 @@ const useSummaryCache = (surveyId: string) => {
 
 为防止多人同时编辑同一题目，系统实现了题目级的乐观锁定：
 
+\begin{listing}[H]
 \begin{minted}[linenos]{typescript}
 // 选中题目时发送锁定请求
 const lockQuestion = async (questionId: string) => {
@@ -466,7 +495,8 @@ const unlockQuestion = async (questionId: string) => {
   })
 }
 \end{minted}
-\captionof{listing}{题目锁定机制}
+\caption{题目锁定机制}
+\end{listing}
 
 \subsubsection{实时同步事件}
 
@@ -501,6 +531,7 @@ const unlockQuestion = async (questionId: string) => {
   \item \textbf{并发编辑冲突}：乐观锁定机制确保同一时刻只有一个用户编辑特定题目
 \end{itemize}
 
+\begin{listing}[H]
 \begin{minted}[linenos]{typescript}
 channel.bind('pusher:member_removed', (member) => {
   // 释放该成员锁定的所有题目
@@ -510,4 +541,5 @@ channel.bind('pusher:member_removed', (member) => {
   })
 })
 \end{minted}
-\captionof{listing}{成员离开自动解锁}
+\caption{成员离开自动解锁}
+\end{listing}

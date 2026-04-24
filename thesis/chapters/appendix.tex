@@ -3,6 +3,7 @@
 % ============================================
 \section{附录 A：核心数据模型定义}
 
+\begin{listing}[H]
 \begin{minted}[linenos]{typescript}
 // 用户认证模型
 model User {
@@ -102,7 +103,8 @@ model SurveyVersion {
   responses Response[]
 }
 \end{minted}
-\captionof{listing}{完整 Prisma Schema（核心部分）}
+\caption{完整 Prisma Schema（核心部分）}
+\end{listing}
 
 \section{附录 B：系统界面截图}
 
@@ -138,6 +140,7 @@ model SurveyVersion {
 
 \section{附录 C：项目结构}
 
+\begin{listing}[H]
 \begin{minted}[linenos]{bash}
 survey-test/
 ├── app/                    # Next.js App Router
@@ -165,4 +168,5 @@ survey-test/
 ├── thesis/                # 毕业论文
 └── package.json           # 项目配置
 \end{minted}
-\captionof{listing}{项目目录结构}
+\caption{项目目录结构}
+\end{listing}
