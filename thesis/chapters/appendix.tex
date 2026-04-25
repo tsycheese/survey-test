@@ -13,73 +13,139 @@ model User {
   emailVerified DateTime?
   image         String?
   password      String?
-  accounts      Account[]
-  sessions      Session[]
-  surveys       Survey[]
-  collaborators SurveyCollaborator[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts       Account[]
+  sessions       Session[]
+  authenticators Authenticator[]
+  surveys        Survey[]
+  collaborations SurveyCollaborator[]
+  surveyLogs     SurveyLog[]
 }
 
-// 问卷模型
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Authenticator {
+  credentialID         String  @unique
+  userId               String
+  providerAccountId    String
+  credentialPublicKey  String
+  counter              Int
+  credentialDeviceType String
+  credentialBackedUp   Boolean
+  transports           String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, credentialID])
+}
+
+// 问卷核心模型
 model Survey {
   id               String   @id @default(cuid())
   title            String
   description      String?
   published        Boolean  @default(false)
-  shareToken       String?  @unique
-  currentVersionId String?
+  shareToken       String   @unique @default(cuid())
+  settings         Json?
   userId           String
+  maxCollaborators Int      @default(10)
+  currentVersionId String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  user          User                 @relation(fields: [userId], references: [id])
+  user          User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   questions     Question[]
   responses     Response[]
-  versions      SurveyVersion[]
+  views         SurveyView[]
   collaborators SurveyCollaborator[]
   invites       SurveyInvite[]
   logs          SurveyLog[]
-  views         SurveyView[]
+  versions      SurveyVersion[]
+
+  @@index([currentVersionId])
 }
 
-// 题目模型
 model Question {
-  id       String @id @default(cuid())
-  surveyId String
-  type     String
-  title    String
-  required Boolean @default(false)
-  order    Int
-  config   Json?
+  id          String       @id @default(cuid())
+  surveyId    String
+  type        QuestionType
+  title       String
+  description String?
+  required    Boolean      @default(false)
+  order       Int
+  config      Json?
+  lockedBy    String?
+  lockedAt    DateTime?
 
   survey  Survey   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
-  options Option[]
   answers Answer[]
+
+  @@index([lockedBy])
 }
 
-// 选项模型
-model Option {
-  id         String @id @default(cuid())
-  questionId String
-  label      String
-  value      String?
-  order      Int
+model SurveyVersion {
+  id          String   @id @default(cuid())
+  surveyId    String
+  version     Int
+  title       String
+  description String?
+  questions   Json
+  publishedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
 
-  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  survey    Survey     @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  responses Response[]
+
+  @@unique([surveyId, version])
+  @@index([surveyId])
+  @@index([publishedAt])
 }
 
-// 回答模型
 model Response {
-  id         String   @id @default(cuid())
-  surveyId   String
-  versionId  String?
-  createdAt  DateTime @default(now())
+  id          String   @id @default(cuid())
+  surveyId    String
+  versionId   String
+  respondent  String?
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
 
-  survey  Survey       @relation(fields: [surveyId], references: [id], onDelete: Cascade)
-  version SurveyVersion? @relation(fields: [versionId], references: [id])
+  survey  Survey        @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  version SurveyVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
   answers Answer[]
+
+  @@index([versionId])
+  @@index([createdAt])
 }
 
-// 答案模型
 model Answer {
   id         String @id @default(cuid())
   responseId String
@@ -87,20 +153,75 @@ model Answer {
   value      Json
 
   response Response @relation(fields: [responseId], references: [id], onDelete: Cascade)
-  question Question @relation(fields: [questionId], references: [id])
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
 }
 
-// 版本模型
-model SurveyVersion {
+// 协作与日志模型
+model SurveyCollaborator {
+  id             String @id @default(cuid())
+  surveyId       String
+  userId         String
+  canEdit        Boolean @default(false)
+  canViewResults Boolean @default(false)
+  invitedBy      String
+  createdAt      DateTime @default(now())
+
+  survey Survey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([surveyId, userId])
+  @@index([surveyId])
+  @@index([userId])
+}
+
+model SurveyInvite {
+  id          String    @id @default(cuid())
+  surveyId    String
+  code        String    @unique
+  maxUses     Int?
+  usedCount   Int       @default(0)
+  expiresAt   DateTime?
+  permissions Json?
+  createdBy   String
+  createdAt   DateTime  @default(now())
+
+  survey Survey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+
+  @@index([surveyId])
+  @@index([code])
+}
+
+model SurveyLog {
   id        String   @id @default(cuid())
   surveyId  String
-  version   Int
-  title     String
-  questions Json
+  userId    String
+  action    String
+  details   Json?
   createdAt DateTime @default(now())
 
-  survey    Survey     @relation(fields: [surveyId], references: [id], onDelete: Cascade)
-  responses Response[]
+  survey Survey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([surveyId])
+  @@index([createdAt])
+}
+
+model SurveyView {
+  id         String   @id @default(cuid())
+  surveyId   String
+  viewedAt   DateTime @default(now())
+  ip         String?
+  deviceType String?
+  os         String?
+  browser    String?
+  country    String?
+  province   String?
+  city       String?
+
+  survey Survey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+
+  @@index([surveyId])
+  @@index([viewedAt])
 }
 \end{minted}
 \caption{完整 Prisma Schema（核心部分）}
