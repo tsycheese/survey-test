@@ -30,6 +30,7 @@ import {
   DragOverEvent,
   pointerWithin,
   useDraggable,
+  useDroppable,
 } from "@dnd-kit/core"
 import {
   SortableContext,
@@ -931,17 +932,7 @@ export default function EditSurveyPage() {
                 >
                   <div className="divide-y divide-dashed divide-border">
                     {survey.questions.length === 0 ? (
-                      <div
-                        id="empty-canvas-dropzone"
-                        className={cn(
-                          "flex h-40 items-center justify-center text-sm text-muted-foreground transition-colors",
-                          draggingType && "bg-muted/50"
-                        )}
-                      >
-                        {draggingType
-                          ? "松开鼠标添加题目"
-                          : "点击左侧题型添加第一道题"}
-                      </div>
+                      <EmptyCanvasDropzone draggingType={draggingType} />
                     ) : (
                       survey.questions.map((q, idx) => {
                         // 乐观锁定：如果当前题目是乐观锁定的，使用乐观锁定状态
@@ -1583,6 +1574,30 @@ function SortableQuestionCard({
         {/* 被锁定时显示提示 */}
         <QuestionLockOverlay lockInfo={lockInfo} isLockedByMe={isLockedByMe} />
       </div>
+    </div>
+  )
+}
+
+// 空画布拖拽放置区域（必须在 DndContext 子组件中调用 useDroppable）
+function EmptyCanvasDropzone({
+  draggingType,
+}: {
+  draggingType: QuestionType | null
+}) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: "empty-canvas-dropzone",
+  })
+
+  return (
+    <div
+      ref={setNodeRef}
+      id="empty-canvas-dropzone"
+      className={cn(
+        "flex h-40 items-center justify-center text-sm text-muted-foreground transition-colors",
+        (draggingType || isOver) && "bg-muted/50"
+      )}
+    >
+      {draggingType ? "松开鼠标添加题目" : "点击左侧题型添加第一道题"}
     </div>
   )
 }
