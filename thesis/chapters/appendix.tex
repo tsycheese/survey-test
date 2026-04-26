@@ -3,9 +3,11 @@
 % ============================================
 \section{附录 A：核心数据模型定义}
 
+\clearpage
+\subsection{用户认证模型}
+
 \begin{listing}[H]
 \begin{minted}[linenos]{typescript}
-// 用户认证模型
 model User {
   id            String    @id @default(cuid())
   name          String?
@@ -39,16 +41,19 @@ model Account {
   session_state     String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
   @@unique([provider, providerAccountId])
 }
+\end{minted}
+\caption{User 与 Account 模型}
+\end{listing}
 
+\begin{listing}[H]
+\begin{minted}[linenos]{typescript}
 model Session {
   id           String   @id @default(cuid())
   sessionToken String   @unique
   userId       String
   expires      DateTime
-
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
@@ -61,13 +66,17 @@ model Authenticator {
   credentialDeviceType String
   credentialBackedUp   Boolean
   transports           String?
-
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
   @@unique([userId, credentialID])
 }
+\end{minted}
+\caption{Session 与 Authenticator 模型}
+\end{listing}
 
-// 问卷核心模型
+\subsection{问卷核心模型}
+
+\begin{listing}[H]
+\begin{minted}[linenos]{typescript}
 model Survey {
   id               String   @id @default(cuid())
   title            String
@@ -89,7 +98,6 @@ model Survey {
   invites       SurveyInvite[]
   logs          SurveyLog[]
   versions      SurveyVersion[]
-
   @@index([currentVersionId])
 }
 
@@ -104,13 +112,16 @@ model Question {
   config      Json?
   lockedBy    String?
   lockedAt    DateTime?
-
   survey  Survey   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
   answers Answer[]
-
   @@index([lockedBy])
 }
+\end{minted}
+\caption{问卷与题目模型}
+\end{listing}
 
+\begin{listing}[H]
+\begin{minted}[linenos]{typescript}
 model SurveyVersion {
   id          String   @id @default(cuid())
   surveyId    String
@@ -120,10 +131,8 @@ model SurveyVersion {
   questions   Json
   publishedAt DateTime @default(now())
   createdAt   DateTime @default(now())
-
   survey    Survey     @relation(fields: [surveyId], references: [id], onDelete: Cascade)
   responses Response[]
-
   @@unique([surveyId, version])
   @@index([surveyId])
   @@index([publishedAt])
@@ -137,11 +146,9 @@ model Response {
   startedAt   DateTime?
   completedAt DateTime?
   createdAt   DateTime @default(now())
-
   survey  Survey        @relation(fields: [surveyId], references: [id], onDelete: Cascade)
   version SurveyVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
   answers Answer[]
-
   @@index([versionId])
   @@index([createdAt])
 }
@@ -151,12 +158,18 @@ model Answer {
   responseId String
   questionId String
   value      Json
-
   response Response @relation(fields: [responseId], references: [id], onDelete: Cascade)
   question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
 }
+\end{minted}
+\caption{版本与回答模型}
+\end{listing}
 
-// 协作与日志模型
+\clearpage
+\subsection{协作与日志模型}
+
+\begin{listing}[H]
+\begin{minted}[linenos]{typescript}
 model SurveyCollaborator {
   id             String @id @default(cuid())
   surveyId       String
@@ -165,10 +178,8 @@ model SurveyCollaborator {
   canViewResults Boolean @default(false)
   invitedBy      String
   createdAt      DateTime @default(now())
-
   survey Survey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
   @@unique([surveyId, userId])
   @@index([surveyId])
   @@index([userId])
@@ -184,13 +195,16 @@ model SurveyInvite {
   permissions Json?
   createdBy   String
   createdAt   DateTime  @default(now())
-
   survey Survey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
-
   @@index([surveyId])
   @@index([code])
 }
+\end{minted}
+\caption{协作者与邀请码模型}
+\end{listing}
 
+\begin{listing}[H]
+\begin{minted}[linenos]{typescript}
 model SurveyLog {
   id        String   @id @default(cuid())
   surveyId  String
@@ -198,10 +212,8 @@ model SurveyLog {
   action    String
   details   Json?
   createdAt DateTime @default(now())
-
   survey Survey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
   @@index([surveyId])
   @@index([createdAt])
 }
@@ -217,14 +229,12 @@ model SurveyView {
   country    String?
   province   String?
   city       String?
-
   survey Survey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
-
   @@index([surveyId])
   @@index([viewedAt])
 }
 \end{minted}
-\caption{完整 Prisma Schema（核心部分）}
+\caption{操作日志与浏览记录模型}
 \end{listing}
 
 \section{附录 B：系统界面截图}
