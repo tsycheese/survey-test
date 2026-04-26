@@ -71,6 +71,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
+  DialogFooter,
 } from "@/components/ui/dialog"
 
 export default function EditSurveyPage() {
@@ -1331,6 +1332,7 @@ function QuestionEditor({
 }) {
   const def = getQuestionDef(question.type)
   const hasChangesRef = useRef(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   function handleUpdate(updated: Question) {
     hasChangesRef.current = true
@@ -1354,11 +1356,39 @@ function QuestionEditor({
           variant="ghost"
           size="icon"
           className="h-7 w-7 text-destructive hover:text-destructive"
-          onClick={onDelete}
+          onClick={() => setShowDeleteConfirm(true)}
         >
           <Trash2 className="h-4 w-4" />
         </Button>
       </div>
+
+      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>确认删除</DialogTitle>
+            <DialogDescription>
+              确定要删除这道题吗？删除后无法恢复。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowDeleteConfirm(false)}
+            >
+              取消
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                setShowDeleteConfirm(false)
+                onDelete()
+              }}
+            >
+              确认删除
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="flex-1 space-y-5 overflow-y-auto p-4">
         {/* 题目类型 */}
