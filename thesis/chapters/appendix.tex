@@ -3,10 +3,8 @@
 % ============================================
 \section{附录 A：核心数据模型定义}
 
-\clearpage
 \subsection{用户认证模型}
 
-\begin{listing}[H]
 \begin{minted}[linenos]{typescript}
 model User {
   id            String    @id @default(cuid())
@@ -44,10 +42,8 @@ model Account {
   @@unique([provider, providerAccountId])
 }
 \end{minted}
-\caption{User 与 Account 模型}
-\end{listing}
+\captionof{listing}{User 与 Account 模型}
 
-\begin{listing}[H]
 \begin{minted}[linenos]{typescript}
 model Session {
   id           String   @id @default(cuid())
@@ -70,12 +66,10 @@ model Authenticator {
   @@unique([userId, credentialID])
 }
 \end{minted}
-\caption{Session 与 Authenticator 模型}
-\end{listing}
+\captionof{listing}{Session 与 Authenticator 模型}
 
 \subsection{问卷核心模型}
 
-\begin{listing}[H]
 \begin{minted}[linenos]{typescript}
 model Survey {
   id               String   @id @default(cuid())
@@ -117,10 +111,8 @@ model Question {
   @@index([lockedBy])
 }
 \end{minted}
-\caption{问卷与题目模型}
-\end{listing}
+\captionof{listing}{问卷与题目模型}
 
-\begin{listing}[H]
 \begin{minted}[linenos]{typescript}
 model SurveyVersion {
   id          String   @id @default(cuid())
@@ -162,13 +154,11 @@ model Answer {
   question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
 }
 \end{minted}
-\caption{版本与回答模型}
-\end{listing}
+\captionof{listing}{版本与回答模型}
 
 \clearpage
 \subsection{协作与日志模型}
 
-\begin{listing}[H]
 \begin{minted}[linenos]{typescript}
 model SurveyCollaborator {
   id             String @id @default(cuid())
@@ -200,10 +190,8 @@ model SurveyInvite {
   @@index([code])
 }
 \end{minted}
-\caption{协作者与邀请码模型}
-\end{listing}
+\captionof{listing}{协作者与邀请码模型}
 
-\begin{listing}[H]
 \begin{minted}[linenos]{typescript}
 model SurveyLog {
   id        String   @id @default(cuid())
@@ -234,8 +222,7 @@ model SurveyView {
   @@index([viewedAt])
 }
 \end{minted}
-\caption{操作日志与浏览记录模型}
-\end{listing}
+\captionof{listing}{操作日志与浏览记录模型}
 
 \section{附录 B：系统界面截图}
 
@@ -271,7 +258,6 @@ model SurveyView {
 
 \section{附录 C：项目结构}
 
-\begin{listing}[H]
 \begin{minted}[linenos]{bash}
 survey-test/
 ├── app/                    # Next.js App Router
@@ -299,5 +285,4 @@ survey-test/
 ├── thesis/                # 毕业论文
 └── package.json           # 项目配置
 \end{minted}
-\caption{项目目录结构}
-\end{listing}
+\captionof{listing}{项目目录结构}
