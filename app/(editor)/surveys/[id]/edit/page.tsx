@@ -117,9 +117,9 @@ export default function EditSurveyPage() {
     members,
     lockedQuestions,
     isConnected,
-    lockQuestion,
     unlockQuestion,
     onEvent,
+    setLockedQuestions,
   } = useSurveyCollaboration(
     permission.canAccess ? id : null,
     permission.userId
@@ -424,6 +424,24 @@ export default function EditSurveyPage() {
               })
             ) as Question[],
           })
+
+          // 同步数据库中的锁定状态到前端（防止 Pusher 事件丢失导致状态不一致）
+          const initialLocked = new Map<string, LockInfo>()
+          for (const q of surveyData.questions ?? []) {
+            if (q.lockedBy && q.lockedBy !== userId) {
+              initialLocked.set(q.id as string, {
+                questionId: q.id as string,
+                userId: q.lockedBy as string,
+                userName: null,
+                lockedAt: q.lockedAt
+                  ? new Date(q.lockedAt as string).toISOString()
+                  : new Date().toISOString(),
+              })
+            }
+          }
+          if (initialLocked.size > 0) {
+            setLockedQuestions(initialLocked)
+          }
         }
       } catch {
         setPermission({
@@ -436,7 +454,7 @@ export default function EditSurveyPage() {
     }
 
     checkPermission()
-  }, [id, setSurvey])
+  }, [id, setSurvey, setLockedQuestions])
 
   async function handleSaveTitleDesc(title: string, description: string) {
     const res = await fetch(`/api/surveys/${id}`, {
@@ -635,9 +653,35 @@ export default function EditSurveyPage() {
       // 尝试锁定新选中的题目
       const lockInfo = lockedQuestions.get(questionId)
       if (!lockInfo || lockInfo.userId === permission.userId) {
-        const success = await lockQuestion(questionId)
-        if (!success && lockInfo) {
-          toast.warning(`该题目正在被 ${lockInfo.userName || "其他用户"} 编辑`)
+        const response = await fetch("/api/surveys/collaboration/lock", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ surveyId: id, questionId }),
+        })
+
+        if (!response.ok) {
+          // 回滚乐观锁定，避免用户看到自己"正在编辑"但实际上服务器拒绝了
+          setOptimisticLockedId((prev) => (prev === questionId ? null : prev))
+
+          if (response.status === 409) {
+            const data = await response.json().catch(() => ({}))
+            // 将服务器返回的远程锁定信息更新到本地状态
+            if (data.lockedByUserId) {
+              setLockedQuestions((prev) => {
+                const next = new Map(prev)
+                next.set(questionId, {
+                  questionId,
+                  userId: data.lockedByUserId,
+                  userName: data.lockedBy || "其他用户",
+                  lockedAt: data.lockedAt || new Date().toISOString(),
+                })
+                return next
+              })
+            }
+            toast.warning(`该题目正在被 ${data.lockedBy || "其他用户"} 编辑`)
+          } else {
+            toast.error("锁定题目失败，请刷新页面重试")
+          }
         }
       }
     }

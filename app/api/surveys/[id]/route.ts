@@ -30,7 +30,20 @@ export async function GET(
   const survey = await prisma.survey.findUnique({
     where: { id },
     include: {
-      questions: { orderBy: { order: "asc" } },
+      questions: {
+        orderBy: { order: "asc" },
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          type: true,
+          order: true,
+          required: true,
+          config: true,
+          lockedBy: true,
+          lockedAt: true,
+        },
+      },
       _count: { select: { responses: true } },
       collaborators: {
         where: { userId },

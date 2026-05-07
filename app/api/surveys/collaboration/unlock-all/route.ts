@@ -39,12 +39,15 @@ export async function POST(request: Request) {
     }
 
     const isOwner = survey.userId === session.user.id
-    const targetUserId = userId || session.user.id
+    const isCollaborator = survey.collaborators.some(
+      (c: { canEdit: boolean }) => c.canEdit
+    )
 
-    // 只有所有者可以解锁其他用户的题目
-    if (targetUserId !== session.user.id && !isOwner) {
-      return NextResponse.json({ error: "没有权限" }, { status: 403 })
+    if (!isOwner && !isCollaborator) {
+      return NextResponse.json({ error: "没有编辑权限" }, { status: 403 })
     }
+
+    const targetUserId = userId || session.user.id
 
     // 解锁该用户所有锁定的题目
     await prisma.question.updateMany({

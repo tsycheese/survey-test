@@ -67,6 +67,7 @@ export async function POST(request: Request) {
         {
           error: "题目已被锁定",
           lockedBy: lockedByUser?.name || "其他用户",
+          lockedByUserId: question.lockedBy,
           lockedAt: question.lockedAt,
         },
         { status: 409 }

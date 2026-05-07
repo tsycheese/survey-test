@@ -46,6 +46,9 @@ export type CollaborationActions = {
   unlockQuestion: (questionId: string) => Promise<boolean>
   unlockAllQuestions: (userId?: string) => Promise<boolean>
   onEvent: (event: string, callback: (data: unknown) => void) => () => void
+  setLockedQuestions: React.Dispatch<
+    React.SetStateAction<Map<string, LockInfo>>
+  >
 }
 
 export function useSurveyCollaboration(
@@ -312,5 +315,6 @@ export function useSurveyCollaboration(
     unlockQuestion,
     unlockAllQuestions,
     onEvent,
+    setLockedQuestions,
   }
 }
