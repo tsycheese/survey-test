@@ -1620,14 +1620,31 @@ function SortableQuestionCard({
         className="relative flex-1 px-12 py-2 text-left"
       >
         {isLockedByOther ? (
-          // 只读模式：使用 Response 组件（仅展示，不能编辑）
-          <def.Response
-            question={question as never}
-            order={idx + 1}
-            showNumber={survey?.settings?.showQuestionNumber ?? true}
-            value={undefined}
-            onChange={() => {}}
-          />
+          // 被他人锁定：保持 QuestionCard 视觉一致，用遮罩层阻止交互
+          <div className="relative">
+            <div className="opacity-70">
+              <def.QuestionCard
+                question={question as never}
+                selected={false}
+                order={idx + 1}
+                showNumber={survey?.settings?.showQuestionNumber ?? true}
+                readOnly={true}
+                onUpdate={() => {}}
+                onTitleChange={() => {}}
+                onTitleBlur={() => {}}
+                onDescriptionChange={() => {}}
+                onDescriptionBlur={() => {}}
+                onOptionChange={() => {}}
+                onFocusQuestion={() => {}}
+              />
+            </div>
+            {/* 遮罩层阻止所有鼠标/触摸交互，并阻止事件冒泡到外层 onClick */}
+            <div
+              className="absolute inset-0 z-10 cursor-not-allowed"
+              onClick={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+            />
+          </div>
         ) : (
           // 编辑模式
           <def.QuestionCard
