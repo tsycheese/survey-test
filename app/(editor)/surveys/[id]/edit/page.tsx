@@ -112,6 +112,10 @@ export default function EditSurveyPage() {
     null
   )
 
+  // 用于串行化 lock/unlock 操作，防止快速点击时并发请求导致多题同时锁定
+  const previousSelectedRef = useRef<string | null>(null)
+  const lockQueueRef = useRef<Promise<void>>(Promise.resolve())
+
   // 协作功能（Presence Channel 自动处理加入/离开）
   const {
     members,
@@ -634,60 +638,63 @@ export default function EditSurveyPage() {
 
   // 选中题目时尝试锁定
   const handleSelectQuestionWithLock = (questionId: string) => {
+    // 重复点击同一题，不做任何操作
+    if (previousSelectedRef.current === questionId) return
+
     // 先立即更新本地状态，让UI立即响应
     handleSelectQuestion(questionId)
 
     // 乐观更新：立即设置本地锁定状态，显示"我正在编辑"
     setOptimisticLockedId(questionId)
 
-    // 异步执行锁定操作（不await，让它们在后台执行）
-    const doLock = async () => {
-      // 先解锁之前选中的题目
-      if (selectedId && selectedId !== questionId) {
-        const prevLock = lockedQuestions.get(selectedId)
-        if (prevLock?.userId === permission.userId) {
-          await unlockQuestion(selectedId)
+    const previousId = previousSelectedRef.current
+    previousSelectedRef.current = questionId
+
+    // 将 lock/unlock 操作加入队列，保证串行执行
+    // 避免快速点击时并发请求导致多题同时锁定
+    lockQueueRef.current = lockQueueRef.current
+      .then(async () => {
+        // 先解锁之前选中的题目
+        if (previousId) {
+          await unlockQuestion(previousId).catch(() => {})
         }
-      }
 
-      // 尝试锁定新选中的题目
-      const lockInfo = lockedQuestions.get(questionId)
-      if (!lockInfo || lockInfo.userId === permission.userId) {
-        const response = await fetch("/api/surveys/collaboration/lock", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ surveyId: id, questionId }),
-        })
+        // 尝试锁定新选中的题目
+        const lockInfo = lockedQuestions.get(questionId)
+        if (!lockInfo || lockInfo.userId === permission.userId) {
+          const response = await fetch("/api/surveys/collaboration/lock", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ surveyId: id, questionId }),
+          })
 
-        if (!response.ok) {
-          // 回滚乐观锁定，避免用户看到自己"正在编辑"但实际上服务器拒绝了
-          setOptimisticLockedId((prev) => (prev === questionId ? null : prev))
+          if (!response.ok) {
+            // 回滚乐观锁定，避免用户看到自己"正在编辑"但实际上服务器拒绝了
+            setOptimisticLockedId((prev) => (prev === questionId ? null : prev))
 
-          if (response.status === 409) {
-            const data = await response.json().catch(() => ({}))
-            // 将服务器返回的远程锁定信息更新到本地状态
-            if (data.lockedByUserId) {
-              setLockedQuestions((prev) => {
-                const next = new Map(prev)
-                next.set(questionId, {
-                  questionId,
-                  userId: data.lockedByUserId,
-                  userName: data.lockedBy || "其他用户",
-                  lockedAt: data.lockedAt || new Date().toISOString(),
+            if (response.status === 409) {
+              const data = await response.json().catch(() => ({}))
+              // 将服务器返回的远程锁定信息更新到本地状态
+              if (data.lockedByUserId) {
+                setLockedQuestions((prev) => {
+                  const next = new Map(prev)
+                  next.set(questionId, {
+                    questionId,
+                    userId: data.lockedByUserId,
+                    userName: data.lockedBy || "其他用户",
+                    lockedAt: data.lockedAt || new Date().toISOString(),
+                  })
+                  return next
                 })
-                return next
-              })
+              }
+              toast.warning(`该题目正在被 ${data.lockedBy || "其他用户"} 编辑`)
+            } else {
+              toast.error("锁定题目失败，请刷新页面重试")
             }
-            toast.warning(`该题目正在被 ${data.lockedBy || "其他用户"} 编辑`)
-          } else {
-            toast.error("锁定题目失败，请刷新页面重试")
           }
         }
-      }
-    }
-
-    // 启动异步操作，不阻塞UI
-    doLock()
+      })
+      .catch(() => {})
   }
 
   if (permission.isLoading) {
