@@ -203,12 +203,6 @@ export function LoginForm() {
                     />
                     <span>记住我</span>
                   </label>
-                  <Link
-                    href="/forgot-password"
-                    className="text-sm text-primary hover:underline"
-                  >
-                    忘记密码？
-                  </Link>
                 </div>
                 <Button type="submit" className="w-full" disabled={isPending}>
                   {isPending ? (
