@@ -38,3 +38,6 @@ next-env.d.ts
 
 # prisma generated
 prisma/generated
+
+# sisyphus workflow
+.sisyphus/
