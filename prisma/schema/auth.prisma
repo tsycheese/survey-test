@@ -65,3 +65,14 @@ model Authenticator {
 
   @@unique([userId, credentialID])
 }
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  email     String
+  token     String   @unique
+  expires   DateTime
+  createdAt DateTime @default(now())
+
+  @@index([email])
+  @@index([token])
+}
