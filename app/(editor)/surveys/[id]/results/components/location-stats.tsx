@@ -297,35 +297,42 @@ export function LocationStats({
 
   const hasData = currentData.length > 0
 
-  // 计算占比前5的地区（不够5个全显示，第5个位置显示"其他"汇总剩余）
+  // 计算占比前5的地区：中国省份正常显示，非中国地区统一归入"其他地区"
   const topRegions = useMemo(() => {
     if (!hasData) return []
     const total = currentData.reduce((sum, d) => sum + d.count, 0)
-    const sorted = [...currentData].sort((a, b) => b.count - a.count)
 
-    if (sorted.length <= 5) {
-      // 不足5个，全部显示
-      return sorted.map((d) => ({
-        name: d.name,
-        percent: total > 0 ? ((d.count / total) * 100).toFixed(0) : "0",
-      }))
+    // 判断是否是中国的省份/地区
+    const isChina = (name: string) =>
+      CHINA_NAME_MAP[name] !== undefined ||
+      Object.values(CHINA_NAME_MAP).includes(name)
+
+    // 分离中国省份和非中国地区
+    const chinaList = currentData.filter((d) => isChina(d.name))
+    const otherList = currentData.filter((d) => !isChina(d.name))
+
+    // 中国省份排序，取前4个
+    const sortedChina = [...chinaList].sort((a, b) => b.count - a.count)
+    const topChina = sortedChina.slice(0, 4)
+
+    // 非中国地区 + 剩余中国省份统一归入"其他地区"
+    const othersCount =
+      sortedChina.slice(4).reduce((sum, d) => sum + d.count, 0) +
+      otherList.reduce((sum, d) => sum + d.count, 0)
+
+    const result: { name: string; percent: string }[] = topChina.map((d) => ({
+      name: d.name,
+      percent: total > 0 ? ((d.count / total) * 100).toFixed(0) : "0",
+    }))
+
+    if (othersCount > 0) {
+      result.push({
+        name: "其他地区",
+        percent: total > 0 ? ((othersCount / total) * 100).toFixed(0) : "0",
+      })
     }
 
-    // 超过5个：前4个 + "其他"
-    const top4 = sorted.slice(0, 4)
-    const others = sorted.slice(4)
-    const othersCount = others.reduce((sum, d) => sum + d.count, 0)
-
-    return [
-      ...top4.map((d) => ({
-        name: d.name,
-        percent: total > 0 ? ((d.count / total) * 100).toFixed(0) : "0",
-      })),
-      {
-        name: "其他",
-        percent: total > 0 ? ((othersCount / total) * 100).toFixed(0) : "0",
-      },
-    ]
+    return result
   }, [currentData, hasData])
 
   return (
