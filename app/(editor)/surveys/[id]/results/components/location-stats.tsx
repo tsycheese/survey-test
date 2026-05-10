@@ -51,7 +51,7 @@ const CHINA_NAME_MAP: Record<string, string> = {
 // ========== 地图数据加载 ==========
 
 const MAP_URLS: Record<MapType, string> = {
-  china: "https://geo.datav.aliyun.com/areas_v3/bound/100000_full.json",
+  china: "/geo/china.json",
 }
 
 const mapCache = new Map<MapType, unknown>()
