@@ -194,7 +194,7 @@ export function LocationStats({
           value: number | undefined
           data: { count?: number }
         }) => {
-          const count = params.data?.count ?? params.value ?? 0
+          const count = params.data?.count ?? (params.value || 0) ?? 0
           const total = dataValues.reduce((a, b) => a + b, 0)
           const pct = total > 0 ? ((count / total) * 100).toFixed(1) : "0"
           return `<div style="font-weight:600;margin-bottom:4px">${params.name}</div>
