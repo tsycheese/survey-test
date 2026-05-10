@@ -47,15 +47,36 @@ export async function GET(
     return NextResponse.json(survey)
   }
 
-  // 正常模式：只返回已发布的问卷
+  // 正常模式：读取当前发布版本的快照
   const survey = await prisma.survey.findUnique({
     where: { shareToken: token, published: true },
-    include: { questions: { orderBy: { order: "asc" } } },
+    select: {
+      id: true,
+      settings: true,
+      currentVersionId: true,
+    },
   })
 
-  if (!survey) {
+  if (!survey || !survey.currentVersionId) {
     return NextResponse.json({ error: "问卷不存在或未发布" }, { status: 404 })
   }
 
-  return NextResponse.json(survey)
+  // 读取版本快照
+  const version = await prisma.surveyVersion.findUnique({
+    where: { id: survey.currentVersionId },
+  })
+
+  if (!version) {
+    return NextResponse.json({ error: "版本不存在" }, { status: 404 })
+  }
+
+  // 只返回答题需要的数据
+  return NextResponse.json({
+    id: survey.id,
+    title: version.title,
+    description: version.description,
+    published: true,
+    settings: survey.settings ?? { showQuestionNumber: true },
+    questions: version.questions,
+  })
 }
