@@ -1,10 +1,10 @@
 "use client"
 
 import { useParams } from "next/navigation"
-import { useState, useCallback, useRef, useEffect } from "react"
+import { useState, useCallback, useRef, useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { ScrollArea } from "@/components/ui/scroll-area"
+
 import {
   Sparkles,
   Loader2,
@@ -12,11 +12,17 @@ import {
   Check,
   RefreshCw,
   AlertCircle,
+  TrendingDown,
+  TrendingUp,
+  Clock,
+  FileText,
 } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
+import { cn } from "@/lib/utils"
 import { useResultsData } from "../hooks/use-results-data"
 import { ResultsHeader } from "../components/results-header"
+import type { ResultsData } from "../types"
 
 interface CachedSummary {
   content: string
@@ -34,7 +40,6 @@ function loadCached(surveyId: string): CachedSummary | null {
     const raw = localStorage.getItem(getStorageKey(surveyId))
     if (!raw) return null
     const parsed = JSON.parse(raw) as CachedSummary
-    // 校验数据一致性
     if (parsed.surveyId !== surveyId) return null
     return parsed
   } catch {
@@ -56,6 +61,196 @@ function saveCached(surveyId: string, content: string, totalResponses: number) {
   }
 }
 
+// ========== 工具函数 ==========
+
+function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${seconds}秒`
+  const mins = Math.floor(seconds / 60)
+  const remainingSecs = seconds % 60
+  if (mins < 60) return `${mins}分${remainingSecs}秒`
+  const hours = Math.floor(mins / 60)
+  const remainingMins = mins % 60
+  return `${hours}时${remainingMins}分`
+}
+
+// ========== KPI 卡片 ==========
+
+function KpiCards({ data }: { data: ResultsData }) {
+  const kpis = useMemo(() => {
+    const ratingQs = data.questions.filter((q) =>
+      ["RATING", "NPS", "CES"].includes(q.type)
+    )
+
+    let minAvg = Infinity
+    let maxAvg = -Infinity
+    let minTitle = ""
+    let maxTitle = ""
+
+    ratingQs.forEach((q) => {
+      const scores = q.answers
+        .map((a) => Number(a.value))
+        .filter((n) => !isNaN(n))
+      if (scores.length === 0) return
+      const avg = scores.reduce((a, b) => a + b, 0) / scores.length
+      if (avg < minAvg) {
+        minAvg = avg
+        minTitle = q.title
+      }
+      if (avg > maxAvg) {
+        maxAvg = avg
+        maxTitle = q.title
+      }
+    })
+
+    return [
+      {
+        label: "回收量",
+        value: data.totalResponses.toString(),
+        unit: "份",
+        icon: FileText,
+        color: "text-blue-500",
+        bgColor: "bg-blue-500/10",
+      },
+      {
+        label: "最低评分",
+        value: minAvg === Infinity ? "-" : minAvg.toFixed(1),
+        unit: "分",
+        subtitle: minTitle,
+        icon: TrendingDown,
+        color: "text-red-500",
+        bgColor: "bg-red-500/10",
+      },
+      {
+        label: "最高评分",
+        value: maxAvg === -Infinity ? "-" : maxAvg.toFixed(1),
+        unit: "分",
+        subtitle: maxTitle,
+        icon: TrendingUp,
+        color: "text-green-500",
+        bgColor: "bg-green-500/10",
+      },
+      {
+        label: "平均用时",
+        value: formatDuration(data.avgCompletionTime),
+        unit: "",
+        icon: Clock,
+        color: "text-amber-500",
+        bgColor: "bg-amber-500/10",
+      },
+    ]
+  }, [data])
+
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {kpis.map((kpi) => {
+        const Icon = kpi.icon
+        return (
+          <Card key={kpi.label}>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2">
+                <div
+                  className={cn(
+                    "flex h-8 w-8 items-center justify-center rounded-lg",
+                    kpi.bgColor
+                  )}
+                >
+                  <Icon className={cn("h-4 w-4", kpi.color)} />
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  {kpi.label}
+                </span>
+              </div>
+              <div className="mt-2 flex items-baseline gap-1">
+                <span className="text-2xl font-bold">{kpi.value}</span>
+                {kpi.unit && (
+                  <span className="text-xs text-muted-foreground">
+                    {kpi.unit}
+                  </span>
+                )}
+              </div>
+              {kpi.subtitle && (
+                <p className="mt-1 truncate text-xs text-muted-foreground">
+                  {kpi.subtitle}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        )
+      })}
+    </div>
+  )
+}
+
+// ========== Markdown 章节切分 ==========
+
+type Section = {
+  title: string
+  content: string
+}
+
+function parseSections(markdown: string): Section[] {
+  const lines = markdown.split("\n")
+  const sections: Section[] = []
+  let current: Section | null = null
+  let prelude: string[] = []
+
+  for (const line of lines) {
+    const h2Match = line.match(/^##\s+(.+)$/)
+    if (h2Match) {
+      if (current) {
+        sections.push({ title: current.title, content: current.content.trim() })
+      } else if (prelude.length > 0) {
+        sections.push({ title: "", content: prelude.join("\n").trim() })
+        prelude = []
+      }
+      current = { title: h2Match[1], content: "" }
+    } else if (current) {
+      current.content += line + "\n"
+    } else {
+      prelude.push(line)
+    }
+  }
+
+  if (current) {
+    sections.push({ title: current.title, content: current.content.trim() })
+  } else if (prelude.length > 0) {
+    sections.push({ title: "", content: prelude.join("\n").trim() })
+  }
+
+  return sections
+}
+
+function SectionCard({ section }: { section: Section }) {
+  if (!section.title) {
+    return (
+      <div className="prose prose-sm dark:prose-invert max-w-none px-2">
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+          {section.content}
+        </ReactMarkdown>
+      </div>
+    )
+  }
+
+  return (
+    <Card className="overflow-hidden">
+      <CardHeader className="bg-muted/30 pt-4 pb-3">
+        <CardTitle className="text-base font-semibold">
+          {section.title}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-5">
+        <div className="prose prose-sm dark:prose-invert max-w-none">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+            {section.content}
+          </ReactMarkdown>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+// ========== 主组件 ==========
+
 export default function SummaryPage() {
   const { id } = useParams<{ id: string }>()
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(
@@ -72,7 +267,6 @@ export default function SummaryPage() {
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
-  const scrollRef = useRef<HTMLDivElement>(null)
   const hasAutoGenerated = useRef(false)
 
   // 加载缓存
@@ -158,13 +352,6 @@ export default function SummaryPage() {
     setTimeout(() => setCopied(false), 2000)
   }, [content])
 
-  // 自动滚动
-  useEffect(() => {
-    if (scrollRef.current && generating) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-    }
-  }, [content, generating])
-
   // 清理
   useEffect(() => {
     return () => {
@@ -246,15 +433,30 @@ export default function SummaryPage() {
             </div>
           )}
 
-          <ScrollArea
-            className="max-h-[60vh] overflow-y-auto rounded-lg border bg-muted/20"
-            ref={scrollRef}
+          {/* KPI 卡片：生成完成后展示 */}
+          {content && !generating && <KpiCards data={data} />}
+
+          <div
+            className={cn(
+              "rounded-lg border bg-muted/20",
+              content && !generating ? "mt-4" : ""
+            )}
           >
-            <div className="prose prose-sm dark:prose-invert max-w-none p-6">
-              {content ? (
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {content}
-                </ReactMarkdown>
+            <div className="p-4">
+              {/* 已生成且非流式中：按章节卡片化展示 */}
+              {content && !generating ? (
+                <div className="space-y-4">
+                  {parseSections(content).map((section, i) => (
+                    <SectionCard key={i} section={section} />
+                  ))}
+                </div>
+              ) : content && generating ? (
+                /* 流式生成中：连续 prose 渲染，避免卡片跳动 */
+                <div className="prose prose-sm dark:prose-invert max-w-none p-4">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {content}
+                  </ReactMarkdown>
+                </div>
               ) : generating ? (
                 <div className="flex flex-col items-center gap-3 py-12 text-muted-foreground">
                   <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -277,7 +479,7 @@ export default function SummaryPage() {
                 </div>
               )}
             </div>
-          </ScrollArea>
+          </div>
 
           {hasCache && !generating && (
             <div className="mt-3 text-right text-xs text-muted-foreground">
