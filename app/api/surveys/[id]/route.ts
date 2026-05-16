@@ -80,6 +80,7 @@ export async function PUT(
   }
 
   const { id } = await params
+  const userId = session.user.id
   const body = await request.json()
   const parsed = updateSurveySchema.safeParse(body)
   if (!parsed.success) {
@@ -90,10 +91,24 @@ export async function PUT(
   }
 
   const existing = await prisma.survey.findUnique({
-    where: { id, userId: session.user.id },
+    where: { id },
+    include: {
+      collaborators: {
+        where: { userId },
+        select: { canEdit: true },
+      },
+    },
   })
+
   if (!existing) {
     return NextResponse.json({ error: "问卷不存在" }, { status: 404 })
+  }
+
+  const isOwner = existing.userId === userId
+  const canEdit = isOwner || existing.collaborators[0]?.canEdit
+
+  if (!canEdit) {
+    return NextResponse.json({ error: "无权限编辑" }, { status: 403 })
   }
 
   const survey = await prisma.survey.update({
