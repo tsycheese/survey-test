@@ -33,6 +33,7 @@ const questionSchema = z.object({
     "IMAGE_MULTIPLE_CHOICE",
   ]),
   required: z.boolean().default(false),
+  order: z.number().int().nonnegative().optional(),
   config: z
     .record(z.unknown())
     .optional()
@@ -87,17 +88,34 @@ export async function POST(
   }
 
   const count = await prisma.question.count({ where: { surveyId: id } })
+  const targetOrder = parsed.data.order ?? count
+  const finalOrder = targetOrder < count ? targetOrder : count
 
-  const question = await prisma.question.create({
-    data: {
-      surveyId: id,
-      title: parsed.data.title,
-      description: parsed.data.description,
-      type: parsed.data.type,
-      required: parsed.data.required,
-      config: parsed.data.config ?? {},
-      order: count,
-    },
+  // 使用交互式事务确保移位 + 创建的原子性（先移位后创建）
+  const question = await prisma.$transaction(async (tx) => {
+    if (targetOrder < count) {
+      await tx.question.updateMany({
+        where: {
+          surveyId: id,
+          order: { gte: targetOrder },
+        },
+        data: {
+          order: { increment: 1 },
+        },
+      })
+    }
+
+    return tx.question.create({
+      data: {
+        surveyId: id,
+        title: parsed.data.title,
+        description: parsed.data.description,
+        type: parsed.data.type,
+        required: parsed.data.required,
+        config: parsed.data.config ?? {},
+        order: finalOrder,
+      },
+    })
   })
 
   // 触发实时同步事件

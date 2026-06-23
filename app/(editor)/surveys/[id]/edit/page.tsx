@@ -165,10 +165,21 @@ export default function EditSurveyPage() {
         }
         if (fromUserId === permission.userId) return
 
-        addQuestion({
-          ...question,
-          config: question.config,
-        } as Question)
+        // API 已将数据库中 order >= 新题目 order 的题目移位，
+        // 接收端本地状态也需要同步移位以避免 order 碰撞
+        const shifted = survey.questions.map((q) => ({
+          ...q,
+          order: q.order >= question.order ? q.order + 1 : q.order,
+        }))
+        const merged = [
+          ...shifted,
+          { ...question, config: question.config } as Question,
+        ]
+        merged.sort((a, b) => a.order - b.order)
+        merged.forEach((q, idx) => {
+          q.order = idx
+        })
+        setSurvey({ ...survey, questions: merged })
 
         toast.info("有新题目添加", { duration: 2000 })
       }
@@ -502,6 +513,7 @@ export default function EditSurveyPage() {
         title: question.title,
         type: question.type,
         required: question.required,
+        order: survey.questions.length,
         config: question.config,
       }),
     })
@@ -526,23 +538,24 @@ export default function EditSurveyPage() {
         title: question.title,
         type: question.type,
         required: question.required,
+        order: index,
         config: question.config,
       }),
     })
     if (res.ok) {
       const created = await res.json()
-      const newQuestion = { ...question, id: created.id }
-      // 在指定位置插入题目
-      addQuestion(newQuestion)
-      // 由于 addQuestion 是添加到末尾，需要手动调整顺序
-      const newQuestions = [...survey.questions]
-      newQuestions.splice(index, 0, newQuestion)
-      // 更新所有题目的 order
+      const newQuestion = { ...question, id: created.id, order: created.order }
+      // API 已移位已有题目，本地状态也需同步移位
+      const shifted = survey.questions.map((q) => ({
+        ...q,
+        order: q.order >= created.order ? q.order + 1 : q.order,
+      }))
+      const newQuestions = [...shifted, newQuestion]
+      newQuestions.sort((a, b) => a.order - b.order)
       newQuestions.forEach((q, idx) => {
         q.order = idx
       })
       setSurvey({ ...survey, questions: newQuestions })
-      // 选中新题目并切换到题目面板
       selectQuestion(newQuestion.id)
       setActiveTab("question")
       toast.success("题目已添加")
@@ -577,6 +590,7 @@ export default function EditSurveyPage() {
       }
 
       // 批量添加题目
+      let nextOrder = survey.questions.length
       for (const q of questions) {
         const res = await fetch(`/api/surveys/${id}/questions`, {
           method: "POST",
@@ -585,12 +599,14 @@ export default function EditSurveyPage() {
             title: q.title,
             type: q.type,
             required: q.required,
+            order: nextOrder,
             config: q.config,
           }),
         })
         if (res.ok) {
           const created = await res.json()
           addQuestion({ ...q, id: created.id })
+          nextOrder++
         }
       }
       toast.success(`已添加 ${questions.length} 道题目`)

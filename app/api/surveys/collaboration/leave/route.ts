@@ -1,5 +1,10 @@
 import { auth } from "@/lib/auth"
 import { prisma } from "@/prisma"
+import {
+  pusherServer,
+  getSurveyChannel,
+  COLLABORATION_EVENTS,
+} from "@/lib/pusher"
 import { NextResponse } from "next/server"
 
 /**
@@ -21,7 +26,7 @@ export async function POST(request: Request) {
     }
 
     // 解锁该用户锁定的所有题目
-    await prisma.question.updateMany({
+    const updateResult = await prisma.question.updateMany({
       where: {
         surveyId,
         lockedBy: session.user.id,
@@ -31,6 +36,19 @@ export async function POST(request: Request) {
         lockedAt: null,
       },
     })
+
+    // 如果确实解锁了题目，通过 Pusher 通知所有在线客户端
+    if (updateResult.count > 0) {
+      await pusherServer.trigger(
+        getSurveyChannel(surveyId),
+        COLLABORATION_EVENTS.QUESTIONS_UNLOCK_ALL,
+        {
+          userId: session.user.id,
+          unlockedBy: session.user.id,
+          unlockedAt: new Date().toISOString(),
+        }
+      )
+    }
 
     // 记录日志（可选，Presence Channel 已处理成员管理）
     await prisma.surveyLog.create({
