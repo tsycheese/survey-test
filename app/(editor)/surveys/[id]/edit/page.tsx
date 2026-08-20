@@ -57,9 +57,12 @@ import type {
   SurveySettings,
   QuestionCategory,
 } from "@/lib/questions/types"
-import type { LockInfo } from "@/lib/pusher"
-import { COLLABORATION_EVENTS } from "@/lib/pusher"
-import type { QuestionData, SurveyData } from "@/lib/pusher"
+import {
+  COLLABORATION_EVENTS,
+  type LockInfo,
+  type QuestionData,
+  type SurveyData,
+} from "@/lib/realtime-shared"
 import { QUESTION_CATEGORIES } from "@/lib/questions/types"
 import { SurveySettingsPanel } from "@/components/editor/survey-settings-panel"
 import { AIClarifyDialog } from "@/components/ai/ai-clarify-dialog"

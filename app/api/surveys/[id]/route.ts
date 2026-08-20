@@ -2,11 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/prisma"
 import { z } from "zod"
-import {
-  pusherServer,
-  getSurveyChannel,
-  COLLABORATION_EVENTS,
-} from "@/lib/pusher"
+import { scheduleSurveyBroadcast } from "@/lib/realtime-broadcast"
+import { COLLABORATION_EVENTS } from "@/lib/realtime-shared"
 
 const updateSurveySchema = z.object({
   title: z.string().min(1).max(100).optional(),
@@ -116,20 +113,20 @@ export async function PUT(
     data: parsed.data,
   })
 
-  // 触发实时同步事件
-  await pusherServer.trigger(
-    getSurveyChannel(id),
-    COLLABORATION_EVENTS.SURVEY_UPDATED,
-    {
+  // 数据库更新成功即可响应；实时通知在响应后发送。
+  scheduleSurveyBroadcast({
+    surveyId: id,
+    event: COLLABORATION_EVENTS.SURVEY_UPDATED,
+    operation: "survey-update",
+    payload: {
       survey: {
         title: survey.title,
         description: survey.description,
         settings: survey.settings as Record<string, unknown>,
       },
       fromUserId: session.user.id,
-      timestamp: new Date().toISOString(),
-    }
-  )
+    },
+  })
 
   return NextResponse.json(survey)
 }

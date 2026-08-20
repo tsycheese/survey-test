@@ -4,6 +4,7 @@ import { prisma } from "@/prisma"
 import { z } from "zod"
 import {
   pusherServer,
+  realtimeProvider,
   getSurveyChannel,
   COLLABORATION_EVENTS,
 } from "@/lib/pusher"
@@ -164,6 +165,7 @@ export async function POST(
   )
 
   const eventPayload = {
+    requestId,
     question: {
       id: question.id,
       type: question.type,
@@ -189,10 +191,15 @@ export async function POST(
       )
       console.info("[Question Create Pusher Performance]", {
         requestId,
+        provider: realtimeProvider,
         duration: `${(performance.now() - pusherStartedAt).toFixed(1)}ms`,
       })
     } catch (error) {
-      console.error("[Question Create Pusher Error]", { requestId, error })
+      console.error("[Question Create Pusher Error]", {
+        requestId,
+        provider: realtimeProvider,
+        error,
+      })
     }
   })
 

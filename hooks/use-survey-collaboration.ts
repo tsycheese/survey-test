@@ -7,10 +7,20 @@ import {
   getSurveyChannel,
   type MemberInfo,
   type LockInfo,
-} from "@/lib/pusher"
+} from "@/lib/realtime-shared"
 
 // Pusher 客户端单例（仅在客户端创建）
 let pusherClient: Pusher | null = null
+let pusherClientCreatedAt: number | null = null
+
+type RealtimeDiagnosticPayload = {
+  requestId?: string
+  timestamp?: string
+}
+
+function getRealtimePerformanceTime(): number {
+  return performance.now()
+}
 
 function getPusherClient(): Pusher | null {
   if (typeof window === "undefined") {
@@ -18,17 +28,68 @@ function getPusherClient(): Pusher | null {
   }
 
   if (!pusherClient) {
-    const key = process.env.NEXT_PUBLIC_PUSHER_KEY
-    const cluster = process.env.NEXT_PUBLIC_PUSHER_CLUSTER
+    const useLocalRealtime =
+      process.env.NEXT_PUBLIC_REALTIME_PROVIDER === "soketi"
+    const key = useLocalRealtime
+      ? (process.env.NEXT_PUBLIC_SOKETI_APP_KEY ?? "survey-local-key")
+      : process.env.NEXT_PUBLIC_PUSHER_KEY
+    const cluster = useLocalRealtime
+      ? "mt1"
+      : process.env.NEXT_PUBLIC_PUSHER_CLUSTER
 
     if (!key || !cluster) {
       console.error("Pusher: Missing environment variables")
       return null
     }
 
+    pusherClientCreatedAt = getRealtimePerformanceTime()
     pusherClient = new Pusher(key, {
-      cluster: cluster,
+      cluster,
       authEndpoint: "/api/pusher/auth",
+      ...(useLocalRealtime
+        ? {
+            wsHost: process.env.NEXT_PUBLIC_SOKETI_HOST ?? "127.0.0.1",
+            wsPort: Number(process.env.NEXT_PUBLIC_SOKETI_PORT ?? "6001"),
+            forceTLS: false,
+            enabledTransports: ["ws" as const],
+            disableStats: true,
+          }
+        : {}),
+    })
+
+    console.info("[Realtime Provider]", {
+      provider: useLocalRealtime ? "soketi" : "pusher",
+    })
+
+    pusherClient.connection.bind(
+      "state_change",
+      ({ previous, current }: { previous: string; current: string }) => {
+        console.info("[Realtime Connection State]", {
+          previous,
+          current,
+          durationSinceClientCreated: pusherClientCreatedAt
+            ? `${(getRealtimePerformanceTime() - pusherClientCreatedAt).toFixed(
+                1
+              )}ms`
+            : "unknown",
+        })
+      }
+    )
+
+    pusherClient.connection.bind("connected", () => {
+      console.info("[Realtime Connection Performance]", {
+        phase: "client-created-to-connected",
+        duration: pusherClientCreatedAt
+          ? `${(getRealtimePerformanceTime() - pusherClientCreatedAt).toFixed(
+              1
+            )}ms`
+          : "unknown",
+        transport: pusherClient?.connection.state,
+      })
+    })
+
+    pusherClient.connection.bind("error", (error: unknown) => {
+      console.error("[Realtime Connection Error]", error)
     })
   }
   return pusherClient
@@ -76,8 +137,30 @@ export function useSurveyCollaboration(
     }
 
     const channelName = getSurveyChannel(surveyId)
+    const subscriptionStartedAt = getRealtimePerformanceTime()
     const channel = pusher.subscribe(channelName)
     channelRef.current = channel
+
+    const handleRealtimeDiagnosticEvent = (
+      eventName: string,
+      data: RealtimeDiagnosticPayload
+    ) => {
+      if (
+        !(Object.values(COLLABORATION_EVENTS) as string[]).includes(eventName)
+      )
+        return
+
+      const emittedAt = data?.timestamp ? Date.parse(data.timestamp) : NaN
+      console.info("[Realtime Event Delivery Performance]", {
+        eventName,
+        requestId: data?.requestId ?? "unknown",
+        emittedToReceived: Number.isFinite(emittedAt)
+          ? `${(Date.now() - emittedAt).toFixed(1)}ms`
+          : "unknown",
+      })
+    }
+
+    channel.bind_global(handleRealtimeDiagnosticEvent)
 
     // Presence Channel: 订阅成功时获取成员列表
     channel.bind(
@@ -89,10 +172,12 @@ export function useSurveyCollaboration(
       }) => {
         setIsConnected(true)
 
-        console.log("[Pusher] subscription_succeeded:", {
-          members: data.members,
-          myID: data.myID,
-          me: data.me,
+        console.info("[Realtime Subscription Performance]", {
+          channel: channelName,
+          duration: `${(
+            getRealtimePerformanceTime() - subscriptionStartedAt
+          ).toFixed(1)}ms`,
+          memberCount: Object.keys(data.members).length,
         })
 
         // 构建成员列表（包含所有成员，包括自己）
@@ -218,14 +303,13 @@ export function useSurveyCollaboration(
 
     // 清理函数
     return () => {
-      if (subscribedRef.current) {
-        channel.unbind_all()
-        pusher.unsubscribe(channelName)
-        subscribedRef.current = false
-        setIsConnected(false)
-        setMembers(new Map())
-        setLockedQuestions(new Map())
-      }
+      channel.unbind_global(handleRealtimeDiagnosticEvent)
+      channel.unbind_all()
+      pusher.unsubscribe(channelName)
+      subscribedRef.current = false
+      setIsConnected(false)
+      setMembers(new Map())
+      setLockedQuestions(new Map())
     }
   }, [surveyId, userId])
 

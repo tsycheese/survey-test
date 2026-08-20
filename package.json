@@ -12,7 +12,10 @@
     "typecheck": "tsc --noEmit",
     "prepare": "husky",
     "db:generate": "prisma generate",
-    "db:push": "prisma db push"
+    "db:push": "prisma db push",
+    "realtime:up": "docker compose -f compose.realtime.yml up -d",
+    "realtime:down": "docker compose -f compose.realtime.yml down",
+    "realtime:logs": "docker compose -f compose.realtime.yml logs -f soketi"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^2.0.38",

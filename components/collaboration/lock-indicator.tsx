@@ -2,7 +2,7 @@
 
 import { Lock } from "lucide-react"
 import { cn } from "@/lib/utils"
-import type { LockInfo } from "@/lib/pusher"
+import type { LockInfo } from "@/lib/realtime-shared"
 
 interface LockIndicatorProps {
   lockInfo: LockInfo | undefined

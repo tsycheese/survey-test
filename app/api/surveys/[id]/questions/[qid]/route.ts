@@ -2,11 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/prisma"
 import { z } from "zod"
-import {
-  pusherServer,
-  getSurveyChannel,
-  COLLABORATION_EVENTS,
-} from "@/lib/pusher"
+import { scheduleSurveyBroadcast } from "@/lib/realtime-broadcast"
+import { COLLABORATION_EVENTS } from "@/lib/realtime-shared"
 
 const updateQuestionSchema = z.object({
   title: z.string().min(1).optional(),
@@ -96,11 +93,12 @@ export async function PUT(
     data: parsed.data,
   })
 
-  // 触发实时同步事件
-  await pusherServer.trigger(
-    getSurveyChannel(id),
-    COLLABORATION_EVENTS.QUESTION_UPDATED,
-    {
+  // 数据库更新成功即可响应；实时通知在响应后发送。
+  scheduleSurveyBroadcast({
+    surveyId: id,
+    event: COLLABORATION_EVENTS.QUESTION_UPDATED,
+    operation: "question-update",
+    payload: {
       questionId: qid,
       question: {
         id: question.id,
@@ -112,9 +110,8 @@ export async function PUT(
         config: question.config as Record<string, unknown>,
       },
       fromUserId: userId,
-      timestamp: new Date().toISOString(),
-    }
-  )
+    },
+  })
 
   return NextResponse.json(question)
 }
@@ -155,16 +152,16 @@ export async function DELETE(
 
   await prisma.question.delete({ where: { id: qid, surveyId: id } })
 
-  // 触发实时同步事件
-  await pusherServer.trigger(
-    getSurveyChannel(id),
-    COLLABORATION_EVENTS.QUESTION_DELETED,
-    {
+  // 数据库删除成功即可响应；实时通知在响应后发送。
+  scheduleSurveyBroadcast({
+    surveyId: id,
+    event: COLLABORATION_EVENTS.QUESTION_DELETED,
+    operation: "question-delete",
+    payload: {
       questionId: qid,
       fromUserId: userId,
-      timestamp: new Date().toISOString(),
-    }
-  )
+    },
+  })
 
   return NextResponse.json({ message: "删除成功" })
 }

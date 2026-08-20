@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { Users } from "lucide-react"
 import { cn } from "@/lib/utils"
-import type { MemberInfo } from "@/lib/pusher"
+import type { MemberInfo } from "@/lib/realtime-shared"
 
 interface OnlineMembersProps {
   members: Map<string, MemberInfo>

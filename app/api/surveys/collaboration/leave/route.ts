@@ -1,10 +1,7 @@
 import { auth } from "@/lib/auth"
 import { prisma } from "@/prisma"
-import {
-  pusherServer,
-  getSurveyChannel,
-  COLLABORATION_EVENTS,
-} from "@/lib/pusher"
+import { scheduleSurveyBroadcast } from "@/lib/realtime-broadcast"
+import { COLLABORATION_EVENTS } from "@/lib/realtime-shared"
 import { NextResponse } from "next/server"
 
 /**
@@ -39,15 +36,16 @@ export async function POST(request: Request) {
 
     // 如果确实解锁了题目，通过 Pusher 通知所有在线客户端
     if (updateResult.count > 0) {
-      await pusherServer.trigger(
-        getSurveyChannel(surveyId),
-        COLLABORATION_EVENTS.QUESTIONS_UNLOCK_ALL,
-        {
+      scheduleSurveyBroadcast({
+        surveyId,
+        event: COLLABORATION_EVENTS.QUESTIONS_UNLOCK_ALL,
+        operation: "collaboration-leave-unlock",
+        payload: {
           userId: session.user.id,
           unlockedBy: session.user.id,
           unlockedAt: new Date().toISOString(),
-        }
-      )
+        },
+      })
     }
 
     // 记录日志（可选，Presence Channel 已处理成员管理）

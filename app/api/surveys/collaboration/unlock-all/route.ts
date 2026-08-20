@@ -1,9 +1,6 @@
 import { auth } from "@/lib/auth"
-import {
-  pusherServer,
-  getSurveyChannel,
-  COLLABORATION_EVENTS,
-} from "@/lib/pusher"
+import { scheduleSurveyBroadcast } from "@/lib/realtime-broadcast"
+import { COLLABORATION_EVENTS } from "@/lib/realtime-shared"
 import { prisma } from "@/prisma"
 import { NextResponse } from "next/server"
 
@@ -61,17 +58,17 @@ export async function POST(request: Request) {
       },
     })
 
-    // 触发批量解锁事件
-    const channel = getSurveyChannel(surveyId)
-    await pusherServer.trigger(
-      channel,
-      COLLABORATION_EVENTS.QUESTIONS_UNLOCK_ALL,
-      {
+    // 数据库解锁成功即可响应；实时通知在响应后发送。
+    scheduleSurveyBroadcast({
+      surveyId,
+      event: COLLABORATION_EVENTS.QUESTIONS_UNLOCK_ALL,
+      operation: "questions-unlock-all",
+      payload: {
         userId: targetUserId,
         unlockedBy: session.user.id,
         unlockedAt: new Date().toISOString(),
-      }
-    )
+      },
+    })
 
     return NextResponse.json({ success: true })
   } catch (error) {

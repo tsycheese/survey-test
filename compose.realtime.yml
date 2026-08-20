@@ -1,0 +1,12 @@
+services:
+  soketi:
+    image: quay.io/soketi/soketi:1.6.1-16-debian
+    container_name: survey-soketi
+    restart: unless-stopped
+    ports:
+      - "6001:6001"
+    environment:
+      SOKETI_DEFAULT_APP_ID: survey-local
+      SOKETI_DEFAULT_APP_KEY: survey-local-key
+      SOKETI_DEFAULT_APP_SECRET: survey-local-secret
+      SOKETI_DEBUG: "0"

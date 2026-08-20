@@ -2,11 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/prisma"
 import { z } from "zod"
-import {
-  pusherServer,
-  getSurveyChannel,
-  COLLABORATION_EVENTS,
-} from "@/lib/pusher"
+import { scheduleSurveyBroadcast } from "@/lib/realtime-broadcast"
+import { COLLABORATION_EVENTS } from "@/lib/realtime-shared"
 
 const reorderSchema = z.object({
   questions: z.array(
@@ -69,19 +66,19 @@ export async function PUT(
     )
   )
 
-  // 触发实时同步事件
-  await pusherServer.trigger(
-    getSurveyChannel(id),
-    COLLABORATION_EVENTS.QUESTIONS_REORDERED,
-    {
+  // 数据库排序成功即可响应；实时通知在响应后发送。
+  scheduleSurveyBroadcast({
+    surveyId: id,
+    event: COLLABORATION_EVENTS.QUESTIONS_REORDERED,
+    operation: "questions-reorder",
+    payload: {
       questions: parsed.data.questions.map((q) => ({
         id: q.id,
         order: q.order,
       })),
       fromUserId: session.user.id,
-      timestamp: new Date().toISOString(),
-    }
-  )
+    },
+  })
 
   return NextResponse.json({ success: true })
 }
