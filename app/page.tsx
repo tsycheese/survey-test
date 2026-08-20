@@ -11,6 +11,7 @@ import {
   SurveyIcon,
   FeatureCards,
 } from "@/components/landing"
+import { SocialAuthButtons } from "@/components/auth/social-auth-buttons"
 
 export default function Page() {
   const { status } = useSession()
@@ -116,6 +117,10 @@ export default function Page() {
               注册
             </Button>
           </Link>
+        </div>
+
+        <div className="w-full max-w-md">
+          <SocialAuthButtons callbackUrl="/surveys" />
         </div>
       </div>
 

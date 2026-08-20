@@ -19,6 +19,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { registerSchema, type RegisterInput } from "@/lib/validations/auth"
 import { ParticleBackground } from "@/components/landing"
+import { SocialAuthButtons } from "@/components/auth/social-auth-buttons"
 
 export function RegisterForm() {
   const [isPending, setIsPending] = useState(false)
@@ -226,6 +227,7 @@ export function RegisterForm() {
                 </Button>
               </form>
             </Form>
+            <SocialAuthButtons callbackUrl="/surveys" />
           </div>
 
           {/* 底部 */}

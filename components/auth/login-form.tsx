@@ -20,6 +20,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { loginSchema, type LoginInput } from "@/lib/validations/auth"
 import { ParticleBackground } from "@/components/landing"
+import { SocialAuthButtons } from "@/components/auth/social-auth-buttons"
 
 export function LoginForm() {
   const searchParams = useSearchParams()
@@ -237,6 +238,7 @@ export function LoginForm() {
                 </Button>
               </form>
             </Form>
+            <SocialAuthButtons callbackUrl={callbackUrl} />
           </div>
 
           {/* 底部 */}
