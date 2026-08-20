@@ -1,0 +1,1058 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="问卷编辑器题目创建性能优化：本地 PostgreSQL 环境下的优化前后对比报告"
+    />
+    <title>问卷题目创建性能优化报告</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #07110f;
+        --panel: #0d1a17;
+        --panel-2: #12231e;
+        --line: #244038;
+        --text: #e9f4ef;
+        --muted: #9bb1a8;
+        --green: #55e6a5;
+        --green-2: #1e9e70;
+        --amber: #ffbf69;
+        --red: #ff7a7a;
+        --blue: #70b7ff;
+        --radius: 20px;
+        --shadow: 0 24px 70px rgba(0, 0, 0, 0.32);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        background:
+          radial-gradient(
+            circle at 12% 4%,
+            rgba(45, 185, 124, 0.16),
+            transparent 28rem
+          ),
+          radial-gradient(
+            circle at 88% 18%,
+            rgba(71, 137, 255, 0.1),
+            transparent 26rem
+          ),
+          var(--bg);
+        color: var(--text);
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          "Microsoft YaHei",
+          sans-serif;
+        line-height: 1.68;
+      }
+
+      a {
+        color: inherit;
+      }
+
+      .shell {
+        width: min(1160px, calc(100% - 32px));
+        margin: 0 auto;
+      }
+
+      .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        border-bottom: 1px solid rgba(85, 230, 165, 0.14);
+        background: rgba(7, 17, 15, 0.84);
+        backdrop-filter: blur(18px);
+      }
+
+      .topbar .shell {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        min-height: 62px;
+        gap: 24px;
+      }
+
+      .brand {
+        font-weight: 760;
+        letter-spacing: -0.02em;
+      }
+
+      .topbar nav {
+        display: flex;
+        gap: 20px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .topbar a {
+        text-decoration: none;
+      }
+
+      .topbar a:hover {
+        color: var(--green);
+      }
+
+      .hero {
+        padding: 92px 0 56px;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 12px;
+        border: 1px solid rgba(85, 230, 165, 0.3);
+        border-radius: 999px;
+        background: rgba(85, 230, 165, 0.08);
+        color: var(--green);
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        max-width: 900px;
+        margin: 24px 0 20px;
+        font-size: clamp(42px, 7vw, 76px);
+        line-height: 1.04;
+        letter-spacing: -0.055em;
+      }
+
+      h1 span {
+        color: var(--green);
+      }
+
+      .lede {
+        max-width: 760px;
+        color: var(--muted);
+        font-size: clamp(17px, 2vw, 21px);
+      }
+
+      .meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 28px;
+      }
+
+      .chip {
+        padding: 8px 12px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: rgba(13, 26, 23, 0.72);
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .metrics {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 14px;
+        margin: 32px 0 0;
+      }
+
+      .metric,
+      .card,
+      .flow-card {
+        border: 1px solid var(--line);
+        background: linear-gradient(
+          145deg,
+          rgba(18, 35, 30, 0.92),
+          rgba(10, 22, 19, 0.92)
+        );
+        box-shadow: var(--shadow);
+      }
+
+      .metric {
+        min-height: 176px;
+        padding: 22px;
+        border-radius: var(--radius);
+      }
+
+      .metric small {
+        color: var(--muted);
+      }
+
+      .metric strong {
+        display: block;
+        margin: 16px 0 8px;
+        color: var(--green);
+        font-size: clamp(30px, 4vw, 44px);
+        line-height: 1;
+        letter-spacing: -0.045em;
+      }
+
+      .metric p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      main section {
+        padding: 58px 0;
+      }
+
+      .section-head {
+        display: grid;
+        grid-template-columns: 0.7fr 1.3fr;
+        gap: 40px;
+        margin-bottom: 28px;
+      }
+
+      h2 {
+        margin-bottom: 12px;
+        font-size: clamp(28px, 4vw, 42px);
+        line-height: 1.14;
+        letter-spacing: -0.035em;
+      }
+
+      h3 {
+        font-size: 20px;
+      }
+
+      .section-head p,
+      .muted {
+        color: var(--muted);
+      }
+
+      .flow-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+      }
+
+      .flow-card {
+        padding: 26px;
+        border-radius: var(--radius);
+      }
+
+      .flow-card.before {
+        border-color: rgba(255, 122, 122, 0.28);
+      }
+
+      .flow-card.after {
+        border-color: rgba(85, 230, 165, 0.3);
+      }
+
+      .tag {
+        display: inline-block;
+        margin-bottom: 14px;
+        padding: 5px 9px;
+        border-radius: 7px;
+        font-size: 12px;
+        font-weight: 760;
+      }
+
+      .before .tag {
+        background: rgba(255, 122, 122, 0.12);
+        color: var(--red);
+      }
+
+      .after .tag {
+        background: rgba(85, 230, 165, 0.11);
+        color: var(--green);
+      }
+
+      .flow {
+        display: grid;
+        gap: 9px;
+        margin-top: 20px;
+      }
+
+      .step {
+        position: relative;
+        padding: 11px 13px 11px 38px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: rgba(0, 0, 0, 0.14);
+        color: #cfe0d8;
+        font-size: 14px;
+      }
+
+      .step::before {
+        content: attr(data-n);
+        position: absolute;
+        left: 12px;
+        top: 11px;
+        color: var(--muted);
+        font:
+          700 12px/1.68 ui-monospace,
+          SFMono-Regular,
+          Consolas,
+          monospace;
+      }
+
+      .step.highlight {
+        border-color: rgba(85, 230, 165, 0.35);
+        color: var(--green);
+      }
+
+      .card {
+        padding: 26px;
+        border-radius: var(--radius);
+      }
+
+      .bars {
+        display: grid;
+        gap: 26px;
+      }
+
+      .bar-row {
+        display: grid;
+        grid-template-columns: 210px 1fr 92px;
+        align-items: center;
+        gap: 16px;
+      }
+
+      .bar-label span {
+        display: block;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .bar-track {
+        position: relative;
+        height: 34px;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        background: #091411;
+      }
+
+      .bar-fill {
+        height: 100%;
+        min-width: 3px;
+        border-radius: 8px;
+      }
+
+      .bar-fill.before {
+        background: linear-gradient(90deg, #b94d58, #ff7a7a);
+      }
+
+      .bar-fill.after {
+        background: linear-gradient(90deg, var(--green-2), var(--green));
+      }
+
+      .bar-value {
+        text-align: right;
+        font:
+          700 14px ui-monospace,
+          SFMono-Regular,
+          Consolas,
+          monospace;
+      }
+
+      .legend {
+        display: flex;
+        gap: 18px;
+        margin-bottom: 26px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .dot {
+        display: inline-block;
+        width: 9px;
+        height: 9px;
+        margin-right: 6px;
+        border-radius: 50%;
+      }
+
+      .dot.red {
+        background: var(--red);
+      }
+
+      .dot.green {
+        background: var(--green);
+      }
+
+      .insights {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+      }
+
+      .insight {
+        padding: 22px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: rgba(13, 26, 23, 0.72);
+      }
+
+      .insight b {
+        display: block;
+        margin-bottom: 8px;
+        color: var(--green);
+      }
+
+      .insight p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .table-wrap {
+        overflow-x: auto;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 760px;
+        background: rgba(10, 22, 19, 0.82);
+        font-size: 14px;
+      }
+
+      th,
+      td {
+        padding: 13px 15px;
+        border-bottom: 1px solid var(--line);
+        text-align: right;
+        white-space: nowrap;
+      }
+
+      th:first-child,
+      td:first-child {
+        text-align: left;
+      }
+
+      th {
+        color: var(--muted);
+        font-size: 12px;
+        letter-spacing: 0.03em;
+      }
+
+      tbody tr:last-child td {
+        border-bottom: 0;
+      }
+
+      tr.median {
+        color: var(--green);
+        font-weight: 760;
+      }
+
+      details {
+        margin-top: 16px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: rgba(13, 26, 23, 0.62);
+      }
+
+      summary {
+        cursor: pointer;
+        padding: 16px 18px;
+        font-weight: 700;
+      }
+
+      details > div {
+        padding: 0 18px 18px;
+      }
+
+      .callout {
+        padding: 22px;
+        border: 1px solid rgba(255, 191, 105, 0.3);
+        border-radius: 16px;
+        background: rgba(255, 191, 105, 0.07);
+      }
+
+      .callout b {
+        color: var(--amber);
+      }
+
+      blockquote {
+        margin: 0;
+        padding: 26px;
+        border-left: 3px solid var(--green);
+        border-radius: 0 16px 16px 0;
+        background: rgba(85, 230, 165, 0.07);
+        font-size: 18px;
+      }
+
+      footer {
+        padding: 40px 0 72px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      @media (max-width: 900px) {
+        .metrics,
+        .insights {
+          grid-template-columns: 1fr 1fr;
+        }
+
+        .section-head,
+        .flow-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .bar-row {
+          grid-template-columns: 150px 1fr 76px;
+        }
+      }
+
+      @media (max-width: 620px) {
+        .topbar nav {
+          display: none;
+        }
+
+        .hero {
+          padding-top: 62px;
+        }
+
+        .metrics,
+        .insights {
+          grid-template-columns: 1fr;
+        }
+
+        .bar-row {
+          grid-template-columns: 1fr 70px;
+        }
+
+        .bar-track {
+          grid-column: 1 / -1;
+          grid-row: 2;
+        }
+      }
+
+      @media print {
+        :root {
+          color-scheme: light;
+          --bg: #fff;
+          --panel: #fff;
+          --panel-2: #f7faf8;
+          --line: #d8e2dd;
+          --text: #102019;
+          --muted: #52635b;
+          --shadow: none;
+        }
+
+        body {
+          background: #fff;
+        }
+
+        .topbar {
+          display: none;
+        }
+
+        .metric,
+        .card,
+        .flow-card {
+          box-shadow: none;
+          break-inside: avoid;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="shell">
+        <div class="brand">Survey Editor · Performance Study</div>
+        <nav aria-label="报告导航">
+          <a href="#result">结果</a>
+          <a href="#architecture">架构</a>
+          <a href="#data">数据</a>
+          <a href="#scope">边界</a>
+        </nav>
+      </div>
+    </header>
+
+    <div class="shell">
+      <header class="hero">
+        <div class="eyebrow">LOCAL POSTGRESQL · WARM MEDIAN</div>
+        <h1>让“添加题目”从等待，变成<span>即时反馈</span></h1>
+        <p class="lede">
+          通过乐观更新、临时
+          ID、串行持久化、失败回滚和服务端快路径，将题目可见延迟中位数从 379.2
+          ms 降到 73.7 ms。
+        </p>
+        <div class="meta">
+          <span class="chip">2026-08-20</span>
+          <span class="chip">Next.js 16.1.7 / Turbopack</span>
+          <span class="chip">PostgreSQL 18.3 @ localhost</span>
+          <span class="chip">1 冷启动 + 5 暖请求</span>
+          <span class="chip">Pusher 云端配置保持不变</span>
+        </div>
+
+        <div class="metrics" id="result">
+          <article class="metric">
+            <small>用户可见延迟</small>
+            <strong>-80.6%</strong>
+            <p>379.2 ms → 73.7 ms，约 5.15 倍提升</p>
+          </article>
+          <article class="metric">
+            <small>服务端关键路径</small>
+            <strong>-91.7%</strong>
+            <p>210.3 ms → 17.5 ms，约 12.02 倍提升</p>
+          </article>
+          <article class="metric">
+            <small>数据库写入</small>
+            <strong>-53.3%</strong>
+            <p>6.0 ms → 2.8 ms，末尾追加绕过事务</p>
+          </article>
+          <article class="metric">
+            <small>冷启动首次可见</small>
+            <strong>-97.7%</strong>
+            <p>5685.4 ms → 131.9 ms，反馈不再等待冷链路</p>
+          </article>
+        </div>
+      </header>
+
+      <main>
+        <section id="architecture">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">ARCHITECTURE</div>
+              <h2>把反馈路径和持久化路径拆开</h2>
+            </div>
+            <p>
+              原始实现把鉴权、查询、事务、Pusher 和 React
+              绘制串成一条链；优化后，页面先给出可恢复的本地结果，后台再按顺序完成持久化。
+            </p>
+          </div>
+
+          <div class="flow-grid">
+            <article class="flow-card before">
+              <span class="tag">优化前 · 悲观更新</span>
+              <h3>所有远端步骤完成后才显示</h3>
+              <div class="flow" aria-label="优化前流程">
+                <div class="step" data-n="01">用户点击添加</div>
+                <div class="step" data-n="02">权限查询 + 单独题目计数</div>
+                <div class="step" data-n="03">交互式事务写入</div>
+                <div class="step" data-n="04">同步等待 Pusher</div>
+                <div class="step" data-n="05">返回响应并更新 Zustand</div>
+                <div class="step" data-n="06">React 绘制题目</div>
+              </div>
+            </article>
+
+            <article class="flow-card after">
+              <span class="tag">优化后 · 乐观更新</span>
+              <h3>先显示，后台可靠保存</h3>
+              <div class="flow" aria-label="优化后流程">
+                <div class="step highlight" data-n="01">
+                  插入临时题目并立即绘制
+                </div>
+                <div class="step" data-n="02">串行化后台创建请求</div>
+                <div class="step" data-n="03">合并权限查询与题目计数</div>
+                <div class="step" data-n="04">末尾追加走单次写入快路径</div>
+                <div class="step" data-n="05">正式 ID 替换临时 ID</div>
+                <div class="step" data-n="06">响应后广播；失败则回滚</div>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section>
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">MEDIAN COMPARISON</div>
+              <h2>暖请求中位数对比</h2>
+            </div>
+            <p>
+              每条横轴以该指标的优化前数值为
+              100%。绿色越短，代表优化后耗时越低。用户可见反馈与后台持久化分别统计。
+            </p>
+          </div>
+
+          <div class="card">
+            <div class="legend">
+              <span><i class="dot red"></i>优化前</span>
+              <span><i class="dot green"></i>优化后</span>
+            </div>
+            <div class="bars">
+              <div>
+                <div class="bar-row">
+                  <div class="bar-label">
+                    用户可见反馈<span>点击到题目出现</span>
+                  </div>
+                  <div class="bar-track">
+                    <div class="bar-fill before" style="width: 100%"></div>
+                  </div>
+                  <div class="bar-value">379.2 ms</div>
+                </div>
+                <div class="bar-row">
+                  <div class="bar-label muted">优化后</div>
+                  <div class="bar-track">
+                    <div class="bar-fill after" style="width: 19.4%"></div>
+                  </div>
+                  <div class="bar-value">73.7 ms</div>
+                </div>
+              </div>
+
+              <div>
+                <div class="bar-row">
+                  <div class="bar-label">
+                    请求往返<span>浏览器发出到收到响应</span>
+                  </div>
+                  <div class="bar-track">
+                    <div class="bar-fill before" style="width: 100%"></div>
+                  </div>
+                  <div class="bar-value">301.4 ms</div>
+                </div>
+                <div class="bar-row">
+                  <div class="bar-label muted">优化后</div>
+                  <div class="bar-track">
+                    <div class="bar-fill after" style="width: 24.7%"></div>
+                  </div>
+                  <div class="bar-value">74.5 ms</div>
+                </div>
+              </div>
+
+              <div>
+                <div class="bar-row">
+                  <div class="bar-label">
+                    服务端关键路径<span>Server-Timing total</span>
+                  </div>
+                  <div class="bar-track">
+                    <div class="bar-fill before" style="width: 100%"></div>
+                  </div>
+                  <div class="bar-value">210.3 ms</div>
+                </div>
+                <div class="bar-row">
+                  <div class="bar-label muted">优化后</div>
+                  <div class="bar-track">
+                    <div class="bar-fill after" style="width: 8.3%"></div>
+                  </div>
+                  <div class="bar-value">17.5 ms</div>
+                </div>
+              </div>
+
+              <div>
+                <div class="bar-row">
+                  <div class="bar-label">
+                    数据库写入<span>末尾追加题目</span>
+                  </div>
+                  <div class="bar-track">
+                    <div class="bar-fill before" style="width: 100%"></div>
+                  </div>
+                  <div class="bar-value">6.0 ms</div>
+                </div>
+                <div class="bar-row">
+                  <div class="bar-label muted">优化后</div>
+                  <div class="bar-track">
+                    <div class="bar-fill after" style="width: 46.7%"></div>
+                  </div>
+                  <div class="bar-value">2.8 ms</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section>
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">WHAT CHANGED</div>
+              <h2>性能来自架构调整，而非隐藏等待</h2>
+            </div>
+            <p>
+              乐观更新必须同时解决临时状态、顺序、一致性和失败恢复；否则只是把错误推迟暴露。本次实现覆盖了完整生命周期。
+            </p>
+          </div>
+          <div class="insights">
+            <article class="insight">
+              <b>即时但可回滚</b>
+              <p>
+                临时 ID、保存中状态、正式 ID
+                确认和失败回滚共同保证本地状态可恢复。
+              </p>
+            </article>
+            <article class="insight">
+              <b>快速但有顺序</b>
+              <p>
+                用户可以连续添加，后台 Promise
+                队列按点击顺序持久化，避免并发顺序竞争。
+              </p>
+            </article>
+            <article class="insight">
+              <b>查询与写入更少</b>
+              <p>
+                权限与计数合并；末尾追加直接 create，中间插入才保留原子事务。
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section id="data">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">RAW DATA</div>
+              <h2>测试数据与方法</h2>
+            </div>
+            <p>
+              同机、同浏览器、同一 PostgreSQL 实例，分别创建空白问卷并添加 TEXT
+              题。每个版本记录 1 次冷启动和 5
+              次暖请求，正式结论使用暖请求中位数。
+            </p>
+          </div>
+
+          <details open>
+            <summary>优化前暖请求（毫秒）</summary>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>样本</th>
+                    <th>请求往返</th>
+                    <th>点击到绘制</th>
+                    <th>权限</th>
+                    <th>计数</th>
+                    <th>数据库</th>
+                    <th>Pusher</th>
+                    <th>服务端</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>1</td>
+                    <td>272.3</td>
+                    <td>328.3</td>
+                    <td>3.2</td>
+                    <td>1.3</td>
+                    <td>3.3</td>
+                    <td>185.7</td>
+                    <td>201.7</td>
+                  </tr>
+                  <tr>
+                    <td>2</td>
+                    <td>292.9</td>
+                    <td>379.2</td>
+                    <td>3.3</td>
+                    <td>1.1</td>
+                    <td>6.0</td>
+                    <td>188.7</td>
+                    <td>211.4</td>
+                  </tr>
+                  <tr>
+                    <td>3</td>
+                    <td>311.9</td>
+                    <td>367.0</td>
+                    <td>2.5</td>
+                    <td>1.3</td>
+                    <td>3.3</td>
+                    <td>189.0</td>
+                    <td>205.5</td>
+                  </tr>
+                  <tr>
+                    <td>4</td>
+                    <td>311.5</td>
+                    <td>380.8</td>
+                    <td>3.4</td>
+                    <td>1.5</td>
+                    <td>7.0</td>
+                    <td>186.3</td>
+                    <td>210.3</td>
+                  </tr>
+                  <tr>
+                    <td>5</td>
+                    <td>301.4</td>
+                    <td>389.2</td>
+                    <td>3.7</td>
+                    <td>2.1</td>
+                    <td>8.3</td>
+                    <td>208.9</td>
+                    <td>236.2</td>
+                  </tr>
+                  <tr class="median">
+                    <td>中位数</td>
+                    <td>301.4</td>
+                    <td>379.2</td>
+                    <td>3.3</td>
+                    <td>1.3</td>
+                    <td>6.0</td>
+                    <td>188.7</td>
+                    <td>210.3</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </details>
+
+          <details open>
+            <summary>优化后暖请求（毫秒）</summary>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>样本</th>
+                    <th>乐观绘制</th>
+                    <th>调度/队列</th>
+                    <th>请求往返</th>
+                    <th>持久化完成</th>
+                    <th>权限与计数</th>
+                    <th>数据库</th>
+                    <th>服务端</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>1</td>
+                    <td>108.7</td>
+                    <td>105.0</td>
+                    <td>56.7</td>
+                    <td>241.9</td>
+                    <td>2.2</td>
+                    <td>2.7</td>
+                    <td>16.1</td>
+                  </tr>
+                  <tr>
+                    <td>2</td>
+                    <td>47.3</td>
+                    <td>44.5</td>
+                    <td>79.0</td>
+                    <td>179.8</td>
+                    <td>2.1</td>
+                    <td>2.8</td>
+                    <td>21.0</td>
+                  </tr>
+                  <tr>
+                    <td>3</td>
+                    <td>58.3</td>
+                    <td>54.3</td>
+                    <td>91.7</td>
+                    <td>266.0</td>
+                    <td>2.7</td>
+                    <td>3.0</td>
+                    <td>17.5</td>
+                  </tr>
+                  <tr>
+                    <td>4</td>
+                    <td>94.6</td>
+                    <td>90.9</td>
+                    <td>74.5</td>
+                    <td>281.4</td>
+                    <td>2.3</td>
+                    <td>2.5</td>
+                    <td>16.2</td>
+                  </tr>
+                  <tr>
+                    <td>5</td>
+                    <td>73.7</td>
+                    <td>69.5</td>
+                    <td>65.1</td>
+                    <td>202.2</td>
+                    <td>1.8</td>
+                    <td>3.7</td>
+                    <td>20.1</td>
+                  </tr>
+                  <tr class="median">
+                    <td>中位数</td>
+                    <td>73.7</td>
+                    <td>69.5</td>
+                    <td>74.5</td>
+                    <td>241.9</td>
+                    <td>2.2</td>
+                    <td>2.8</td>
+                    <td>17.5</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </details>
+
+          <details>
+            <summary>冷启动观察</summary>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>指标</th>
+                    <th>优化前</th>
+                    <th>优化后</th>
+                    <th>变化</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>点击到首次可见</td>
+                    <td>5685.4 ms</td>
+                    <td>131.9 ms</td>
+                    <td>-97.7%</td>
+                  </tr>
+                  <tr>
+                    <td>请求往返</td>
+                    <td>5590.6 ms</td>
+                    <td>493.9 ms</td>
+                    <td>-91.2%</td>
+                  </tr>
+                  <tr>
+                    <td>服务端计时</td>
+                    <td>2415.6 ms</td>
+                    <td>43.4 ms</td>
+                    <td>-98.2%</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </details>
+        </section>
+
+        <section id="scope">
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">SCOPE & NEXT</div>
+              <h2>结论边界</h2>
+            </div>
+            <p>
+              这是一组开发环境、同机相对基准。数据用于验证改造方向和量化相对提升，不替代生产环境的端到端监控与
+              SLA。
+            </p>
+          </div>
+
+          <div class="callout">
+            <b>Pusher 服务本身不在本阶段优化范围。</b>
+            基线中 Pusher 暖请求中位数为 188.7 ms，占服务端总耗时约
+            89.7%。优化版只是将广播移出当前用户的响应关键路径。下一阶段将单独比较云端
+            Pusher、开发环境禁用广播和本地 Soketi，并评估失败重试策略。
+          </div>
+        </section>
+
+        <section>
+          <div class="section-head">
+            <div>
+              <div class="eyebrow">RESUME READY</div>
+              <h2>项目表述</h2>
+            </div>
+            <p>
+              数据需要保留测试环境限定，重点强调完整的一致性设计，而不只是“加了乐观更新”。
+            </p>
+          </div>
+          <blockquote>
+            重构问卷编辑器题目创建链路，引入乐观更新、临时 ID、串行持久化、正式
+            ID
+            确认与失败回滚；合并权限/计数查询并为末尾追加设计单写入快路径。在本地
+            PostgreSQL 暖请求基准中，将用户可见延迟中位数由 379.2 ms 降至 73.7
+            ms（-80.6%），服务端关键路径由 210.3 ms 降至 17.5 ms（-91.7%）。
+          </blockquote>
+        </section>
+      </main>
+
+      <footer>
+        问卷编辑器性能优化阶段报告 · 数据单位均为毫秒 · 生成于 2026-08-20
+      </footer>
+    </div>
+  </body>
+</html>

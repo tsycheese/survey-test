@@ -74,15 +74,31 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog"
 
+function getClientPerformanceTime(): number {
+  return performance.now()
+}
+
+function waitForNextPaint(): Promise<number> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => resolve(getClientPerformanceTime()))
+    })
+  })
+}
+
 export default function EditSurveyPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
   const {
     survey,
     selectedId,
+    pendingQuestionIds,
     setSurvey,
     selectQuestion,
     addQuestion,
+    addPendingQuestion,
+    confirmPendingQuestion,
+    rollbackPendingQuestion,
     updateQuestion,
     deleteQuestion,
     reorderQuestions,
@@ -115,6 +131,7 @@ export default function EditSurveyPage() {
   // 用于串行化 lock/unlock 操作，防止快速点击时并发请求导致多题同时锁定
   const previousSelectedRef = useRef<string | null>(null)
   const lockQueueRef = useRef<Promise<void>>(Promise.resolve())
+  const questionCreationQueueRef = useRef<Promise<void>>(Promise.resolve())
 
   // 协作功能（Presence Channel 自动处理加入/离开）
   const {
@@ -503,65 +520,148 @@ export default function EditSurveyPage() {
     }
   }
 
-  async function handleAddQuestion(type: QuestionType) {
-    if (!survey) return
-    const question = createQuestion(type, survey.questions.length)
-    const res = await fetch(`/api/surveys/${id}/questions`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title: question.title,
-        type: question.type,
-        required: question.required,
-        order: survey.questions.length,
-        config: question.config,
-      }),
-    })
-    if (res.ok) {
-      const created = await res.json()
-      addQuestion({ ...question, id: created.id })
-    } else {
-      toast.error("添加失败")
+  function createQuestionOptimistically(
+    type: QuestionType,
+    requestedIndex: number,
+    showSuccessToast = false
+  ): Promise<void> {
+    const latestSurvey = useEditorStore.getState().survey
+    if (!latestSurvey) return Promise.resolve()
+
+    const index = Math.min(
+      Math.max(requestedIndex, 0),
+      latestSurvey.questions.length
+    )
+    const requestId = crypto.randomUUID()
+    const temporaryId = `temporary-${requestId}`
+    const clickStartedAt = getClientPerformanceTime()
+    const questionCountBefore = latestSurvey.questions.length
+    const visibilityStateAtClick = document.visibilityState
+    const question = {
+      ...createQuestion(type, index),
+      id: temporaryId,
     }
+
+    addPendingQuestion(question)
+    const optimisticStateUpdatedAt = getClientPerformanceTime()
+    const optimisticPaintPromise = waitForNextPaint()
+
+    const persistQuestion = async () => {
+      const requestStartedAt = getClientPerformanceTime()
+
+      try {
+        const res = await fetch(`/api/surveys/${id}/questions`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Request-Id": requestId,
+          },
+          body: JSON.stringify({
+            title: question.title,
+            type: question.type,
+            required: question.required,
+            order: index,
+            config: question.config,
+          }),
+        })
+        const responseReceivedAt = getClientPerformanceTime()
+
+        if (!res.ok) {
+          throw new Error(`创建题目失败：HTTP ${res.status}`)
+        }
+
+        const created = (await res.json()) as { id: string; order: number }
+        const responseParsedAt = getClientPerformanceTime()
+
+        confirmPendingQuestion(temporaryId, {
+          ...question,
+          id: created.id,
+          order: created.order,
+        })
+        const confirmedAt = getClientPerformanceTime()
+        const [optimisticPaintedAt, confirmedPaintedAt] = await Promise.all([
+          optimisticPaintPromise,
+          waitForNextPaint(),
+        ])
+
+        if (showSuccessToast) {
+          setActiveTab("question")
+          toast.success("题目已添加")
+        }
+
+        console.groupCollapsed(
+          `[Question Add Performance] ${requestId.slice(0, 8)}`
+        )
+        console.table([
+          {
+            phase: "乐观状态更新",
+            duration: `${(optimisticStateUpdatedAt - clickStartedAt).toFixed(
+              1
+            )}ms`,
+          },
+          {
+            phase: "点击到乐观绘制",
+            duration: `${(optimisticPaintedAt - clickStartedAt).toFixed(1)}ms`,
+          },
+          {
+            phase: "后台队列等待",
+            duration: `${(requestStartedAt - optimisticStateUpdatedAt).toFixed(
+              1
+            )}ms`,
+          },
+          {
+            phase: "保存请求往返",
+            duration: `${(responseReceivedAt - requestStartedAt).toFixed(1)}ms`,
+          },
+          {
+            phase: "正式 ID 确认",
+            duration: `${(confirmedAt - responseParsedAt).toFixed(1)}ms`,
+          },
+          {
+            phase: "点击到持久化完成",
+            duration: `${(confirmedPaintedAt - clickStartedAt).toFixed(1)}ms`,
+          },
+        ])
+        console.info("Server-Timing:", res.headers.get("server-timing") ?? "无")
+        console.info("Test Context:", {
+          questionType: type,
+          questionCountBefore,
+          requestedIndex: index,
+          visibilityStateAtClick,
+          visibilityStateAtPaint: document.visibilityState,
+        })
+        console.info("Request ID:", requestId)
+        console.groupEnd()
+      } catch (error) {
+        rollbackPendingQuestion(temporaryId)
+        await waitForNextPaint()
+        console.error("[Question Add Performance] 保存失败并已回滚", {
+          requestId,
+          duration: `${(getClientPerformanceTime() - clickStartedAt).toFixed(
+            1
+          )}ms`,
+          error,
+        })
+        toast.error("添加失败，已撤销临时题目")
+      }
+    }
+
+    const queuedOperation = questionCreationQueueRef.current.then(
+      persistQuestion,
+      persistQuestion
+    )
+    questionCreationQueueRef.current = queuedOperation
+    return queuedOperation
   }
 
-  async function handleAddQuestionAtPosition(
-    type: QuestionType,
-    index: number
-  ) {
-    if (!survey) return
-    const question = createQuestion(type, index)
-    const res = await fetch(`/api/surveys/${id}/questions`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title: question.title,
-        type: question.type,
-        required: question.required,
-        order: index,
-        config: question.config,
-      }),
-    })
-    if (res.ok) {
-      const created = await res.json()
-      const newQuestion = { ...question, id: created.id, order: created.order }
-      // API 已移位已有题目，本地状态也需同步移位
-      const shifted = survey.questions.map((q) => ({
-        ...q,
-        order: q.order >= created.order ? q.order + 1 : q.order,
-      }))
-      const newQuestions = [...shifted, newQuestion]
-      newQuestions.sort((a, b) => a.order - b.order)
-      newQuestions.forEach((q, idx) => {
-        q.order = idx
-      })
-      setSurvey({ ...survey, questions: newQuestions })
-      selectQuestion(newQuestion.id)
-      setActiveTab("question")
-      toast.success("题目已添加")
-    } else {
-      toast.error("添加失败")
-    }
+  function handleAddQuestion(type: QuestionType) {
+    const questionCount =
+      useEditorStore.getState().survey?.questions.length ?? 0
+    void createQuestionOptimistically(type, questionCount)
+  }
+
+  function handleAddQuestionAtPosition(type: QuestionType, index: number) {
+    return createQuestionOptimistically(type, index, true)
   }
 
   async function handleAddAIQuestions(
@@ -1003,6 +1103,7 @@ export default function EditSurveyPage() {
                       <EmptyCanvasDropzone draggingType={draggingType} />
                     ) : (
                       survey.questions.map((q, idx) => {
+                        const isPending = pendingQuestionIds.has(q.id)
                         // 乐观锁定：如果当前题目是乐观锁定的，使用乐观锁定状态
                         const isOptimisticLocked = optimisticLockedId === q.id
                         const serverLockInfo = lockedQuestions.get(q.id)
@@ -1033,6 +1134,7 @@ export default function EditSurveyPage() {
                               selectedId={selectedId}
                               survey={survey}
                               lockInfo={lockInfo}
+                              isPending={isPending}
                               isLockedByMe={!!isLockedByMe}
                               isLockedByOther={!!isLockedByOther}
                               onSelect={() =>
@@ -1538,6 +1640,7 @@ function SortableQuestionCard({
   selectedId,
   survey,
   lockInfo,
+  isPending,
   isLockedByMe,
   isLockedByOther,
   onSelect,
@@ -1553,6 +1656,7 @@ function SortableQuestionCard({
   selectedId: string | null
   survey: Survey | null
   lockInfo: LockInfo | undefined
+  isPending: boolean
   isLockedByMe: boolean
   isLockedByOther: boolean
   onSelect: () => void
@@ -1570,7 +1674,7 @@ function SortableQuestionCard({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: question.id })
+  } = useSortable({ id: question.id, disabled: isPending })
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -1587,6 +1691,7 @@ function SortableQuestionCard({
       className={cn(
         "group relative flex w-full items-start transition-colors",
         selectedId === question.id ? "bg-primary/5" : "hover:bg-muted/5",
+        isPending && "pointer-events-none opacity-70",
         isLockedByOther && "opacity-75",
         isLockedByOther && "rounded-sm ring-1 ring-amber-400/70 ring-inset"
       )}
@@ -1608,8 +1713,14 @@ function SortableQuestionCard({
         <div className="absolute top-0 left-0 h-full w-1 rounded-l-sm bg-primary" />
       )}
 
+      {isPending && (
+        <div className="absolute top-2 right-2 z-20 rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">
+          保存中…
+        </div>
+      )}
+
       {/* 锁定指示器 */}
-      {lockInfo && (
+      {lockInfo && !isPending && (
         <div className="absolute top-2 right-2 z-20">
           <LockIndicator lockInfo={lockInfo} isLockedByMe={isLockedByMe} />
         </div>
