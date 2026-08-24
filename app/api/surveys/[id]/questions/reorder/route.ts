@@ -5,14 +5,38 @@ import { z } from "zod"
 import { scheduleSurveyBroadcast } from "@/lib/realtime-broadcast"
 import { COLLABORATION_EVENTS } from "@/lib/realtime-shared"
 
-const reorderSchema = z.object({
-  questions: z.array(
-    z.object({
-      id: z.string(),
-      order: z.number().int().nonnegative(),
-    })
-  ),
-})
+const reorderSchema = z
+  .object({
+    questions: z
+      .array(
+        z.object({
+          id: z.string().min(1),
+          order: z.number().int().nonnegative(),
+        })
+      )
+      .min(1),
+  })
+  .refine(
+    ({ questions }) =>
+      new Set(questions.map((question) => question.id)).size ===
+      questions.length,
+    { message: "题目ID不能重复", path: ["questions"] }
+  )
+  .refine(
+    ({ questions }) =>
+      new Set(questions.map((question) => question.order)).size ===
+      questions.length,
+    { message: "题目顺序不能重复", path: ["questions"] }
+  )
+  .refine(
+    ({ questions }) =>
+      [...questions]
+        .sort((a, b) => a.order - b.order)
+        .every((question, index) => question.order === index),
+    { message: "题目顺序必须从0开始连续排列", path: ["questions"] }
+  )
+
+class ReorderConflictError extends Error {}
 
 export async function PUT(
   request: NextRequest,
@@ -56,15 +80,54 @@ export async function PUT(
     )
   }
 
-  // 批量更新题目顺序
-  await prisma.$transaction(
-    parsed.data.questions.map((q) =>
-      prisma.question.update({
-        where: { id: q.id },
-        data: { order: q.order },
+  try {
+    await prisma.$transaction(async (tx) => {
+      // 同一问卷的重排请求串行执行，避免两次事务交错写出混合顺序。
+      await tx.$queryRaw`SELECT "id" FROM "Survey" WHERE "id" = ${id} FOR UPDATE`
+
+      const persistedQuestions = await tx.question.findMany({
+        where: { surveyId: id },
+        select: { id: true },
       })
-    )
-  )
+      const requestedIds = new Set(
+        parsed.data.questions.map((question) => question.id)
+      )
+      const isCompleteQuestionSet =
+        persistedQuestions.length === requestedIds.size &&
+        persistedQuestions.every((question) => requestedIds.has(question.id))
+
+      if (!isCompleteQuestionSet) {
+        throw new ReorderConflictError()
+      }
+
+      // 使用稳定的 ID 顺序获取行锁，降低并发重排发生数据库死锁的概率。
+      const updates = [...parsed.data.questions].sort((a, b) =>
+        a.id.localeCompare(b.id)
+      )
+
+      for (const question of updates) {
+        const updateResult = await tx.question.updateMany({
+          where: {
+            id: question.id,
+            surveyId: id,
+          },
+          data: { order: question.order },
+        })
+
+        if (updateResult.count !== 1) {
+          throw new ReorderConflictError()
+        }
+      }
+    })
+  } catch (error) {
+    if (error instanceof ReorderConflictError) {
+      return NextResponse.json(
+        { error: "题目列表已发生变化，请刷新后重试" },
+        { status: 409 }
+      )
+    }
+    throw error
+  }
 
   // 数据库排序成功即可响应；实时通知在响应后发送。
   scheduleSurveyBroadcast({

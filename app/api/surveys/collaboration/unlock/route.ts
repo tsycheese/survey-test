@@ -3,6 +3,12 @@ import { scheduleSurveyBroadcast } from "@/lib/realtime-broadcast"
 import { COLLABORATION_EVENTS } from "@/lib/realtime-shared"
 import { prisma } from "@/prisma"
 import { NextResponse } from "next/server"
+import { z } from "zod"
+
+const unlockQuestionSchema = z.object({
+  surveyId: z.string().min(1),
+  questionId: z.string().min(1),
+})
 
 /**
  * POST /api/surveys/collaboration/unlock
@@ -15,11 +21,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "未登录" }, { status: 401 })
     }
 
-    const { surveyId, questionId } = await request.json()
-
-    if (!surveyId || !questionId) {
+    const body = await request.json().catch(() => null)
+    const parsed = unlockQuestionSchema.safeParse(body)
+    if (!parsed.success) {
       return NextResponse.json({ error: "缺少必要参数" }, { status: 400 })
     }
+    const { surveyId, questionId } = parsed.data
 
     // 验证权限
     const survey = await prisma.survey.findUnique({
@@ -44,35 +51,39 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "没有编辑权限" }, { status: 403 })
     }
 
-    // 检查题目锁定状态
-    const question = await prisma.question.findUnique({
-      where: { id: questionId },
-    })
-
-    if (!question) {
-      return NextResponse.json({ error: "题目不存在" }, { status: 404 })
-    }
-
-    // 只能解锁自己锁定的题目（所有者可以解锁所有）
-    if (
-      question.lockedBy &&
-      question.lockedBy !== session.user.id &&
-      !isOwner
-    ) {
-      return NextResponse.json(
-        { error: "不能解锁其他用户的题目" },
-        { status: 403 }
-      )
-    }
-
-    // 解锁题目
-    await prisma.question.update({
-      where: { id: questionId },
+    // 所有者可以解锁问卷内任意题目；协作者只能解锁未锁定或自己锁定的题目。
+    // 所属问卷和锁拥有者都放进写入条件，避免检查后锁状态发生变化。
+    const updateResult = await prisma.question.updateMany({
+      where: {
+        id: questionId,
+        surveyId,
+        ...(!isOwner
+          ? {
+              OR: [{ lockedBy: null }, { lockedBy: session.user.id }],
+            }
+          : {}),
+      },
       data: {
         lockedBy: null,
         lockedAt: null,
       },
     })
+
+    if (updateResult.count === 0) {
+      const question = await prisma.question.findFirst({
+        where: { id: questionId, surveyId },
+        select: { id: true },
+      })
+
+      if (!question) {
+        return NextResponse.json({ error: "题目不存在" }, { status: 404 })
+      }
+
+      return NextResponse.json(
+        { error: "不能解锁其他用户的题目" },
+        { status: 403 }
+      )
+    }
 
     // 数据库解锁成功即可响应；实时通知在响应后发送。
     scheduleSurveyBroadcast({

@@ -3,6 +3,12 @@ import { scheduleSurveyBroadcast } from "@/lib/realtime-broadcast"
 import { COLLABORATION_EVENTS } from "@/lib/realtime-shared"
 import { prisma } from "@/prisma"
 import { NextResponse } from "next/server"
+import { z } from "zod"
+
+const lockQuestionSchema = z.object({
+  surveyId: z.string().min(1),
+  questionId: z.string().min(1),
+})
 
 /**
  * POST /api/surveys/collaboration/lock
@@ -15,11 +21,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "未登录" }, { status: 401 })
     }
 
-    const { surveyId, questionId } = await request.json()
-
-    if (!surveyId || !questionId) {
+    const body = await request.json().catch(() => null)
+    const parsed = lockQuestionSchema.safeParse(body)
+    if (!parsed.success) {
       return NextResponse.json({ error: "缺少必要参数" }, { status: 400 })
     }
+    const { surveyId, questionId } = parsed.data
 
     // 验证权限
     const survey = await prisma.survey.findUnique({
@@ -44,16 +51,38 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "没有编辑权限" }, { status: 403 })
     }
 
-    // 检查题目是否已被锁定
-    const question = await prisma.question.findUnique({
-      where: { id: questionId },
+    const lockedAt = new Date()
+
+    // 将所属问卷校验和抢锁条件放进同一次写入，避免“先检查、后更新”的竞态。
+    const updateResult = await prisma.question.updateMany({
+      where: {
+        id: questionId,
+        surveyId,
+        OR: [{ lockedBy: null }, { lockedBy: session.user.id }],
+      },
+      data: {
+        lockedBy: session.user.id,
+        lockedAt,
+      },
     })
 
-    if (!question) {
-      return NextResponse.json({ error: "题目不存在" }, { status: 404 })
-    }
+    if (updateResult.count === 0) {
+      const question = await prisma.question.findFirst({
+        where: { id: questionId, surveyId },
+        select: { lockedBy: true, lockedAt: true },
+      })
 
-    if (question.lockedBy && question.lockedBy !== session.user.id) {
+      if (!question) {
+        return NextResponse.json({ error: "题目不存在" }, { status: 404 })
+      }
+
+      if (!question.lockedBy) {
+        return NextResponse.json(
+          { error: "题目锁状态已发生变化，请重试" },
+          { status: 409 }
+        )
+      }
+
       // 获取锁定者信息
       const lockedByUser = await prisma.user.findUnique({
         where: { id: question.lockedBy },
@@ -71,15 +100,6 @@ export async function POST(request: Request) {
       )
     }
 
-    // 锁定题目
-    await prisma.question.update({
-      where: { id: questionId },
-      data: {
-        lockedBy: session.user.id,
-        lockedAt: new Date(),
-      },
-    })
-
     // 获取用户信息
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
@@ -95,7 +115,7 @@ export async function POST(request: Request) {
         questionId,
         userId: session.user.id,
         userName: user?.name,
-        lockedAt: new Date().toISOString(),
+        lockedAt: lockedAt.toISOString(),
       },
     })
 
