@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>问卷编辑器性能与协作可靠性优化总结</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #07111f;
+        --panel: rgba(15, 27, 46, 0.82);
+        --panel-2: rgba(23, 40, 66, 0.72);
+        --line: rgba(148, 163, 184, 0.18);
+        --text: #e8eef8;
+        --muted: #9fb0c8;
+        --blue: #67b7ff;
+        --cyan: #48e0d1;
+        --green: #71e6a6;
+        --amber: #ffc66d;
+        --violet: #b9a1ff;
+        --red: #ff8c9b;
+        --shadow: 0 24px 80px rgba(0, 0, 0, 0.28);
+      }
+
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body {
+        margin: 0;
+        min-width: 1080px;
+        background:
+          radial-gradient(circle at 12% 0%, rgba(72, 224, 209, 0.12), transparent 31rem),
+          radial-gradient(circle at 90% 12%, rgba(103, 183, 255, 0.12), transparent 34rem),
+          var(--bg);
+        color: var(--text);
+        font: 15px/1.72 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      a { color: inherit; text-decoration: none; }
+      code { font-family: "SFMono-Regular", Consolas, monospace; color: #bfe6ff; }
+      .shell { width: min(1240px, calc(100% - 64px)); margin: 0 auto; }
+
+      .hero { padding: 72px 0 42px; }
+      .eyebrow {
+        display: inline-flex; gap: 8px; align-items: center; padding: 6px 11px;
+        border: 1px solid rgba(72, 224, 209, 0.35); border-radius: 999px;
+        color: var(--cyan); background: rgba(72, 224, 209, 0.08); font-size: 13px;
+      }
+      .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 16px var(--green); }
+      h1 { max-width: 920px; margin: 20px 0 16px; font-size: 52px; line-height: 1.1; letter-spacing: -0.04em; }
+      .lead { max-width: 900px; margin: 0; color: var(--muted); font-size: 19px; }
+      .meta { display: flex; gap: 24px; margin-top: 24px; color: #7f93ad; font-size: 13px; }
+
+      .nav {
+        position: sticky; top: 0; z-index: 10; border-block: 1px solid var(--line);
+        background: rgba(7, 17, 31, 0.86); backdrop-filter: blur(18px);
+      }
+      .nav .shell { display: flex; gap: 8px; padding: 11px 0; }
+      .nav a { padding: 7px 12px; border-radius: 8px; color: var(--muted); font-size: 13px; }
+      .nav a:hover { color: var(--text); background: rgba(255, 255, 255, 0.06); }
+
+      section { padding: 54px 0; border-bottom: 1px solid var(--line); }
+      h2 { margin: 0 0 10px; font-size: 30px; letter-spacing: -0.025em; }
+      h3 { margin: 0 0 8px; font-size: 18px; }
+      .section-intro { max-width: 850px; margin: 0 0 28px; color: var(--muted); }
+      .grid { display: grid; gap: 16px; }
+      .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      .card { padding: 22px; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); box-shadow: var(--shadow); }
+      .card p { margin: 6px 0 0; color: var(--muted); }
+      .tag { display: inline-block; margin-bottom: 10px; color: var(--cyan); font: 12px/1.4 "SFMono-Regular", Consolas, monospace; }
+
+      .metric { min-height: 150px; }
+      .metric .value { margin: 7px 0 4px; font-size: 34px; font-weight: 750; letter-spacing: -0.035em; }
+      .metric .before { color: #8193aa; text-decoration: line-through; font-size: 14px; }
+      .metric .delta { color: var(--green); font-weight: 650; }
+
+      .flow { display: grid; grid-template-columns: 1fr 70px 1fr; align-items: stretch; gap: 12px; }
+      .flow-arrow { display: grid; place-items: center; color: var(--cyan); font-size: 30px; }
+      .steps { list-style: none; padding: 0; margin: 14px 0 0; counter-reset: item; }
+      .steps li { position: relative; padding: 8px 0 8px 32px; color: var(--muted); }
+      .steps li::before {
+        counter-increment: item; content: counter(item); position: absolute; left: 0; top: 9px;
+        display: grid; place-items: center; width: 20px; height: 20px; border-radius: 6px;
+        background: rgba(103, 183, 255, 0.13); color: var(--blue); font-size: 11px; font-weight: 700;
+      }
+      .bad { border-top: 3px solid var(--red); }
+      .good { border-top: 3px solid var(--green); }
+
+      table { width: 100%; border-collapse: collapse; overflow: hidden; border-radius: 14px; background: var(--panel); }
+      th, td { padding: 13px 15px; border-bottom: 1px solid var(--line); text-align: left; }
+      th { color: #b8c8dc; background: rgba(255, 255, 255, 0.035); font-size: 13px; }
+      td { color: var(--muted); }
+      td:not(:first-child), th:not(:first-child) { text-align: right; }
+      tbody tr:last-child td { border-bottom: 0; }
+      .win { color: var(--green); font-weight: 700; }
+
+      .timeline { position: relative; display: grid; gap: 14px; margin-top: 24px; }
+      .timeline::before { content: ""; position: absolute; left: 20px; top: 18px; bottom: 18px; width: 1px; background: linear-gradient(var(--blue), var(--cyan), var(--violet)); }
+      .commit { position: relative; display: grid; grid-template-columns: 42px 115px 1fr; gap: 14px; align-items: start; }
+      .node { z-index: 1; display: grid; place-items: center; width: 42px; height: 42px; border: 1px solid rgba(103,183,255,.38); border-radius: 12px; background: #10213a; color: var(--blue); font-weight: 800; }
+      .hash { padding-top: 10px; color: var(--violet); font: 13px/1.5 "SFMono-Regular", Consolas, monospace; }
+      .commit-body { padding: 10px 14px 16px; border-bottom: 1px solid var(--line); }
+      .commit-body p { margin: 4px 0 0; color: var(--muted); }
+
+      .model { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+      .model .card { min-height: 170px; }
+      .model strong { display: block; margin: 6px 0; color: var(--text); font-size: 17px; }
+      .model .symbol { color: var(--cyan); font: 24px/1 "SFMono-Regular", Consolas, monospace; }
+
+      .checks { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+      .check { display: grid; grid-template-columns: 30px 1fr; gap: 10px; padding: 16px; border: 1px solid var(--line); border-radius: 13px; background: var(--panel-2); }
+      .check i { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: rgba(113,230,166,.13); color: var(--green); font-style: normal; font-weight: 900; }
+      .check p { margin: 3px 0 0; color: var(--muted); font-size: 13px; }
+
+      .story { padding: 28px; border: 1px solid rgba(103,183,255,.25); border-radius: 18px; background: linear-gradient(135deg, rgba(103,183,255,.1), rgba(72,224,209,.06)); font-size: 17px; }
+      .story p { margin: 0 0 14px; color: #c9d7e9; }
+      .story p:last-child { margin-bottom: 0; }
+
+      .quote { padding: 24px; border-left: 3px solid var(--cyan); border-radius: 0 14px 14px 0; background: var(--panel); color: #d9e5f4; font-size: 17px; }
+      footer { padding: 42px 0 70px; color: #71849d; font-size: 13px; }
+
+      @media print {
+        body { min-width: 0; background: #fff; color: #111827; }
+        .nav { display: none; }
+        .card, table, .story, .quote { box-shadow: none; background: #f8fafc; color: #111827; }
+        .section-intro, .card p, td, .commit-body p, .check p, .story p { color: #475569; }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="hero shell">
+      <span class="eyebrow"><span class="dot"></span>最终验收通过 · 2026-08-24</span>
+      <h1>从“点击后等待”到<br />可恢复的多人实时编辑</h1>
+      <p class="lead">一次从性能测量开始，经过关键路径重构、本地实时基础设施、幂等与事务设计，最终以双用户断线并发验收收尾的完整工程闭环。</p>
+      <div class="meta"><span>Next.js 16 / React 19</span><span>PostgreSQL 18.3</span><span>Pusher Protocol / Soketi</span><span>双浏览器双账号</span></div>
+    </header>
+
+    <nav class="nav"><div class="shell">
+      <a href="#outcome">结果</a><a href="#root-cause">根因</a><a href="#architecture">架构</a><a href="#realtime">实时服务</a><a href="#reliability">可靠性</a><a href="#acceptance">验收</a><a href="#story">完整叙事</a>
+    </div></nav>
+
+    <main>
+      <section id="outcome"><div class="shell">
+        <h2>先看结果</h2>
+        <p class="section-intro">稳定暖请求使用本地 PostgreSQL；实时服务对比使用相同业务链路下的 Pusher Cloud 与本地 Soketi。数字用于同机相对比较。</p>
+        <div class="grid grid-4">
+          <article class="card metric"><span class="tag">可见反馈</span><div class="before">379.2 ms</div><div class="value">73.7 ms</div><div class="delta">↓ 80.6% · 5.15×</div></article>
+          <article class="card metric"><span class="tag">服务端关键路径</span><div class="before">210.3 ms</div><div class="value">17.5 ms</div><div class="delta">↓ 91.7% · 12.02×</div></article>
+          <article class="card metric"><span class="tag">实时事件发布</span><div class="before">220.6 ms · Pusher</div><div class="value">6.4 ms</div><div class="delta">↓ 97.1% · 34.5×</div></article>
+          <article class="card metric"><span class="tag">最终一致性</span><div class="before">断线 / 并发 / 回显风险</div><div class="value">7 / 7</div><div class="delta">关键验收场景通过</div></article>
+        </div>
+      </div></section>
+
+      <section id="root-cause"><div class="shell">
+        <h2>慢，不在一次 setState</h2>
+        <p class="section-intro">最初的远程环境一次添加可达 6～14 秒。分段计时显示，JSON 解析和 Zustand 更新接近零，真正的问题是外部步骤被串联在用户反馈之前。</p>
+        <div class="flow">
+          <article class="card bad"><span class="tag">优化前 · 悲观串行</span><h3>全部完成，页面才变化</h3><ol class="steps"><li>鉴权与权限查询</li><li>题目计数</li><li>数据库写入</li><li>同步等待实时广播</li><li>更新状态并绘制</li></ol></article>
+          <div class="flow-arrow">→</div>
+          <article class="card good"><span class="tag">优化后 · 双路径</span><h3>先反馈，再可靠保存</h3><ol class="steps"><li>立即插入临时题目</li><li>React 完成乐观绘制</li><li>后台队列串行持久化</li><li>正式 ID 确认或失败回滚</li><li>响应后异步广播</li></ol></article>
+        </div>
+      </div></section>
+
+      <section id="architecture"><div class="shell">
+        <h2>第一阶段：重构用户关键路径</h2>
+        <p class="section-intro"><code>f58a4a7</code> 不只是“加一个 loading”。它为客户端建立了一套可恢复的小型事务：临时身份、排队保存、正式确认和失败撤销。</p>
+        <div class="grid grid-3">
+          <article class="card"><span class="tag">OPTIMISTIC UI</span><h3>临时题目立即出现</h3><p>点击先写入 Zustand，保存期间显示明确状态；网络不再决定首次视觉反馈。</p></article>
+          <article class="card"><span class="tag">PERSISTENCE QUEUE</span><h3>显示并行，写入串行</h3><p>连续点击都能即时显示，后台按顺序保存，避免多个请求读到相同末尾位置。</p></article>
+          <article class="card"><span class="tag">SERVER FAST PATH</span><h3>少查询、少等待</h3><p>合并权限与计数查询；末尾追加使用单写入；实时广播退出当前响应关键路径。</p></article>
+        </div>
+        <div style="margin-top:22px;overflow:hidden;border-radius:14px">
+          <table><thead><tr><th>本地 PostgreSQL 暖请求中位数</th><th>优化前</th><th>优化后</th><th>改善</th></tr></thead><tbody>
+            <tr><td>用户可见反馈</td><td>379.2 ms</td><td>73.7 ms</td><td class="win">-80.6%</td></tr>
+            <tr><td>请求往返</td><td>301.4 ms</td><td>74.5 ms</td><td class="win">-75.3%</td></tr>
+            <tr><td>服务端关键路径</td><td>210.3 ms</td><td>17.5 ms</td><td class="win">-91.7%</td></tr>
+            <tr><td>数据库写入</td><td>6.0 ms</td><td>2.8 ms</td><td class="win">-53.3%</td></tr>
+            <tr><td>点击到持久化完成</td><td>379.2 ms</td><td>241.9 ms</td><td class="win">-36.2%</td></tr>
+          </tbody></table>
+        </div>
+      </div></section>
+
+      <section id="realtime"><div class="shell">
+        <h2>第二阶段：本地 Soketi 去掉开发网络噪声</h2>
+        <p class="section-intro"><code>c67b036</code> 保留 Pusher 协议、Presence 和鉴权语义，只把开发环境传输端点切到本地。生产环境仍可继续使用 Pusher Cloud。</p>
+        <div class="grid grid-4">
+          <article class="card metric"><span class="tag">WEBSOCKET</span><div class="before">450.4 ms</div><div class="value">54.2 ms</div><div class="delta">8.3×</div></article>
+          <article class="card metric"><span class="tag">PRESENCE</span><div class="before">861.5 ms</div><div class="value">183.4 ms</div><div class="delta">4.7×</div></article>
+          <article class="card metric"><span class="tag">PUBLISH</span><div class="before">220.6 ms</div><div class="value">6.4 ms</div><div class="delta">34.5×</div></article>
+          <article class="card metric"><span class="tag">DELIVERY</span><div class="before">158.0 ms</div><div class="value">72.0 ms</div><div class="delta">2.2×</div></article>
+        </div>
+      </div></section>
+
+      <section id="reliability"><div class="shell">
+        <h2>第三阶段：把“更快”变成“快且正确”</h2>
+        <p class="section-intro">乐观更新把一个同步流程变成了分布式时序问题。后续提交依次补上服务端原子性、客户端幂等性和断线恢复。</p>
+        <div class="timeline">
+          <div class="commit"><div class="node">1</div><div class="hash">1a69881</div><div class="commit-body"><h3>作用域与原子性</h3><p>锁定、解锁、重排都绑定当前问卷；多题顺序更新以事务为边界，避免半完成状态。</p></div></div>
+          <div class="commit"><div class="node">2</div><div class="hash">99b33fa</div><div class="commit-body"><h3>乐观创建幂等</h3><p><code>clientMutationId</code> 串起临时题目、数据库记录、保存确认和广播回显，防止同一操作重复落地。</p></div></div>
+          <div class="commit"><div class="node">3</div><div class="hash">be64bc4</div><div class="commit-body"><h3>实时状态可靠收敛</h3><p>订阅成功、重连和标签页恢复时获取服务器快照；实时事件负责快，数据库快照负责最终正确。</p></div></div>
+          <div class="commit"><div class="node">4</div><div class="hash">3b501d8</div><div class="commit-body"><h3>进入页面不再假聚焦</h3><p>默认选题改为空，用户主动选择后才进入锁定流程，消除“看似编辑但没有锁”的歧义。</p></div></div>
+        </div>
+        <div class="model" style="margin-top:30px">
+          <article class="card"><span class="symbol">↯</span><strong>实时事件</strong><p>低延迟增量通知</p></article>
+          <article class="card"><span class="symbol">▣</span><strong>数据库快照</strong><p>最终事实来源</p></article>
+          <article class="card"><span class="symbol">#</span><strong>Mutation ID</strong><p>一次操作的稳定身份</p></article>
+          <article class="card"><span class="symbol">◇</span><strong>事务 + 作用域</strong><p>服务端一致性边界</p></article>
+        </div>
+      </div></section>
+
+      <section id="acceptance"><div class="shell">
+        <h2>双用户最终验收</h2>
+        <p class="section-intro">A 为协作者、B 为问卷所有者。两个不同账号同时打开同一问卷，并主动制造断线、并发与离开场景。</p>
+        <div class="checks">
+          <div class="check"><i>✓</i><div><h3>首次进入无默认选题</h3><p>页面与数据库都不会凭空产生第一题锁。</p></div></div>
+          <div class="check"><i>✓</i><div><h3>锁定对另一端可见</h3><p>A 编辑时 B 可见锁定人，且数据库只锁定目标题。</p></div></div>
+          <div class="check"><i>✓</i><div><h3>切换题目原子换锁</h3><p>旧锁释放、新锁取得，任意时刻最多一条有效锁。</p></div></div>
+          <div class="check"><i>✓</i><div><h3>离开页面自动释放</h3><p>B 的提示消失，数据库锁数量回到 0。</p></div></div>
+          <div class="check"><i>✓</i><div><h3>断线并发重排</h3><p>两端离线形成不同顺序，数据库仍保持唯一连续 order。</p></div></div>
+          <div class="check"><i>✓</i><div><h3>重连快照收敛</h3><p>Soketi 恢复后，两端重新订阅并与数据库顺序一致。</p></div></div>
+          <div class="check"><i>✓</i><div><h3>连续新增无重复</h3><p>7 个正式 ID、7 个唯一 mutation ID，order 为 0…6。</p></div></div>
+          <div class="check"><i>✓</i><div><h3>无错误与残留状态</h3><p>无保存失败、重复题目或长期“保存中”。</p></div></div>
+        </div>
+      </div></section>
+
+      <section id="story"><div class="shell">
+        <h2>完整叙事</h2>
+        <div class="story">
+          <p>一开始，我们看到的是“添加题目很慢”；计时后发现，真正的问题是所有步骤被串在用户等待路径上。于是先通过乐观更新把交互反馈提前，再通过查询合并和快路径压缩持久化时间。</p>
+          <p>本地 PostgreSQL 随后暴露出云端实时服务成为开发环境的新主导延迟，因此引入兼容 Pusher 协议的本地 Soketi。系统变成“先本地、后持久化、再广播”后，性能问题也转化成分布式状态问题：锁属于谁、重排是否原子、自己的广播是否重复应用、断线期间遗漏的变化如何找回。</p>
+          <p>后续提交分别用作用域与事务、幂等 mutation ID、重连快照对账解决这些风险，最后通过双账号、断网和并发操作验证闭环。价值不只是一组更快的毫秒数，而是完成了诊断、重构、基础设施、正确性设计和验收的全流程。</p>
+        </div>
+        <h3 style="margin-top:28px">简历表述参考</h3>
+        <div class="quote">重构多人协作问卷编辑器的题目创建链路，引入乐观更新、临时 ID、串行持久化、幂等 mutation ID、事务化重排与断线快照对账；在本地 PostgreSQL 暖请求基准中将用户可见延迟中位数由 379.2 ms 降至 73.7 ms（-80.6%），服务端关键路径由 210.3 ms 降至 17.5 ms（-91.7%），并通过双账号并发与断线恢复测试验证最终一致性。</div>
+      </div></section>
+    </main>
+
+    <footer><div class="shell">边界：以上为同机开发环境相对基准，不等同于生产 SLA。下一步建议把本次验收矩阵固化为 Playwright 自动化测试。</div></footer>
+  </body>
+</html>
+
