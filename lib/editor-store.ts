@@ -76,7 +76,7 @@ export const useEditorStore = create<EditorStore>((set) => ({
         (question) => question.id === s.selectedId
       )
         ? s.selectedId
-        : (normalizedQuestions[0]?.id ?? null)
+        : null
 
       return {
         survey: { ...survey, questions: normalizedQuestions },
