@@ -10,6 +10,7 @@ import {
 } from "@/lib/pusher"
 
 const questionSchema = z.object({
+  operationId: z.string().uuid("无效的操作ID"),
   title: z.string().min(1, "题目不能为空"),
   description: z.string().optional(),
   type: z.enum([
@@ -68,6 +69,8 @@ function formatServerTiming(timings: PerformanceTimings): string {
     .join(", ")
 }
 
+class SurveyChangedDuringCreateError extends Error {}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -84,14 +87,11 @@ export async function POST(
   const { id } = await params
   const userId = session.user.id
 
-  const survey = await measure(timings, "permissionAndCount", () =>
+  const survey = await measure(timings, "permission", () =>
     prisma.survey.findUnique({
       where: { id },
       select: {
         userId: true,
-        _count: {
-          select: { questions: true },
-        },
       },
     })
   )
@@ -131,24 +131,40 @@ export async function POST(
     )
   }
 
-  const count = survey._count.questions
-  const targetOrder = parsed.data.order ?? count
-  const finalOrder = targetOrder < count ? targetOrder : count
-
-  const questionData = {
-    surveyId: id,
-    title: parsed.data.title,
-    description: parsed.data.description,
-    type: parsed.data.type,
-    required: parsed.data.required,
-    config: parsed.data.config ?? {},
-    order: finalOrder,
+  const operationId = parsed.data.operationId
+  let persistedResult: {
+    question: Awaited<ReturnType<typeof prisma.question.create>>
+    replayed: boolean
   }
 
-  // 末尾追加走单次写入快路径；只有中间插入才需要原子移位事务。
-  const question = await measure(timings, "database", () =>
-    targetOrder < count
-      ? prisma.$transaction(async (tx) => {
+  try {
+    persistedResult = await measure(timings, "database", () =>
+      prisma.$transaction(async (tx) => {
+        // 创建与重排共用问卷行锁，确保 count、移位和写入基于同一顺序快照。
+        const lockedSurveys = await tx.$queryRaw<Array<{ id: string }>>`
+          SELECT "id" FROM "Survey" WHERE "id" = ${id} FOR UPDATE
+        `
+        if (lockedSurveys.length === 0) {
+          throw new SurveyChangedDuringCreateError()
+        }
+
+        const existingQuestion = await tx.question.findUnique({
+          where: {
+            surveyId_clientMutationId: {
+              surveyId: id,
+              clientMutationId: operationId,
+            },
+          },
+        })
+        if (existingQuestion) {
+          return { question: existingQuestion, replayed: true }
+        }
+
+        const count = await tx.question.count({ where: { surveyId: id } })
+        const targetOrder = parsed.data.order ?? count
+        const finalOrder = targetOrder < count ? targetOrder : count
+
+        if (targetOrder < count) {
           await tx.question.updateMany({
             where: {
               surveyId: id,
@@ -158,14 +174,36 @@ export async function POST(
               order: { increment: 1 },
             },
           })
+        }
 
-          return tx.question.create({ data: questionData })
+        const question = await tx.question.create({
+          data: {
+            surveyId: id,
+            clientMutationId: operationId,
+            title: parsed.data.title,
+            description: parsed.data.description,
+            type: parsed.data.type,
+            required: parsed.data.required,
+            config: parsed.data.config ?? {},
+            order: finalOrder,
+          },
         })
-      : prisma.question.create({ data: questionData })
-  )
+
+        return { question, replayed: false }
+      })
+    )
+  } catch (error) {
+    if (error instanceof SurveyChangedDuringCreateError) {
+      return NextResponse.json({ error: "问卷不存在" }, { status: 404 })
+    }
+    throw error
+  }
+
+  const { question, replayed } = persistedResult
 
   const eventPayload = {
     requestId,
+    operationId,
     question: {
       id: question.id,
       type: question.type,
@@ -179,34 +217,38 @@ export async function POST(
     timestamp: new Date().toISOString(),
   }
 
-  // 当前用户无需等待第三方广播；失败会记录，协作者刷新/重连后仍以数据库为准。
-  after(async () => {
-    const pusherStartedAt = performance.now()
+  // 幂等重放不再次广播，避免协作者收到重复的题目创建事件。
+  if (!replayed) {
+    after(async () => {
+      const pusherStartedAt = performance.now()
 
-    try {
-      await pusherServer.trigger(
-        getSurveyChannel(id),
-        COLLABORATION_EVENTS.QUESTION_CREATED,
-        eventPayload
-      )
-      console.info("[Question Create Pusher Performance]", {
-        requestId,
-        provider: realtimeProvider,
-        duration: `${(performance.now() - pusherStartedAt).toFixed(1)}ms`,
-      })
-    } catch (error) {
-      console.error("[Question Create Pusher Error]", {
-        requestId,
-        provider: realtimeProvider,
-        error,
-      })
-    }
-  })
+      try {
+        await pusherServer.trigger(
+          getSurveyChannel(id),
+          COLLABORATION_EVENTS.QUESTION_CREATED,
+          eventPayload
+        )
+        console.info("[Question Create Pusher Performance]", {
+          requestId,
+          provider: realtimeProvider,
+          duration: `${(performance.now() - pusherStartedAt).toFixed(1)}ms`,
+        })
+      } catch (error) {
+        console.error("[Question Create Pusher Error]", {
+          requestId,
+          provider: realtimeProvider,
+          error,
+        })
+      }
+    })
+  }
 
   timings.total = performance.now() - requestStartedAt
 
   console.info("[Question Create Performance]", {
     requestId,
+    operationId,
+    replayed,
     ...Object.fromEntries(
       Object.entries(timings).map(([name, duration]) => [
         name,
@@ -216,10 +258,11 @@ export async function POST(
   })
 
   return NextResponse.json(question, {
-    status: 201,
+    status: replayed ? 200 : 201,
     headers: {
       "Server-Timing": formatServerTiming(timings),
       "X-Request-Id": requestId,
+      "X-Idempotent-Replay": replayed ? "true" : "false",
     },
   })
 }

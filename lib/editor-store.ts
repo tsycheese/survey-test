@@ -12,10 +12,11 @@ type EditorStore = {
   addQuestion: (question: Question) => void
   addPendingQuestion: (question: Question) => void
   confirmPendingQuestion: (
+    surveyId: string,
     temporaryId: string,
     persistedQuestion: Question
   ) => void
-  rollbackPendingQuestion: (temporaryId: string) => void
+  rollbackPendingQuestion: (surveyId: string, temporaryId: string) => void
   updateQuestion: (question: Question) => void
   deleteQuestion: (id: string) => void
   reorderQuestions: (fromIndex: number, toIndex: number) => void
@@ -78,14 +79,22 @@ export const useEditorStore = create<EditorStore>((set) => ({
             item.order === order ? item : { ...item, order }
           ),
         },
+        selectedId: question.id,
         pendingQuestionIds,
         dirty: true,
       }
     }),
 
-  confirmPendingQuestion: (temporaryId, persistedQuestion) =>
+  confirmPendingQuestion: (surveyId, temporaryId, persistedQuestion) =>
     set((s) => {
-      if (!s.survey) return s
+      if (
+        !s.survey ||
+        s.survey.id !== surveyId ||
+        !s.pendingQuestionIds.has(temporaryId) ||
+        !s.survey.questions.some((question) => question.id === temporaryId)
+      ) {
+        return s
+      }
 
       const pendingQuestionIds = new Set(s.pendingQuestionIds)
       pendingQuestionIds.delete(temporaryId)
@@ -103,15 +112,23 @@ export const useEditorStore = create<EditorStore>((set) => ({
               : question
           ),
         },
-        selectedId: persistedQuestion.id,
+        selectedId:
+          s.selectedId === temporaryId ? persistedQuestion.id : s.selectedId,
         pendingQuestionIds,
         dirty: true,
       }
     }),
 
-  rollbackPendingQuestion: (temporaryId) =>
+  rollbackPendingQuestion: (surveyId, temporaryId) =>
     set((s) => {
-      if (!s.survey) return s
+      if (
+        !s.survey ||
+        s.survey.id !== surveyId ||
+        !s.pendingQuestionIds.has(temporaryId) ||
+        !s.survey.questions.some((question) => question.id === temporaryId)
+      ) {
+        return s
+      }
 
       const pendingQuestionIds = new Set(s.pendingQuestionIds)
       pendingQuestionIds.delete(temporaryId)

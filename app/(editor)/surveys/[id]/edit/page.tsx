@@ -134,7 +134,9 @@ export default function EditSurveyPage() {
   // 用于串行化 lock/unlock 操作，防止快速点击时并发请求导致多题同时锁定
   const previousSelectedRef = useRef<string | null>(null)
   const lockQueueRef = useRef<Promise<void>>(Promise.resolve())
-  const questionCreationQueueRef = useRef<Promise<void>>(Promise.resolve())
+  const questionCreationQueuesRef = useRef<Map<string, Promise<void>>>(
+    new Map()
+  )
 
   // 协作功能（Presence Channel 自动处理加入/离开）
   const {
@@ -386,13 +388,17 @@ export default function EditSurveyPage() {
   }
 
   useEffect(() => {
+    const controller = new AbortController()
+
     // 检查权限
     async function checkPermission() {
       try {
         const [surveyRes, sessionRes] = await Promise.all([
-          fetch(`/api/surveys/${id}`),
-          fetch("/api/auth/session"),
+          fetch(`/api/surveys/${id}`, { signal: controller.signal }),
+          fetch("/api/auth/session", { signal: controller.signal }),
         ])
+
+        if (controller.signal.aborted) return
 
         if (!surveyRes.ok) {
           setPermission({
@@ -415,9 +421,12 @@ export default function EditSurveyPage() {
         let isCollaborator = false
         let canEdit = false
         if (userId && !isOwner) {
-          const collabRes = await fetch(`/api/surveys/${id}/collaborators`)
+          const collabRes = await fetch(`/api/surveys/${id}/collaborators`, {
+            signal: controller.signal,
+          })
           if (collabRes.ok) {
             const data = await collabRes.json()
+            if (controller.signal.aborted) return
             const myCollab = data.collaborators?.find(
               (c: { userId: string }) => c.userId === userId
             )
@@ -474,11 +483,10 @@ export default function EditSurveyPage() {
               })
             }
           }
-          if (initialLocked.size > 0) {
-            setLockedQuestions(initialLocked)
-          }
+          setLockedQuestions(initialLocked)
         }
       } catch {
+        if (controller.signal.aborted) return
         setPermission({
           canAccess: false,
           canEdit: false,
@@ -489,6 +497,7 @@ export default function EditSurveyPage() {
     }
 
     checkPermission()
+    return () => controller.abort()
   }, [id, setSurvey, setLockedQuestions])
 
   async function handleSaveTitleDesc(title: string, description: string) {
@@ -529,14 +538,16 @@ export default function EditSurveyPage() {
     showSuccessToast = false
   ): Promise<void> {
     const latestSurvey = useEditorStore.getState().survey
-    if (!latestSurvey) return Promise.resolve()
+    if (!latestSurvey || latestSurvey.id !== id) return Promise.resolve()
 
+    const targetSurveyId = latestSurvey.id
     const index = Math.min(
       Math.max(requestedIndex, 0),
       latestSurvey.questions.length
     )
-    const requestId = crypto.randomUUID()
-    const temporaryId = `temporary-${requestId}`
+    const operationId = crypto.randomUUID()
+    const requestId = operationId
+    const temporaryId = `temporary-${operationId}`
     const clickStartedAt = getClientPerformanceTime()
     const questionCountBefore = latestSurvey.questions.length
     const visibilityStateAtClick = document.visibilityState
@@ -551,22 +562,51 @@ export default function EditSurveyPage() {
 
     const persistQuestion = async () => {
       const requestStartedAt = getClientPerformanceTime()
+      let saveAttempts = 0
 
       try {
-        const res = await fetch(`/api/surveys/${id}/questions`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Request-Id": requestId,
-          },
-          body: JSON.stringify({
-            title: question.title,
-            type: question.type,
-            required: question.required,
-            order: index,
-            config: question.config,
-          }),
+        const requestBody = JSON.stringify({
+          operationId,
+          title: question.title,
+          type: question.type,
+          required: question.required,
+          order: index,
+          config: question.config,
         })
+        const sendCreateRequest = async (): Promise<Response> => {
+          let lastNetworkError: unknown
+
+          for (let attempt = 1; attempt <= 3; attempt += 1) {
+            saveAttempts = attempt
+
+            try {
+              const response = await fetch(
+                `/api/surveys/${targetSurveyId}/questions`,
+                {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "X-Request-Id": requestId,
+                  },
+                  body: requestBody,
+                }
+              )
+
+              if (response.ok || response.status < 500 || attempt === 3) {
+                return response
+              }
+            } catch (error) {
+              lastNetworkError = error
+              if (attempt === 3) throw error
+            }
+
+            await new Promise((resolve) => setTimeout(resolve, attempt * 150))
+          }
+
+          throw lastNetworkError ?? new Error("创建题目请求失败")
+        }
+
+        const res = await sendCreateRequest()
         const responseReceivedAt = getClientPerformanceTime()
 
         if (!res.ok) {
@@ -576,18 +616,27 @@ export default function EditSurveyPage() {
         const created = (await res.json()) as { id: string; order: number }
         const responseParsedAt = getClientPerformanceTime()
 
-        confirmPendingQuestion(temporaryId, {
-          ...question,
-          id: created.id,
-          order: created.order,
-        })
+        const currentEditorState = useEditorStore.getState()
+        const canApplyToCurrentEditor =
+          currentEditorState.survey?.id === targetSurveyId &&
+          currentEditorState.pendingQuestionIds.has(temporaryId)
+
+        if (canApplyToCurrentEditor) {
+          confirmPendingQuestion(targetSurveyId, temporaryId, {
+            ...question,
+            id: created.id,
+            order: created.order,
+          })
+        }
         const confirmedAt = getClientPerformanceTime()
         const [optimisticPaintedAt, confirmedPaintedAt] = await Promise.all([
           optimisticPaintPromise,
-          waitForNextPaint(),
+          canApplyToCurrentEditor
+            ? waitForNextPaint()
+            : Promise.resolve(confirmedAt),
         ])
 
-        if (showSuccessToast) {
+        if (showSuccessToast && canApplyToCurrentEditor) {
           setActiveTab("question")
           toast.success("题目已添加")
         }
@@ -630,30 +679,51 @@ export default function EditSurveyPage() {
           questionType: type,
           questionCountBefore,
           requestedIndex: index,
+          saveAttempts,
+          idempotentReplay: res.headers.get("x-idempotent-replay") === "true",
           visibilityStateAtClick,
           visibilityStateAtPaint: document.visibilityState,
         })
         console.info("Request ID:", requestId)
         console.groupEnd()
       } catch (error) {
-        rollbackPendingQuestion(temporaryId)
-        await waitForNextPaint()
-        console.error("[Question Add Performance] 保存失败并已回滚", {
+        const currentEditorState = useEditorStore.getState()
+        const canApplyToCurrentEditor =
+          currentEditorState.survey?.id === targetSurveyId &&
+          currentEditorState.pendingQuestionIds.has(temporaryId)
+
+        if (canApplyToCurrentEditor) {
+          rollbackPendingQuestion(targetSurveyId, temporaryId)
+          await waitForNextPaint()
+        }
+        console.error("[Question Add Performance] 保存失败", {
           requestId,
+          saveAttempts,
+          rolledBack: canApplyToCurrentEditor,
           duration: `${(getClientPerformanceTime() - clickStartedAt).toFixed(
             1
           )}ms`,
           error,
         })
-        toast.error("添加失败，已撤销临时题目")
+        if (canApplyToCurrentEditor) {
+          toast.error("添加失败，已撤销临时题目")
+        }
       }
     }
 
-    const queuedOperation = questionCreationQueueRef.current.then(
-      persistQuestion,
-      persistQuestion
-    )
-    questionCreationQueueRef.current = queuedOperation
+    const currentQueue =
+      questionCreationQueuesRef.current.get(targetSurveyId) ?? Promise.resolve()
+    const queuedOperation = currentQueue.then(persistQuestion, persistQuestion)
+    questionCreationQueuesRef.current.set(targetSurveyId, queuedOperation)
+    const clearCompletedQueue = () => {
+      if (
+        questionCreationQueuesRef.current.get(targetSurveyId) ===
+        queuedOperation
+      ) {
+        questionCreationQueuesRef.current.delete(targetSurveyId)
+      }
+    }
+    void queuedOperation.then(clearCompletedQueue, clearCompletedQueue)
     return queuedOperation
   }
 
