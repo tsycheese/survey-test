@@ -1,6 +1,9 @@
 import { auth } from "@/lib/auth"
 import { scheduleSurveyBroadcast } from "@/lib/realtime-broadcast"
-import { COLLABORATION_EVENTS } from "@/lib/realtime-shared"
+import {
+  COLLABORATION_EVENTS,
+  getRealtimeClientIdFromRequest,
+} from "@/lib/realtime-shared"
 import { prisma } from "@/prisma"
 import { NextResponse } from "next/server"
 import { z } from "zod"
@@ -94,6 +97,7 @@ export async function POST(request: Request) {
         questionId,
         userId: session.user.id,
         unlockedAt: new Date().toISOString(),
+        clientId: getRealtimeClientIdFromRequest(request),
       },
     })
 

@@ -3,7 +3,10 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/prisma"
 import { z } from "zod"
 import { scheduleSurveyBroadcast } from "@/lib/realtime-broadcast"
-import { COLLABORATION_EVENTS } from "@/lib/realtime-shared"
+import {
+  COLLABORATION_EVENTS,
+  getRealtimeClientIdFromRequest,
+} from "@/lib/realtime-shared"
 
 const updateQuestionSchema = z.object({
   title: z.string().min(1).optional(),
@@ -110,6 +113,7 @@ export async function PUT(
         config: question.config as Record<string, unknown>,
       },
       fromUserId: userId,
+      clientId: getRealtimeClientIdFromRequest(request),
     },
   })
 
@@ -117,7 +121,7 @@ export async function PUT(
 }
 
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string; qid: string }> }
 ) {
   const session = await auth()
@@ -160,6 +164,7 @@ export async function DELETE(
     payload: {
       questionId: qid,
       fromUserId: userId,
+      clientId: getRealtimeClientIdFromRequest(request),
     },
   })
 

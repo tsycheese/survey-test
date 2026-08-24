@@ -8,6 +8,7 @@ type EditorStore = {
   dirty: boolean
 
   setSurvey: (survey: Survey) => void
+  reconcileSurvey: (survey: Survey) => void
   selectQuestion: (id: string | null) => void
   addQuestion: (question: Question) => void
   addPendingQuestion: (question: Question) => void
@@ -44,6 +45,42 @@ export const useEditorStore = create<EditorStore>((set) => ({
         selectedId: null,
         pendingQuestionIds,
         dirty: false,
+      }
+    }),
+
+  reconcileSurvey: (survey) =>
+    set((s) => {
+      if (!s.survey || s.survey.id !== survey.id) return s
+
+      const pendingQuestions = s.survey.questions.filter((question) =>
+        s.pendingQuestionIds.has(question.id)
+      )
+      const questions = [...survey.questions]
+
+      for (const pendingQuestion of pendingQuestions) {
+        if (questions.some((question) => question.id === pendingQuestion.id)) {
+          continue
+        }
+
+        const insertionIndex = Math.min(
+          Math.max(pendingQuestion.order, 0),
+          questions.length
+        )
+        questions.splice(insertionIndex, 0, pendingQuestion)
+      }
+
+      const normalizedQuestions = questions.map((question, order) =>
+        question.order === order ? question : { ...question, order }
+      )
+      const selectedId = normalizedQuestions.some(
+        (question) => question.id === s.selectedId
+      )
+        ? s.selectedId
+        : (normalizedQuestions[0]?.id ?? null)
+
+      return {
+        survey: { ...survey, questions: normalizedQuestions },
+        selectedId,
       }
     }),
 
@@ -99,10 +136,12 @@ export const useEditorStore = create<EditorStore>((set) => ({
       const pendingQuestionIds = new Set(s.pendingQuestionIds)
       pendingQuestionIds.delete(temporaryId)
 
-      return {
-        survey: {
-          ...s.survey,
-          questions: s.survey.questions.map((question) =>
+      const persistedQuestionAlreadyExists = s.survey.questions.some(
+        (question) => question.id === persistedQuestion.id
+      )
+      const questions = persistedQuestionAlreadyExists
+        ? s.survey.questions.filter((question) => question.id !== temporaryId)
+        : s.survey.questions.map((question) =>
             question.id === temporaryId
               ? {
                   ...question,
@@ -110,6 +149,13 @@ export const useEditorStore = create<EditorStore>((set) => ({
                   order: persistedQuestion.order,
                 }
               : question
+          )
+
+      return {
+        survey: {
+          ...s.survey,
+          questions: questions.map((question, order) =>
+            question.order === order ? question : { ...question, order }
           ),
         },
         selectedId:

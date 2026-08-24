@@ -3,7 +3,10 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/prisma"
 import { z } from "zod"
 import { scheduleSurveyBroadcast } from "@/lib/realtime-broadcast"
-import { COLLABORATION_EVENTS } from "@/lib/realtime-shared"
+import {
+  COLLABORATION_EVENTS,
+  getRealtimeClientIdFromRequest,
+} from "@/lib/realtime-shared"
 
 const reorderSchema = z
   .object({
@@ -140,6 +143,7 @@ export async function PUT(
         order: q.order,
       })),
       fromUserId: session.user.id,
+      clientId: getRealtimeClientIdFromRequest(request),
     },
   })
 

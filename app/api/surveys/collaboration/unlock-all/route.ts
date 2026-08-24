@@ -1,6 +1,9 @@
 import { auth } from "@/lib/auth"
 import { scheduleSurveyBroadcast } from "@/lib/realtime-broadcast"
-import { COLLABORATION_EVENTS } from "@/lib/realtime-shared"
+import {
+  COLLABORATION_EVENTS,
+  getRealtimeClientIdFromRequest,
+} from "@/lib/realtime-shared"
 import { prisma } from "@/prisma"
 import { NextResponse } from "next/server"
 
@@ -47,7 +50,7 @@ export async function POST(request: Request) {
     const targetUserId = userId || session.user.id
 
     // 解锁该用户所有锁定的题目
-    await prisma.question.updateMany({
+    const updateResult = await prisma.question.updateMany({
       where: {
         surveyId,
         lockedBy: targetUserId,
@@ -58,17 +61,20 @@ export async function POST(request: Request) {
       },
     })
 
-    // 数据库解锁成功即可响应；实时通知在响应后发送。
-    scheduleSurveyBroadcast({
-      surveyId,
-      event: COLLABORATION_EVENTS.QUESTIONS_UNLOCK_ALL,
-      operation: "questions-unlock-all",
-      payload: {
-        userId: targetUserId,
-        unlockedBy: session.user.id,
-        unlockedAt: new Date().toISOString(),
-      },
-    })
+    // 重复的成员离开通知可能由多个客户端同时处理；没有实际写入时不重复广播。
+    if (updateResult.count > 0) {
+      scheduleSurveyBroadcast({
+        surveyId,
+        event: COLLABORATION_EVENTS.QUESTIONS_UNLOCK_ALL,
+        operation: "questions-unlock-all",
+        payload: {
+          userId: targetUserId,
+          unlockedBy: session.user.id,
+          unlockedAt: new Date().toISOString(),
+          clientId: getRealtimeClientIdFromRequest(request),
+        },
+      })
+    }
 
     return NextResponse.json({ success: true })
   } catch (error) {

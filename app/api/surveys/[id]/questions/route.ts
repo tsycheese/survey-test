@@ -8,6 +8,7 @@ import {
   getSurveyChannel,
   COLLABORATION_EVENTS,
 } from "@/lib/pusher"
+import { getRealtimeClientIdFromRequest } from "@/lib/realtime-shared"
 
 const questionSchema = z.object({
   operationId: z.string().uuid("无效的操作ID"),
@@ -76,6 +77,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const requestId = request.headers.get("x-request-id") ?? crypto.randomUUID()
+  const clientId = getRealtimeClientIdFromRequest(request)
   const requestStartedAt = performance.now()
   const timings: PerformanceTimings = {}
 
@@ -203,6 +205,7 @@ export async function POST(
 
   const eventPayload = {
     requestId,
+    clientId,
     operationId,
     question: {
       id: question.id,

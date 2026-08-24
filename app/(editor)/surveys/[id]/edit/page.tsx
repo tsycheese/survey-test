@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { toast } from "sonner"
 import {
@@ -59,9 +59,9 @@ import type {
 } from "@/lib/questions/types"
 import {
   COLLABORATION_EVENTS,
+  REALTIME_CLIENT_ID_HEADER,
   type LockInfo,
-  type QuestionData,
-  type SurveyData,
+  type SyncEventData,
 } from "@/lib/realtime-shared"
 import { QUESTION_CATEGORIES } from "@/lib/questions/types"
 import { SurveySettingsPanel } from "@/components/editor/survey-settings-panel"
@@ -89,6 +89,79 @@ function waitForNextPaint(): Promise<number> {
   })
 }
 
+type SurveyQuestionSnapshot = {
+  id: string
+  type: string
+  title: string
+  description: string | null
+  required: boolean
+  order: number
+  config: Record<string, unknown> | null
+  lockedBy?: string | null
+  lockedAt?: string | null
+}
+
+type SurveySnapshot = {
+  id: string
+  title: string
+  description: string | null
+  published: boolean
+  userId: string
+  settings?: SurveySettings
+  questions?: SurveyQuestionSnapshot[]
+}
+
+function toEditorSurvey(snapshot: SurveySnapshot): Survey {
+  return {
+    id: snapshot.id,
+    title: snapshot.title,
+    description: snapshot.description,
+    published: snapshot.published,
+    userId: snapshot.userId,
+    settings: snapshot.settings,
+    questions: (snapshot.questions ?? []).map(
+      (question) =>
+        ({
+          id: question.id,
+          type: question.type,
+          title: question.title,
+          description: question.description ?? undefined,
+          required: question.required,
+          order: question.order,
+          config: question.config ?? {},
+        }) as Question
+    ),
+  }
+}
+
+function toLockedQuestions(
+  snapshot: SurveySnapshot,
+  currentUserId: string | null
+): Map<string, LockInfo> {
+  const locks = new Map<string, LockInfo>()
+
+  for (const question of snapshot.questions ?? []) {
+    if (!question.lockedBy || question.lockedBy === currentUserId) continue
+    locks.set(question.id, {
+      questionId: question.id,
+      userId: question.lockedBy,
+      userName: null,
+      lockedAt: question.lockedAt
+        ? new Date(question.lockedAt).toISOString()
+        : new Date().toISOString(),
+    })
+  }
+
+  return locks
+}
+
+function getRealtimeRequestHeaders(clientId: string | null) {
+  return {
+    "Content-Type": "application/json",
+    ...(clientId ? { [REALTIME_CLIENT_ID_HEADER]: clientId } : {}),
+  }
+}
+
 export default function EditSurveyPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
@@ -97,6 +170,7 @@ export default function EditSurveyPage() {
     selectedId,
     pendingQuestionIds,
     setSurvey,
+    reconcileSurvey,
     selectQuestion,
     addQuestion,
     addPendingQuestion,
@@ -137,13 +211,21 @@ export default function EditSurveyPage() {
   const questionCreationQueuesRef = useRef<Map<string, Promise<void>>>(
     new Map()
   )
+  const reconciliationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  )
+  const reconciliationControllerRef = useRef<AbortController | null>(null)
+  const reconciliationSequenceRef = useRef(0)
 
   // 协作功能（Presence Channel 自动处理加入/离开）
   const {
     members,
     lockedQuestions,
     isConnected,
+    clientId,
+    subscriptionEpoch,
     unlockQuestion,
+    reconcileLockedQuestions,
     onEvent,
     setLockedQuestions,
   } = useSurveyCollaboration(
@@ -151,133 +233,130 @@ export default function EditSurveyPage() {
     permission.userId
   )
 
-  // 监听远程内容变更
-  useEffect(() => {
-    if (!permission.canAccess || !survey) return
+  const reconcileFromServer = useCallback(
+    async (reason: string) => {
+      if (!permission.canAccess) return
 
-    // 监听题目更新
-    const unsubscribeQuestionUpdated = onEvent(
-      COLLABORATION_EVENTS.QUESTION_UPDATED,
-      (data: unknown) => {
-        const { question, fromUserId } = data as {
-          question: QuestionData
-          fromUserId: string
-        }
-        // 忽略自己触发的更新
-        if (fromUserId === permission.userId) return
+      reconciliationControllerRef.current?.abort()
+      const controller = new AbortController()
+      reconciliationControllerRef.current = controller
+      const sequence = ++reconciliationSequenceRef.current
+      const snapshotStartedAt = Date.now()
+      const startedAt = getClientPerformanceTime()
 
-        updateQuestion({
-          ...question,
-          config: question.config,
-        } as Question)
-
-        toast.info("题目已被其他协作者更新", {
-          duration: 2000,
+      try {
+        const response = await fetch(`/api/surveys/${id}`, {
+          signal: controller.signal,
         })
-      }
-    )
+        if (!response.ok) return
 
-    // 监听题目创建
-    const unsubscribeQuestionCreated = onEvent(
-      COLLABORATION_EVENTS.QUESTION_CREATED,
-      (data: unknown) => {
-        const { question, fromUserId } = data as {
-          question: QuestionData
-          fromUserId: string
+        const snapshot = (await response.json()) as SurveySnapshot
+        if (
+          controller.signal.aborted ||
+          sequence !== reconciliationSequenceRef.current ||
+          useEditorStore.getState().survey?.id !== id
+        ) {
+          return
         }
-        if (fromUserId === permission.userId) return
 
-        // API 已将数据库中 order >= 新题目 order 的题目移位，
-        // 接收端本地状态也需要同步移位以避免 order 碰撞
-        const shifted = survey.questions.map((q) => ({
-          ...q,
-          order: q.order >= question.order ? q.order + 1 : q.order,
-        }))
-        const merged = [
-          ...shifted,
-          { ...question, config: question.config } as Question,
-        ]
-        merged.sort((a, b) => a.order - b.order)
-        merged.forEach((q, idx) => {
-          q.order = idx
-        })
-        setSurvey({ ...survey, questions: merged })
-
-        toast.info("有新题目添加", { duration: 2000 })
-      }
-    )
-
-    // 监听题目删除
-    const unsubscribeQuestionDeleted = onEvent(
-      COLLABORATION_EVENTS.QUESTION_DELETED,
-      (data: unknown) => {
-        const { questionId, fromUserId } = data as {
-          questionId: string
-          fromUserId: string
-        }
-        if (fromUserId === permission.userId) return
-
-        deleteQuestion(questionId)
-        toast.info("有题目被删除", { duration: 2000 })
-      }
-    )
-
-    // 监听题目重排
-    const unsubscribeQuestionsReordered = onEvent(
-      COLLABORATION_EVENTS.QUESTIONS_REORDERED,
-      (data: unknown) => {
-        const { questions: reorderedQuestions, fromUserId } = data as {
-          questions: { id: string; order: number }[]
-          fromUserId: string
-        }
-        if (fromUserId === permission.userId) return
-
-        // 根据新顺序重新排序
-        const orderMap = new Map(reorderedQuestions.map((q) => [q.id, q.order]))
-        const newQuestions = [...survey.questions].sort(
-          (a, b) =>
-            (orderMap.get(a.id) ?? a.order) - (orderMap.get(b.id) ?? b.order)
+        reconcileSurvey(toEditorSurvey(snapshot))
+        reconcileLockedQuestions(
+          toLockedQuestions(snapshot, permission.userId),
+          snapshotStartedAt
         )
-        newQuestions.forEach((q, idx) => {
-          q.order = idx
+        console.info("[Realtime Snapshot Reconciliation]", {
+          reason,
+          duration: `${(getClientPerformanceTime() - startedAt).toFixed(1)}ms`,
+          questionCount: snapshot.questions?.length ?? 0,
         })
-        setSurvey({ ...survey, questions: newQuestions })
+      } catch (error) {
+        if (controller.signal.aborted) return
+        console.error("[Realtime Snapshot Reconciliation Error]", {
+          reason,
+          error,
+        })
       }
-    )
+    },
+    [
+      id,
+      permission.canAccess,
+      permission.userId,
+      reconcileLockedQuestions,
+      reconcileSurvey,
+    ]
+  )
 
-    // 监听问卷更新
-    const unsubscribeSurveyUpdated = onEvent(
-      COLLABORATION_EVENTS.SURVEY_UPDATED,
-      (data: unknown) => {
-        const { survey: surveyData, fromUserId } = data as {
-          survey: SurveyData
-          fromUserId: string
+  const scheduleReconciliation = useCallback(
+    (reason: string, delay = 40) => {
+      if (reconciliationTimerRef.current) {
+        clearTimeout(reconciliationTimerRef.current)
+      }
+      reconciliationTimerRef.current = setTimeout(() => {
+        reconciliationTimerRef.current = null
+        void reconcileFromServer(reason)
+      }, delay)
+    },
+    [reconcileFromServer]
+  )
+
+  // 实时事件只作为“数据已失效”的提示，最终状态统一从数据库快照恢复。
+  // 这样重复事件、乱序事件和事件间隙都不会在旧闭包上叠加出错误状态。
+  useEffect(() => {
+    if (!permission.canAccess) return
+
+    const subscriptions = [
+      [COLLABORATION_EVENTS.QUESTION_UPDATED, "题目已被其他协作者更新"],
+      [COLLABORATION_EVENTS.QUESTION_CREATED, "有新题目添加"],
+      [COLLABORATION_EVENTS.QUESTION_DELETED, "有题目被删除"],
+      [COLLABORATION_EVENTS.QUESTIONS_REORDERED, null],
+      [COLLABORATION_EVENTS.SURVEY_UPDATED, "问卷信息已更新"],
+    ] as const
+
+    const unsubscribers = subscriptions.map(([event, message]) =>
+      onEvent(event, (data) => {
+        scheduleReconciliation(event)
+        const eventClientId = (data as SyncEventData | undefined)?.clientId
+        if (message && eventClientId !== clientId) {
+          toast.info(message, { duration: 2000 })
         }
-        if (fromUserId === permission.userId) return
-
-        updateSurveyInfo(surveyData.title, surveyData.description ?? "")
-        toast.info("问卷信息已更新", { duration: 2000 })
-      }
+      })
     )
 
-    return () => {
-      unsubscribeQuestionUpdated()
-      unsubscribeQuestionCreated()
-      unsubscribeQuestionDeleted()
-      unsubscribeQuestionsReordered()
-      unsubscribeSurveyUpdated()
+    return () => unsubscribers.forEach((unsubscribe) => unsubscribe())
+  }, [clientId, onEvent, permission.canAccess, scheduleReconciliation])
+
+  // Presence 重新订阅成功代表连接可能经历过中断；每次都重新对账。
+  useEffect(() => {
+    if (subscriptionEpoch === 0) return
+    scheduleReconciliation("subscription-succeeded", 0)
+  }, [scheduleReconciliation, subscriptionEpoch])
+
+  // 浏览器恢复联网或标签页重新可见时补一次对账，覆盖广播失败与休眠场景。
+  useEffect(() => {
+    const handleOnline = () => scheduleReconciliation("browser-online", 0)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        scheduleReconciliation("page-visible", 0)
+      }
     }
-  }, [
-    permission.canAccess,
-    permission.userId,
-    survey,
-    onEvent,
-    updateQuestion,
-    addQuestion,
-    deleteQuestion,
-    setSurvey,
-    updateSurveyInfo,
-  ])
+
+    window.addEventListener("online", handleOnline)
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+    return () => {
+      window.removeEventListener("online", handleOnline)
+      document.removeEventListener("visibilitychange", handleVisibilityChange)
+    }
+  }, [scheduleReconciliation])
+
+  useEffect(
+    () => () => {
+      if (reconciliationTimerRef.current) {
+        clearTimeout(reconciliationTimerRef.current)
+      }
+      reconciliationControllerRef.current?.abort()
+    },
+    [id]
+  )
 
   // 选中题目时自动切换到题目面板
   const handleSelectQuestion = (id: string) => {
@@ -374,7 +453,7 @@ export default function EditSurveyPage() {
     try {
       const res = await fetch(`/api/surveys/${id}/questions/reorder`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: getRealtimeRequestHeaders(clientId),
         body: JSON.stringify({
           questions: newQuestions.map((q) => ({ id: q.id, order: q.order })),
         }),
@@ -449,41 +528,9 @@ export default function EditSurveyPage() {
         })
 
         if (canAccess) {
-          setSurvey({
-            id: surveyData.id,
-            title: surveyData.title,
-            description: surveyData.description,
-            published: surveyData.published,
-            userId: surveyData.userId,
-            settings: surveyData.settings,
-            questions: (surveyData.questions ?? []).map(
-              (q: Record<string, unknown>) => ({
-                id: q.id,
-                type: q.type,
-                title: q.title,
-                description: q.description,
-                required: q.required,
-                order: q.order,
-                config: q.config ?? {},
-              })
-            ) as Question[],
-          })
-
-          // 同步数据库中的锁定状态到前端（防止 Pusher 事件丢失导致状态不一致）
-          const initialLocked = new Map<string, LockInfo>()
-          for (const q of surveyData.questions ?? []) {
-            if (q.lockedBy && q.lockedBy !== userId) {
-              initialLocked.set(q.id as string, {
-                questionId: q.id as string,
-                userId: q.lockedBy as string,
-                userName: null,
-                lockedAt: q.lockedAt
-                  ? new Date(q.lockedAt as string).toISOString()
-                  : new Date().toISOString(),
-              })
-            }
-          }
-          setLockedQuestions(initialLocked)
+          const snapshot = surveyData as SurveySnapshot
+          setSurvey(toEditorSurvey(snapshot))
+          setLockedQuestions(toLockedQuestions(snapshot, userId))
         }
       } catch {
         if (controller.signal.aborted) return
@@ -503,7 +550,7 @@ export default function EditSurveyPage() {
   async function handleSaveTitleDesc(title: string, description: string) {
     const res = await fetch(`/api/surveys/${id}`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: getRealtimeRequestHeaders(clientId),
       body: JSON.stringify({
         title,
         description: description || null,
@@ -520,7 +567,7 @@ export default function EditSurveyPage() {
     setSurvey({ ...survey, settings: newSettings })
     const res = await fetch(`/api/surveys/${id}`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: getRealtimeRequestHeaders(clientId),
       body: JSON.stringify({
         title: survey.title,
         description: survey.description,
@@ -585,7 +632,7 @@ export default function EditSurveyPage() {
                 {
                   method: "POST",
                   headers: {
-                    "Content-Type": "application/json",
+                    ...getRealtimeRequestHeaders(clientId),
                     "X-Request-Id": requestId,
                   },
                   body: requestBody,
@@ -751,7 +798,7 @@ export default function EditSurveyPage() {
         const description = newDescription ?? survey.description ?? ""
         const res = await fetch(`/api/surveys/${id}`, {
           method: "PUT",
-          headers: { "Content-Type": "application/json" },
+          headers: getRealtimeRequestHeaders(clientId),
           body: JSON.stringify({
             title,
             description: description || null,
@@ -767,8 +814,9 @@ export default function EditSurveyPage() {
       for (const q of questions) {
         const res = await fetch(`/api/surveys/${id}/questions`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: getRealtimeRequestHeaders(clientId),
           body: JSON.stringify({
+            operationId: crypto.randomUUID(),
             title: q.title,
             type: q.type,
             required: q.required,
@@ -791,6 +839,7 @@ export default function EditSurveyPage() {
   async function handleDeleteQuestion(qid: string) {
     const res = await fetch(`/api/surveys/${id}/questions/${qid}`, {
       method: "DELETE",
+      headers: getRealtimeRequestHeaders(clientId),
     })
     if (res.ok) {
       deleteQuestion(qid)
@@ -810,7 +859,7 @@ export default function EditSurveyPage() {
     updateQuestion(updated)
     const res = await fetch(`/api/surveys/${id}/questions/${updated.id}`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: getRealtimeRequestHeaders(clientId),
       body: JSON.stringify({
         title: updated.title,
         description: updated.description,
@@ -853,7 +902,7 @@ export default function EditSurveyPage() {
         if (!lockInfo || lockInfo.userId === permission.userId) {
           const response = await fetch("/api/surveys/collaboration/lock", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: getRealtimeRequestHeaders(clientId),
             body: JSON.stringify({ surveyId: id, questionId }),
           })
 

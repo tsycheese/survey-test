@@ -17,7 +17,7 @@ export function SidebarPalette({ surveyId }: { surveyId: string }) {
     const res = await fetch(`/api/surveys/${surveyId}/questions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(question),
+      body: JSON.stringify({ ...question, operationId: crypto.randomUUID() }),
     })
     if (!res.ok) {
       toast.error("添加题目失败")

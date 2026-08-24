@@ -2,6 +2,15 @@
 export const getSurveyChannel = (surveyId: string) =>
   `presence-survey-${surveyId}`
 
+export const REALTIME_CLIENT_ID_HEADER = "x-realtime-client-id"
+
+export function getRealtimeClientIdFromRequest(
+  request: Request
+): string | undefined {
+  const clientId = request.headers.get(REALTIME_CLIENT_ID_HEADER)?.trim()
+  return clientId && clientId.length <= 128 ? clientId : undefined
+}
+
 // 事件名称常量
 export const COLLABORATION_EVENTS = {
   // 成员管理
@@ -62,6 +71,7 @@ export type SurveyData = {
 // 实时同步事件数据类型
 export type SyncEventData = {
   requestId?: string
+  clientId?: string
   questionId?: string
   question?: QuestionData
   questions?: QuestionData[]
