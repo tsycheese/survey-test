@@ -1810,6 +1810,13 @@ function SortableQuestionCard({
     <div
       ref={setNodeRef}
       style={style}
+      data-question-id={question.id}
+      data-question-order={idx}
+      data-selected={selectedId === question.id ? "true" : "false"}
+      data-pending={isPending ? "true" : "false"}
+      data-lock-state={
+        isLockedByMe ? "mine" : isLockedByOther ? "other" : "none"
+      }
       className={cn(
         "group relative flex w-full items-start transition-colors",
         selectedId === question.id ? "bg-primary/5" : "hover:bg-muted/5",

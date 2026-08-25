@@ -5,6 +5,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
+    "dev:e2e": "next dev --hostname 127.0.0.1 --port 3310",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
@@ -15,7 +16,9 @@
     "db:push": "prisma db push",
     "realtime:up": "docker compose -f compose.realtime.yml up -d",
     "realtime:down": "docker compose -f compose.realtime.yml down",
-    "realtime:logs": "docker compose -f compose.realtime.yml logs -f soketi"
+    "realtime:logs": "docker compose -f compose.realtime.yml logs -f soketi",
+    "test:e2e": "pnpm realtime:up && node ./node_modules/@playwright/test/cli.js test",
+    "test:e2e:ui": "pnpm realtime:up && node ./node_modules/@playwright/test/cli.js test --ui"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^2.0.38",
@@ -66,6 +69,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
+    "@playwright/test": "^1.62.1",
     "@prisma/client-runtime-utils": "7.6.0",
     "@tailwindcss/postcss": "^4.2.1",
     "@types/bcryptjs": "^3.0.0",

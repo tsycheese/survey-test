@@ -18,7 +18,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "未登录" }, { status: 401 })
     }
 
-    const { surveyId, userId } = await request.json()
+    const body = (await request.json().catch(() => null)) as {
+      surveyId?: unknown
+      userId?: unknown
+    } | null
+
+    if (!body || typeof body.surveyId !== "string") {
+      return NextResponse.json({ error: "请求体格式不正确" }, { status: 400 })
+    }
+
+    const surveyId = body.surveyId
+    const userId = typeof body.userId === "string" ? body.userId : undefined
 
     if (!surveyId) {
       return NextResponse.json({ error: "缺少问卷ID" }, { status: 400 })
