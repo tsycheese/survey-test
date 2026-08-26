@@ -366,6 +366,74 @@ test.describe("问卷双账号协作", () => {
       .toEqual({ settings: { showQuestionNumber: false } })
   })
 
+  test("问卷详情冲突时可以恢复服务器版本或保留本地修改", async ({
+    scenario,
+    ownerPage,
+    collaboratorPage,
+  }) => {
+    await openEditorPair(
+      ownerPage,
+      collaboratorPage,
+      scenario.surveyId,
+      scenario.firstQuestionId
+    )
+
+    const titleEditor = collaboratorPage.locator("header input").first()
+    await prisma.survey.update({
+      where: { id: scenario.surveyId },
+      data: {
+        title: "服务器版本一",
+        detailsRevision: { increment: 1 },
+      },
+    })
+
+    await titleEditor.fill("稍后放弃的本地标题")
+    await titleEditor.blur()
+    await expect(
+      collaboratorPage.getByRole("button", { name: "保留我的修改" })
+    ).toBeVisible()
+    await expect(
+      collaboratorPage.getByRole("button", { name: "使用服务器版本" })
+    ).toBeVisible()
+    await expect(titleEditor).toHaveValue("稍后放弃的本地标题")
+
+    await collaboratorPage
+      .getByRole("button", { name: "使用服务器版本" })
+      .click()
+    await expect(titleEditor).toHaveValue("服务器版本一")
+    await expect(
+      collaboratorPage.getByRole("button", { name: "保留我的修改" })
+    ).toHaveCount(0)
+
+    await prisma.survey.update({
+      where: { id: scenario.surveyId },
+      data: {
+        title: "服务器版本二",
+        detailsRevision: { increment: 1 },
+      },
+    })
+
+    await titleEditor.fill("最终保留的本地标题")
+    await titleEditor.blur()
+    await expect(
+      collaboratorPage.getByRole("button", { name: "保留我的修改" })
+    ).toBeVisible()
+    await collaboratorPage.getByRole("button", { name: "保留我的修改" }).click()
+
+    await expect(
+      collaboratorPage.getByText("已保存", { exact: true })
+    ).toBeVisible()
+    await expect(titleEditor).toHaveValue("最终保留的本地标题")
+    await expect
+      .poll(() =>
+        prisma.survey.findUnique({
+          where: { id: scenario.surveyId },
+          select: { title: true, detailsRevision: true },
+        })
+      )
+      .toEqual({ title: "最终保留的本地标题", detailsRevision: 3 })
+  })
+
   test("并发修改问卷详情时只有一个修订可以成功", async ({
     scenario,
     ownerPage,

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { toast } from "sonner"
 import {
@@ -46,7 +46,6 @@ import { cn } from "@/lib/utils"
 import { useEditorStore } from "@/lib/editor-store"
 import {
   editorMutationKey,
-  getEditorMutationHeaders,
   KeyedMutationCoordinator,
   type EditorMutationState,
 } from "@/lib/editor-mutations"
@@ -84,6 +83,7 @@ import { useSurveyReconciliation } from "@/hooks/use-survey-reconciliation"
 import { useSurveyDetailsMutation } from "@/hooks/use-survey-details-mutation"
 import { useQuestionMutation } from "@/hooks/use-question-mutation"
 import { useSurveyStructureMutation } from "@/hooks/use-survey-structure-mutation"
+import { useQuestionLockManager } from "@/hooks/use-question-lock-manager"
 
 export default function EditSurveyPage() {
   const { id } = useParams<{ id: string }>()
@@ -117,17 +117,17 @@ export default function EditSurveyPage() {
     userId: string | null
   }>({ canAccess: false, canEdit: false, isLoading: true, userId: null })
 
-  // 乐观锁定状态：点击题目时立即设置，让UI立即显示"我正在编辑"
-  const [optimisticLockedId, setOptimisticLockedId] = useState<string | null>(
-    null
-  )
-
-  // 用于串行化 lock/unlock 操作，防止快速点击时并发请求导致多题同时锁定
-  const previousSelectedRef = useRef<string | null>(null)
-  const lockQueueRef = useRef<Promise<void>>(Promise.resolve())
   const mutationCoordinatorRef = useRef<KeyedMutationCoordinator | null>(null)
   mutationCoordinatorRef.current ??= new KeyedMutationCoordinator()
   const mutationCoordinator = mutationCoordinatorRef.current
+
+  const handleSelectQuestion = useCallback(
+    (questionId: string) => {
+      selectQuestion(questionId)
+      setActiveTab("question")
+    },
+    [selectQuestion]
+  )
 
   // 协作功能（Presence Channel 自动处理加入/离开）
   const {
@@ -144,6 +144,16 @@ export default function EditSurveyPage() {
     permission.canAccess ? id : null,
     permission.userId
   )
+
+  const { selectWithLock, getLockInfo } = useQuestionLockManager({
+    surveyId: id,
+    currentUserId: permission.userId,
+    clientId,
+    lockedQuestions,
+    unlockQuestion,
+    setLockedQuestions,
+    onSelect: handleSelectQuestion,
+  })
 
   const { reconcileFromServer, scheduleReconciliation } =
     useSurveyReconciliation({
@@ -188,12 +198,6 @@ export default function EditSurveyPage() {
     onCreated: () => setActiveTab("question"),
   })
   const handleDeleteQuestion = structureMutation.remove
-
-  // 选中题目时自动切换到题目面板
-  const handleSelectQuestion = (id: string) => {
-    selectQuestion(id)
-    setActiveTab("question")
-  }
 
   // 拖拽开始（支持已有题目重排和新题目添加）
   const handleDragStart = (event: DragStartEvent) => {
@@ -382,67 +386,6 @@ export default function EditSurveyPage() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "添加失败")
     }
-  }
-
-  // 选中题目时尝试锁定
-  const handleSelectQuestionWithLock = (questionId: string) => {
-    // 重复点击同一题，不做任何操作
-    if (previousSelectedRef.current === questionId) return
-
-    // 先立即更新本地状态，让UI立即响应
-    handleSelectQuestion(questionId)
-
-    // 乐观更新：立即设置本地锁定状态，显示"我正在编辑"
-    setOptimisticLockedId(questionId)
-
-    const previousId = previousSelectedRef.current
-    previousSelectedRef.current = questionId
-
-    // 将 lock/unlock 操作加入队列，保证串行执行
-    // 避免快速点击时并发请求导致多题同时锁定
-    lockQueueRef.current = lockQueueRef.current
-      .then(async () => {
-        // 先解锁之前选中的题目
-        if (previousId) {
-          await unlockQuestion(previousId).catch(() => {})
-        }
-
-        // 尝试锁定新选中的题目
-        const lockInfo = lockedQuestions.get(questionId)
-        if (!lockInfo || lockInfo.userId === permission.userId) {
-          const response = await fetch("/api/surveys/collaboration/lock", {
-            method: "POST",
-            headers: getEditorMutationHeaders(clientId),
-            body: JSON.stringify({ surveyId: id, questionId }),
-          })
-
-          if (!response.ok) {
-            // 回滚乐观锁定，避免用户看到自己"正在编辑"但实际上服务器拒绝了
-            setOptimisticLockedId((prev) => (prev === questionId ? null : prev))
-
-            if (response.status === 409) {
-              const data = await response.json().catch(() => ({}))
-              // 将服务器返回的远程锁定信息更新到本地状态
-              if (data.lockedByUserId) {
-                setLockedQuestions((prev) => {
-                  const next = new Map(prev)
-                  next.set(questionId, {
-                    questionId,
-                    userId: data.lockedByUserId,
-                    userName: data.lockedBy || "其他用户",
-                    lockedAt: data.lockedAt || new Date().toISOString(),
-                  })
-                  return next
-                })
-              }
-              toast.warning(`该题目正在被 ${data.lockedBy || "其他用户"} 编辑`)
-            } else {
-              toast.error("锁定题目失败，请刷新页面重试")
-            }
-          }
-        }
-      })
-      .catch(() => {})
   }
 
   const blockingMutationCount = Object.values(mutationStates).filter(
@@ -778,20 +721,7 @@ export default function EditSurveyPage() {
                     ) : (
                       survey.questions.map((q, idx) => {
                         const isPending = pendingQuestionIds.has(q.id)
-                        // 乐观锁定：如果当前题目是乐观锁定的，使用乐观锁定状态
-                        const isOptimisticLocked = optimisticLockedId === q.id
-                        const serverLockInfo = lockedQuestions.get(q.id)
-                        // 优先使用服务器锁定状态，如果没有则使用乐观锁定状态
-                        const lockInfo: LockInfo | undefined =
-                          serverLockInfo ??
-                          (isOptimisticLocked
-                            ? {
-                                questionId: q.id,
-                                userId: permission.userId!,
-                                userName: "我",
-                                lockedAt: new Date().toISOString(),
-                              }
-                            : undefined)
+                        const lockInfo = getLockInfo(q.id)
                         const isLockedByMe =
                           lockInfo?.userId === permission.userId
                         const isLockedByOther = lockInfo && !isLockedByMe
@@ -811,9 +741,7 @@ export default function EditSurveyPage() {
                               isPending={isPending}
                               isLockedByMe={!!isLockedByMe}
                               isLockedByOther={!!isLockedByOther}
-                              onSelect={() =>
-                                handleSelectQuestionWithLock(q.id)
-                              }
+                              onSelect={() => selectWithLock(q.id)}
                               onUpdate={handleUpdateQuestion}
                               onTitleChange={(title) =>
                                 updateQuestion({ ...q, title })
