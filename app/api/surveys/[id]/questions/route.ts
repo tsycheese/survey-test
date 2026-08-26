@@ -137,6 +137,7 @@ export async function POST(
   let persistedResult: {
     question: Awaited<ReturnType<typeof prisma.question.create>>
     replayed: boolean
+    structureRevision: number
   }
 
   try {
@@ -159,7 +160,15 @@ export async function POST(
           },
         })
         if (existingQuestion) {
-          return { question: existingQuestion, replayed: true }
+          const currentSurvey = await tx.survey.findUniqueOrThrow({
+            where: { id },
+            select: { structureRevision: true },
+          })
+          return {
+            question: existingQuestion,
+            replayed: true,
+            structureRevision: currentSurvey.structureRevision,
+          }
         }
 
         const count = await tx.question.count({ where: { surveyId: id } })
@@ -191,7 +200,17 @@ export async function POST(
           },
         })
 
-        return { question, replayed: false }
+        const updatedSurvey = await tx.survey.update({
+          where: { id },
+          data: { structureRevision: { increment: 1 } },
+          select: { structureRevision: true },
+        })
+
+        return {
+          question,
+          replayed: false,
+          structureRevision: updatedSurvey.structureRevision,
+        }
       })
     )
   } catch (error) {
@@ -201,7 +220,7 @@ export async function POST(
     throw error
   }
 
-  const { question, replayed } = persistedResult
+  const { question, replayed, structureRevision } = persistedResult
 
   const eventPayload = {
     requestId,
@@ -214,8 +233,10 @@ export async function POST(
       description: question.description ?? undefined,
       required: question.required,
       order: question.order,
+      revision: question.revision,
       config: question.config as Record<string, unknown>,
     },
+    structureRevision,
     fromUserId: userId,
     timestamp: new Date().toISOString(),
   }
@@ -260,12 +281,15 @@ export async function POST(
     ),
   })
 
-  return NextResponse.json(question, {
-    status: replayed ? 200 : 201,
-    headers: {
-      "Server-Timing": formatServerTiming(timings),
-      "X-Request-Id": requestId,
-      "X-Idempotent-Replay": replayed ? "true" : "false",
-    },
-  })
+  return NextResponse.json(
+    { ...question, structureRevision },
+    {
+      status: replayed ? 200 : 201,
+      headers: {
+        "Server-Timing": formatServerTiming(timings),
+        "X-Request-Id": requestId,
+        "X-Idempotent-Replay": replayed ? "true" : "false",
+      },
+    }
+  )
 }

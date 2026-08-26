@@ -8,6 +8,7 @@ model Survey {
   userId           String
   maxCollaborators Int      @default(10)
   currentVersionId String?  // 当前发布的版本ID
+  structureRevision Int     @default(0) // 题目集合或顺序的并发修订号
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -33,6 +34,7 @@ model Question {
   required    Boolean      @default(false)
   config      Json?
   clientMutationId String?
+  revision     Int          @default(0) // 题目内容的并发修订号
   lockedBy    String?      // 正在编辑的用户ID
   lockedAt    DateTime?    // 锁定时间
 

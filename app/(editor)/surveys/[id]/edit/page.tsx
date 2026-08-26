@@ -46,6 +46,12 @@ import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { useEditorStore } from "@/lib/editor-store"
 import {
+  editorMutationKey,
+  KeyedMutationCoordinator,
+  MutationRequestError,
+  type EditorMutationState,
+} from "@/lib/editor-mutations"
+import {
   getQuestionDef,
   createQuestion,
   QUESTION_DEFS,
@@ -68,6 +74,10 @@ import { SurveySettingsPanel } from "@/components/editor/survey-settings-panel"
 import { AIClarifyDialog } from "@/components/ai/ai-clarify-dialog"
 import { CollaborationDialog } from "@/components/editor/collaboration-dialog"
 import { VersionDialog } from "@/components/editor/version-dialog"
+import {
+  EditorSaveStatus,
+  QuestionSaveStatus,
+} from "@/components/editor/editor-save-status"
 import {
   Dialog,
   DialogContent,
@@ -96,6 +106,7 @@ type SurveyQuestionSnapshot = {
   description: string | null
   required: boolean
   order: number
+  revision: number
   config: Record<string, unknown> | null
   lockedBy?: string | null
   lockedAt?: string | null
@@ -106,9 +117,43 @@ type SurveySnapshot = {
   title: string
   description: string | null
   published: boolean
+  structureRevision: number
   userId: string
   settings?: SurveySettings
   questions?: SurveyQuestionSnapshot[]
+}
+
+type PersistedQuestionResponse = SurveyQuestionSnapshot & {
+  structureRevision?: number
+}
+
+type SurveyDetails = Pick<Survey, "title" | "description" | "settings">
+
+type PersistedSurveyDetailsResponse = {
+  title: string
+  description: string | null
+  settings?: SurveySettings | null
+}
+
+function toSurveyDetails(survey: Survey): SurveyDetails {
+  return {
+    title: survey.title,
+    description: survey.description,
+    settings: survey.settings,
+  }
+}
+
+function toEditorQuestion(question: SurveyQuestionSnapshot): Question {
+  return {
+    id: question.id,
+    type: question.type,
+    title: question.title,
+    description: question.description ?? undefined,
+    required: question.required,
+    order: question.order,
+    revision: question.revision,
+    config: question.config ?? {},
+  } as Question
 }
 
 function toEditorSurvey(snapshot: SurveySnapshot): Survey {
@@ -117,20 +162,10 @@ function toEditorSurvey(snapshot: SurveySnapshot): Survey {
     title: snapshot.title,
     description: snapshot.description,
     published: snapshot.published,
+    structureRevision: snapshot.structureRevision ?? 0,
     userId: snapshot.userId,
     settings: snapshot.settings,
-    questions: (snapshot.questions ?? []).map(
-      (question) =>
-        ({
-          id: question.id,
-          type: question.type,
-          title: question.title,
-          description: question.description ?? undefined,
-          required: question.required,
-          order: question.order,
-          config: question.config ?? {},
-        }) as Question
-    ),
+    questions: (snapshot.questions ?? []).map(toEditorQuestion),
   }
 }
 
@@ -169,6 +204,7 @@ export default function EditSurveyPage() {
     survey,
     selectedId,
     pendingQuestionIds,
+    mutationStates,
     setSurvey,
     reconcileSurvey,
     selectQuestion,
@@ -177,10 +213,18 @@ export default function EditSurveyPage() {
     confirmPendingQuestion,
     rollbackPendingQuestion,
     updateQuestion,
+    commitQuestionMutation,
+    commitSurveyMutation,
+    restoreQuestionBaseline,
+    setQuestionBaseline,
+    setMutationState,
+    clearMutationState,
+    setStructureRevision,
+    updateSurveySettings,
+    setPublished,
     deleteQuestion,
     reorderQuestions,
     updateSurveyInfo,
-    markSaved,
   } = useEditorStore()
   const [activeTab, setActiveTab] = useState<"survey" | "question">("survey")
   const [isEditingTitle, setIsEditingTitle] = useState(false)
@@ -208,9 +252,11 @@ export default function EditSurveyPage() {
   // 用于串行化 lock/unlock 操作，防止快速点击时并发请求导致多题同时锁定
   const previousSelectedRef = useRef<string | null>(null)
   const lockQueueRef = useRef<Promise<void>>(Promise.resolve())
-  const questionCreationQueuesRef = useRef<Map<string, Promise<void>>>(
-    new Map()
-  )
+  const mutationCoordinatorRef = useRef<KeyedMutationCoordinator | null>(null)
+  mutationCoordinatorRef.current ??= new KeyedMutationCoordinator()
+  const surveySaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const surveyDraftVersionRef = useRef(0)
+  const surveyEnqueuedVersionRef = useRef(-1)
   const reconciliationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
   )
@@ -350,6 +396,9 @@ export default function EditSurveyPage() {
 
   useEffect(
     () => () => {
+      if (surveySaveTimerRef.current) {
+        clearTimeout(surveySaveTimerRef.current)
+      }
       if (reconciliationTimerRef.current) {
         clearTimeout(reconciliationTimerRef.current)
       }
@@ -413,7 +462,7 @@ export default function EditSurveyPage() {
 
   // 拖拽结束
   const handleDragEnd = async (event: DragEndEvent) => {
-    const { active, over } = event
+    const { over } = event
     setDraggingId(null)
     setDraggingType(null)
     setInsertIndex(null)
@@ -438,6 +487,11 @@ export default function EditSurveyPage() {
     // 已有题目重排
     if (!draggingId || !survey) return
 
+    if (pendingQuestionIds.size > 0) {
+      toast.info("请等待新题目保存完成后再调整顺序")
+      return
+    }
+
     const fromIndex = survey.questions.findIndex((q) => q.id === draggingId)
     const toIndex = survey.questions.findIndex((q) => q.id === over.id)
 
@@ -450,20 +504,56 @@ export default function EditSurveyPage() {
     const newQuestions = arrayMove(survey.questions, fromIndex, toIndex).map(
       (q, idx) => ({ ...q, order: idx })
     )
-    try {
-      const res = await fetch(`/api/surveys/${id}/questions/reorder`, {
-        method: "PUT",
-        headers: getRealtimeRequestHeaders(clientId),
-        body: JSON.stringify({
-          questions: newQuestions.map((q) => ({ id: q.id, order: q.order })),
-        }),
-      })
-      if (!res.ok) {
-        toast.error("更新题目顺序失败")
+    const key = editorMutationKey.order(id)
+    const coordinator = mutationCoordinatorRef.current!
+    coordinator.unblock(key)
+    setMutationState(key, "pending")
+
+    void coordinator.enqueue(key, async () => {
+      setMutationState(key, "pending")
+      try {
+        const expectedStructureRevision =
+          useEditorStore.getState().survey?.structureRevision ?? 0
+        const res = await fetch(`/api/surveys/${id}/questions/reorder`, {
+          method: "PUT",
+          headers: getRealtimeRequestHeaders(clientId),
+          body: JSON.stringify({
+            expectedStructureRevision,
+            questions: newQuestions.map((q) => ({
+              id: q.id,
+              order: q.order,
+            })),
+          }),
+        })
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: string
+          code?: string
+          structureRevision?: number
+        }
+        if (!res.ok) {
+          throw new MutationRequestError(
+            data.error || "更新题目顺序失败",
+            res.status,
+            data.code
+          )
+        }
+
+        if (typeof data.structureRevision === "number") {
+          setStructureRevision(data.structureRevision)
+        }
+        setMutationState(key, "saved")
+      } catch (error) {
+        coordinator.block(key)
+        const isConflict =
+          error instanceof MutationRequestError && error.status === 409
+        const message =
+          error instanceof Error ? error.message : "更新题目顺序失败"
+        setMutationState(key, isConflict ? "conflict" : "failed", message)
+        toast.error(message)
+        await reconcileFromServer("reorder-failed")
+        clearMutationState(key)
       }
-    } catch {
-      toast.error("更新题目顺序失败")
-    }
+    })
   }
 
   useEffect(() => {
@@ -547,36 +637,105 @@ export default function EditSurveyPage() {
     return () => controller.abort()
   }, [id, setSurvey, setLockedQuestions])
 
-  async function handleSaveTitleDesc(title: string, description: string) {
-    const res = await fetch(`/api/surveys/${id}`, {
-      method: "PUT",
-      headers: getRealtimeRequestHeaders(clientId),
-      body: JSON.stringify({
-        title,
-        description: description || null,
-      }),
+  function enqueueSurveyDetailsSave(): Promise<void> {
+    const latestSurvey = useEditorStore.getState().survey
+    if (!latestSurvey || latestSurvey.id !== id) return Promise.resolve()
+
+    const submitted = toSurveyDetails(latestSurvey)
+    const submittedVersion = surveyDraftVersionRef.current
+    const key = editorMutationKey.surveyDetails(id)
+    const coordinator = mutationCoordinatorRef.current!
+    surveyEnqueuedVersionRef.current = submittedVersion
+    coordinator.unblock(key)
+    setMutationState(key, "pending")
+
+    return coordinator.enqueue(key, async () => {
+      setMutationState(key, "pending")
+
+      try {
+        const res = await fetch(`/api/surveys/${id}`, {
+          method: "PUT",
+          headers: getRealtimeRequestHeaders(clientId),
+          body: JSON.stringify({
+            title: submitted.title,
+            description: submitted.description,
+            settings: submitted.settings,
+          }),
+        })
+        const data = (await res.json().catch(() => ({}))) as
+          | PersistedSurveyDetailsResponse
+          | { error?: string; code?: string }
+
+        if (!res.ok) {
+          const errorData = data as { error?: string; code?: string }
+          throw new MutationRequestError(
+            errorData.error || "保存问卷失败",
+            res.status,
+            errorData.code
+          )
+        }
+
+        const persisted = data as PersistedSurveyDetailsResponse
+        commitSurveyMutation(submitted, {
+          title: persisted.title,
+          description: persisted.description,
+          settings: persisted.settings ?? undefined,
+        })
+        if (submittedVersion === surveyDraftVersionRef.current) {
+          setMutationState(key, "saved")
+        }
+      } catch (error) {
+        coordinator.block(key)
+        const isConflict =
+          error instanceof MutationRequestError && error.status === 409
+        const message =
+          error instanceof Error ? error.message : "保存问卷失败，请稍后重试"
+        setMutationState(key, isConflict ? "conflict" : "failed", message)
+        toast.error(message)
+      }
     })
-    if (res.ok) {
-      markSaved()
-    }
   }
 
-  async function handleUpdateSurveySettings(settings: SurveySettings) {
-    if (!survey) return
-    const newSettings = { ...survey.settings, ...settings }
-    setSurvey({ ...survey, settings: newSettings })
-    const res = await fetch(`/api/surveys/${id}`, {
-      method: "PUT",
-      headers: getRealtimeRequestHeaders(clientId),
-      body: JSON.stringify({
-        title: survey.title,
-        description: survey.description,
-        settings: newSettings,
-      }),
-    })
-    if (res.ok) {
-      markSaved()
+  function scheduleSurveyDetailsSave() {
+    surveyDraftVersionRef.current += 1
+    const key = editorMutationKey.surveyDetails(id)
+    setMutationState(key, "pending")
+
+    if (surveySaveTimerRef.current) {
+      clearTimeout(surveySaveTimerRef.current)
     }
+    surveySaveTimerRef.current = setTimeout(() => {
+      surveySaveTimerRef.current = null
+      void enqueueSurveyDetailsSave()
+    }, 500)
+  }
+
+  function flushSurveyDetailsSave(): Promise<void> {
+    const key = editorMutationKey.surveyDetails(id)
+    if (surveySaveTimerRef.current) {
+      clearTimeout(surveySaveTimerRef.current)
+      surveySaveTimerRef.current = null
+    } else if (
+      surveyEnqueuedVersionRef.current === surveyDraftVersionRef.current &&
+      mutationCoordinatorRef.current!.hasPending(key)
+    ) {
+      return mutationCoordinatorRef.current!.waitForKey(key)
+    }
+    return enqueueSurveyDetailsSave()
+  }
+
+  function handleUpdateSurveySettings(settings: SurveySettings) {
+    const latestSurvey = useEditorStore.getState().survey
+    if (!latestSurvey || latestSurvey.id !== id) return
+    const newSettings = { ...latestSurvey.settings, ...settings }
+    updateSurveySettings(newSettings)
+    surveyDraftVersionRef.current += 1
+    void flushSurveyDetailsSave()
+  }
+
+  function handleRetrySurveyDetails() {
+    surveyEnqueuedVersionRef.current = -1
+    void flushSurveyDetailsSave()
   }
 
   function createQuestionOptimistically(
@@ -601,6 +760,7 @@ export default function EditSurveyPage() {
     const question = {
       ...createQuestion(type, index),
       id: temporaryId,
+      revision: 0,
     }
 
     addPendingQuestion(question)
@@ -660,7 +820,7 @@ export default function EditSurveyPage() {
           throw new Error(`创建题目失败：HTTP ${res.status}`)
         }
 
-        const created = (await res.json()) as { id: string; order: number }
+        const created = (await res.json()) as PersistedQuestionResponse
         const responseParsedAt = getClientPerformanceTime()
 
         const currentEditorState = useEditorStore.getState()
@@ -673,7 +833,11 @@ export default function EditSurveyPage() {
             ...question,
             id: created.id,
             order: created.order,
+            revision: created.revision,
           })
+          if (typeof created.structureRevision === "number") {
+            setStructureRevision(created.structureRevision)
+          }
         }
         const confirmedAt = getClientPerformanceTime()
         const [optimisticPaintedAt, confirmedPaintedAt] = await Promise.all([
@@ -758,20 +922,10 @@ export default function EditSurveyPage() {
       }
     }
 
-    const currentQueue =
-      questionCreationQueuesRef.current.get(targetSurveyId) ?? Promise.resolve()
-    const queuedOperation = currentQueue.then(persistQuestion, persistQuestion)
-    questionCreationQueuesRef.current.set(targetSurveyId, queuedOperation)
-    const clearCompletedQueue = () => {
-      if (
-        questionCreationQueuesRef.current.get(targetSurveyId) ===
-        queuedOperation
-      ) {
-        questionCreationQueuesRef.current.delete(targetSurveyId)
-      }
-    }
-    void queuedOperation.then(clearCompletedQueue, clearCompletedQueue)
-    return queuedOperation
+    return mutationCoordinatorRef.current!.enqueue(
+      `survey-create:${targetSurveyId}`,
+      persistQuestion
+    )
   }
 
   function handleAddQuestion(type: QuestionType) {
@@ -796,17 +950,9 @@ export default function EditSurveyPage() {
       if (newTitle || newDescription) {
         const title = newTitle || survey.title
         const description = newDescription ?? survey.description ?? ""
-        const res = await fetch(`/api/surveys/${id}`, {
-          method: "PUT",
-          headers: getRealtimeRequestHeaders(clientId),
-          body: JSON.stringify({
-            title,
-            description: description || null,
-          }),
-        })
-        if (res.ok) {
-          updateSurveyInfo(title, description)
-        }
+        updateSurveyInfo(title, description)
+        surveyDraftVersionRef.current += 1
+        await flushSurveyDetailsSave()
       }
 
       // 批量添加题目
@@ -825,8 +971,16 @@ export default function EditSurveyPage() {
           }),
         })
         if (res.ok) {
-          const created = await res.json()
-          addQuestion({ ...q, id: created.id })
+          const created = (await res.json()) as PersistedQuestionResponse
+          addQuestion({
+            ...q,
+            id: created.id,
+            order: created.order,
+            revision: created.revision,
+          })
+          if (typeof created.structureRevision === "number") {
+            setStructureRevision(created.structureRevision)
+          }
           nextOrder++
         }
       }
@@ -837,18 +991,36 @@ export default function EditSurveyPage() {
   }
 
   async function handleDeleteQuestion(qid: string) {
+    const currentQuestion = useEditorStore
+      .getState()
+      .survey?.questions.find((question) => question.id === qid)
+    if (!currentQuestion) return
+
     const res = await fetch(`/api/surveys/${id}/questions/${qid}`, {
       method: "DELETE",
       headers: getRealtimeRequestHeaders(clientId),
+      body: JSON.stringify({
+        expectedRevision: currentQuestion.revision ?? 0,
+      }),
     })
     if (res.ok) {
+      const data = (await res.json()) as { structureRevision?: number }
       deleteQuestion(qid)
+      if (typeof data.structureRevision === "number") {
+        setStructureRevision(data.structureRevision)
+      }
     } else {
-      toast.error("删除失败")
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string
+      }
+      toast.error(data.error || "删除失败")
+      if (res.status === 409) {
+        scheduleReconciliation("delete-conflict", 0)
+      }
     }
   }
 
-  async function handleUpdateQuestion(updated: Question) {
+  function handleUpdateQuestion(updated: Question) {
     // 检查题目是否被锁定
     const lockInfo = lockedQuestions.get(updated.id)
     if (lockInfo && lockInfo.userId !== permission.userId) {
@@ -857,21 +1029,81 @@ export default function EditSurveyPage() {
     }
 
     updateQuestion(updated)
-    const res = await fetch(`/api/surveys/${id}/questions/${updated.id}`, {
-      method: "PUT",
-      headers: getRealtimeRequestHeaders(clientId),
-      body: JSON.stringify({
-        title: updated.title,
-        description: updated.description,
-        required: updated.required,
-        config: updated.config,
-      }),
+    const key = editorMutationKey.question(updated.id)
+    const coordinator = mutationCoordinatorRef.current!
+    coordinator.unblock(key)
+    setMutationState(key, "pending")
+
+    void coordinator.enqueue(key, async () => {
+      setMutationState(key, "pending")
+      const baseline =
+        useEditorStore.getState().questionBaselines[updated.id] ?? updated
+
+      try {
+        const res = await fetch(`/api/surveys/${id}/questions/${updated.id}`, {
+          method: "PUT",
+          headers: getRealtimeRequestHeaders(clientId),
+          body: JSON.stringify({
+            expectedRevision: baseline.revision ?? 0,
+            title: updated.title,
+            description: updated.description,
+            required: updated.required,
+            config: updated.config,
+          }),
+        })
+        const data = (await res.json().catch(() => ({}))) as
+          | PersistedQuestionResponse
+          | {
+              error?: string
+              code?: string
+              current?: SurveyQuestionSnapshot
+            }
+
+        if (!res.ok) {
+          const errorData = data as {
+            error?: string
+            code?: string
+            current?: SurveyQuestionSnapshot
+          }
+          if (errorData.current) {
+            setQuestionBaseline(toEditorQuestion(errorData.current))
+          }
+
+          throw new MutationRequestError(
+            errorData.error || "保存失败",
+            res.status,
+            errorData.code
+          )
+        }
+
+        const persisted = toEditorQuestion(data as PersistedQuestionResponse)
+        commitQuestionMutation(updated, persisted)
+        setMutationState(key, "saved")
+      } catch (error) {
+        coordinator.block(key)
+        const isConflict =
+          error instanceof MutationRequestError && error.status === 409
+        const message =
+          error instanceof Error ? error.message : "保存失败，请稍后重试"
+        setMutationState(key, isConflict ? "conflict" : "failed", message)
+        toast.error(message)
+      }
     })
-    if (res.ok) {
-      toast.success("保存成功")
-    } else {
-      toast.error("保存失败")
-    }
+  }
+
+  function handleRetryQuestion(questionId: string) {
+    const question = useEditorStore
+      .getState()
+      .survey?.questions.find((item) => item.id === questionId)
+    if (question) handleUpdateQuestion(question)
+  }
+
+  function handleUseServerQuestion(questionId: string) {
+    const key = editorMutationKey.question(questionId)
+    mutationCoordinatorRef.current!.unblock(key)
+    restoreQuestionBaseline(questionId)
+    clearMutationState(key)
+    toast.success("已恢复服务器版本")
   }
 
   // 选中题目时尝试锁定
@@ -935,6 +1167,36 @@ export default function EditSurveyPage() {
       .catch(() => {})
   }
 
+  const blockingMutationCount = Object.values(mutationStates).filter(
+    (mutation) =>
+      mutation.status === "pending" ||
+      mutation.status === "failed" ||
+      mutation.status === "conflict"
+  ).length
+  const hasBlockingMutations =
+    pendingQuestionIds.size > 0 || blockingMutationCount > 0
+
+  useEffect(() => {
+    if (!hasBlockingMutations) return
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ""
+    }
+    window.addEventListener("beforeunload", handleBeforeUnload)
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload)
+  }, [hasBlockingMutations])
+
+  function handleLeaveEditor() {
+    if (
+      hasBlockingMutations &&
+      !confirm("仍有内容尚未保存，确定要离开编辑器吗？")
+    ) {
+      return
+    }
+    router.push("/surveys")
+  }
+
   if (permission.isLoading) {
     return (
       <div className="flex h-svh items-center justify-center text-muted-foreground">
@@ -965,17 +1227,18 @@ export default function EditSurveyPage() {
 
   const selectedQuestion =
     survey.questions.find((q) => q.id === selectedId) ?? null
+  const selectedMutationState = selectedId
+    ? mutationStates[editorMutationKey.question(selectedId)]
+    : undefined
+  const surveyMutationState =
+    mutationStates[editorMutationKey.surveyDetails(id)]
 
   return (
     <div className="flex h-svh flex-col overflow-hidden">
       {/* 顶部栏 */}
       <header className="flex h-14 shrink-0 items-center justify-between border-b bg-background px-4">
         <div className="flex items-center gap-3">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => router.push("/surveys")}
-          >
+          <Button variant="ghost" size="sm" onClick={handleLeaveEditor}>
             <ArrowLeft className="mr-1 h-4 w-4" />
             返回
           </Button>
@@ -983,16 +1246,17 @@ export default function EditSurveyPage() {
           <input
             className="w-64 border-none bg-transparent text-base font-semibold outline-none placeholder:text-muted-foreground"
             value={survey.title}
-            onChange={(e) =>
+            onChange={(e) => {
               updateSurveyInfo(e.target.value, survey.description ?? "")
-            }
+              scheduleSurveyDetailsSave()
+            }}
             onFocus={() => {
               titleOriginalRef.current = survey.title
             }}
             onBlur={(e) => {
               const newTitle = e.target.value
               if (newTitle !== titleOriginalRef.current) {
-                handleSaveTitleDesc(newTitle, survey.description ?? "")
+                void flushSurveyDetailsSave()
               }
             }}
             placeholder="未命名问卷"
@@ -1004,12 +1268,22 @@ export default function EditSurveyPage() {
             currentUserId={permission.userId}
             isConnected={isConnected}
           />
+          <EditorSaveStatus
+            mutationStates={mutationStates}
+            pendingCreateCount={pendingQuestionIds.size}
+            surveyMutationState={surveyMutationState}
+            onRetrySurvey={handleRetrySurveyDetails}
+          />
           <div className="h-4 w-px bg-border" />
           <CollaborationDialog surveyId={id} />
           <Button
             variant="outline"
             size="sm"
             onClick={() => setIsVersionDialogOpen(true)}
+            disabled={hasBlockingMutations}
+            title={
+              hasBlockingMutations ? "请先完成或处理尚未保存的内容" : undefined
+            }
           >
             <History className="mr-1.5 h-3.5 w-3.5" />
             版本
@@ -1045,7 +1319,7 @@ export default function EditSurveyPage() {
                   })
                   if (res.ok) {
                     const updated = await res.json()
-                    setSurvey({ ...survey, published: updated.published })
+                    setPublished(updated.published)
                     toast.success("已取消发布")
                   } else {
                     toast.error("操作失败")
@@ -1150,22 +1424,20 @@ export default function EditSurveyPage() {
                       className="h-auto rounded-sm border-2 border-primary bg-transparent px-3 py-2 text-xl font-bold tracking-tight shadow-none focus-visible:ring-0"
                       style={{ fontSize: "1.25rem", lineHeight: "1.75rem" }}
                       value={survey.title}
-                      onChange={(e) =>
+                      onChange={(e) => {
                         updateSurveyInfo(
                           e.target.value,
                           survey.description ?? ""
                         )
-                      }
+                        scheduleSurveyDetailsSave()
+                      }}
                       onFocus={() => {
                         titleOriginalRef.current = survey.title
                       }}
                       onBlur={(e) => {
                         const newTitle = e.target.value
                         if (newTitle !== titleOriginalRef.current) {
-                          handleSaveTitleDesc(
-                            newTitle,
-                            survey.description ?? ""
-                          )
+                          void flushSurveyDetailsSave()
                         }
                         setIsEditingTitle(false)
                       }}
@@ -1188,16 +1460,17 @@ export default function EditSurveyPage() {
                         className="min-h-[80px] rounded-sm border-2 border-primary bg-transparent px-3 py-2 text-sm text-muted-foreground shadow-none focus-visible:ring-0"
                         placeholder="添加问卷说明..."
                         value={survey.description ?? ""}
-                        onChange={(e) =>
+                        onChange={(e) => {
                           updateSurveyInfo(survey.title, e.target.value)
-                        }
+                          scheduleSurveyDetailsSave()
+                        }}
                         onFocus={() => {
                           descOriginalRef.current = survey.description ?? ""
                         }}
                         onBlur={(e) => {
                           const newDesc = e.target.value
                           if (newDesc !== descOriginalRef.current) {
-                            handleSaveTitleDesc(survey.title, newDesc)
+                            void flushSurveyDetailsSave()
                           }
                           setIsEditingDesc(false)
                         }}
@@ -1378,8 +1651,11 @@ export default function EditSurveyPage() {
               <QuestionEditor
                 key={selectedQuestion.id}
                 question={selectedQuestion}
+                mutationState={selectedMutationState}
                 onUpdate={updateQuestion}
                 onSave={(updated) => handleUpdateQuestion(updated)}
+                onRetry={() => handleRetryQuestion(selectedQuestion.id)}
+                onUseServer={() => handleUseServerQuestion(selectedQuestion.id)}
                 onDelete={() => handleDeleteQuestion(selectedQuestion.id)}
               />
             ) : (
@@ -1395,7 +1671,6 @@ export default function EditSurveyPage() {
       <PreviewDialog
         open={isPreviewDialogOpen}
         onOpenChange={setIsPreviewDialogOpen}
-        surveyId={survey.id}
         shareToken={survey.id} // 使用 survey id 作为预览 token
       />
 
@@ -1415,25 +1690,8 @@ export default function EditSurveyPage() {
           // 刷新问卷数据
           const res = await fetch(`/api/surveys/${id}`)
           if (res.ok) {
-            const surveyData = await res.json()
-            setSurvey({
-              id: surveyData.id,
-              title: surveyData.title,
-              description: surveyData.description,
-              published: surveyData.published,
-              settings: surveyData.settings,
-              questions: (surveyData.questions ?? []).map(
-                (q: Record<string, unknown>) => ({
-                  id: q.id,
-                  type: q.type,
-                  title: q.title,
-                  description: q.description,
-                  required: q.required,
-                  order: q.order,
-                  config: q.config ?? {},
-                })
-              ),
-            })
+            const surveyData = (await res.json()) as SurveySnapshot
+            setSurvey(toEditorSurvey(surveyData))
           }
         }}
         published={survey.published}
@@ -1447,12 +1705,10 @@ export default function EditSurveyPage() {
 function PreviewDialog({
   open,
   onOpenChange,
-  surveyId,
   shareToken,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
-  surveyId: string
   shareToken: string
 }) {
   const devices = [
@@ -1612,13 +1868,19 @@ function ShareDialog({
 
 function QuestionEditor({
   question,
+  mutationState,
   onUpdate,
   onSave,
+  onRetry,
+  onUseServer,
   onDelete,
 }: {
   question: Question
+  mutationState?: EditorMutationState
   onUpdate: (q: Question) => void
   onSave: (q: Question) => void
+  onRetry: () => void
+  onUseServer: () => void
   onDelete: () => void
 }) {
   const def = getQuestionDef(question.type)
@@ -1652,6 +1914,16 @@ function QuestionEditor({
           <Trash2 className="h-4 w-4" />
         </Button>
       </div>
+
+      {mutationState &&
+        (mutationState.status === "failed" ||
+          mutationState.status === "conflict") && (
+          <QuestionSaveStatus
+            state={mutationState}
+            onRetry={onRetry}
+            onUseServer={onUseServer}
+          />
+        )}
 
       <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
         <DialogContent showCloseButton={false}>

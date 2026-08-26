@@ -40,6 +40,7 @@ export async function GET(
           order: true,
           required: true,
           config: true,
+          revision: true,
           lockedBy: true,
           lockedAt: true,
         },

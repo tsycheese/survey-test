@@ -1,10 +1,38 @@
 import { create } from "zustand"
 import type { Question, Survey } from "@/lib/questions/types"
+import type {
+  EditorMutationState,
+  EditorMutationStatus,
+} from "@/lib/editor-mutations"
+import { editorMutationKey } from "@/lib/editor-mutations"
+
+function questionContentEquals(left: Question, right: Question): boolean {
+  return (
+    left.type === right.type &&
+    left.title === right.title &&
+    left.description === right.description &&
+    left.required === right.required &&
+    JSON.stringify(left.config) === JSON.stringify(right.config)
+  )
+}
+
+function surveyDetailsEqual(
+  left: Pick<Survey, "title" | "description" | "settings">,
+  right: Pick<Survey, "title" | "description" | "settings">
+): boolean {
+  return (
+    left.title === right.title &&
+    left.description === right.description &&
+    JSON.stringify(left.settings) === JSON.stringify(right.settings)
+  )
+}
 
 type EditorStore = {
   survey: Survey | null
   selectedId: string | null
   pendingQuestionIds: Set<string>
+  questionBaselines: Record<string, Question>
+  mutationStates: Record<string, EditorMutationState>
   dirty: boolean
 
   setSurvey: (survey: Survey) => void
@@ -19,6 +47,22 @@ type EditorStore = {
   ) => void
   rollbackPendingQuestion: (surveyId: string, temporaryId: string) => void
   updateQuestion: (question: Question) => void
+  commitQuestionMutation: (submitted: Question, persisted: Question) => void
+  restoreQuestionBaseline: (id: string) => void
+  setQuestionBaseline: (question: Question) => void
+  commitSurveyMutation: (
+    submitted: Pick<Survey, "title" | "description" | "settings">,
+    persisted: Pick<Survey, "title" | "description" | "settings">
+  ) => void
+  setMutationState: (
+    key: string,
+    status: EditorMutationStatus,
+    message?: string
+  ) => void
+  clearMutationState: (key: string) => void
+  setStructureRevision: (revision: number) => void
+  updateSurveySettings: (settings: Survey["settings"]) => void
+  setPublished: (published: boolean) => void
   deleteQuestion: (id: string) => void
   reorderQuestions: (fromIndex: number, toIndex: number) => void
   updateSurveyInfo: (title: string, description: string) => void
@@ -29,6 +73,8 @@ export const useEditorStore = create<EditorStore>((set) => ({
   survey: null,
   selectedId: null,
   pendingQuestionIds: new Set(),
+  questionBaselines: {},
+  mutationStates: {},
   dirty: false,
 
   setSurvey: (survey) =>
@@ -44,6 +90,10 @@ export const useEditorStore = create<EditorStore>((set) => ({
         survey,
         selectedId: null,
         pendingQuestionIds,
+        questionBaselines: Object.fromEntries(
+          survey.questions.map((question) => [question.id, question])
+        ),
+        mutationStates: {},
         dirty: false,
       }
     }),
@@ -52,10 +102,38 @@ export const useEditorStore = create<EditorStore>((set) => ({
     set((s) => {
       if (!s.survey || s.survey.id !== survey.id) return s
 
+      const surveyMutation =
+        s.mutationStates[editorMutationKey.surveyDetails(survey.id)]
+      const protectsSurveyDraft =
+        surveyMutation?.status === "pending" ||
+        surveyMutation?.status === "failed" ||
+        surveyMutation?.status === "conflict"
+
       const pendingQuestions = s.survey.questions.filter((question) =>
         s.pendingQuestionIds.has(question.id)
       )
-      const questions = [...survey.questions]
+      const incomingBaselines = Object.fromEntries(
+        survey.questions.map((question) => [question.id, question])
+      )
+      const questions = survey.questions.map((question) => {
+        const mutation = s.mutationStates[`question:${question.id}`]
+        const localQuestion = s.survey?.questions.find(
+          (item) => item.id === question.id
+        )
+        const protectsDraft =
+          mutation?.status === "pending" ||
+          mutation?.status === "failed" ||
+          mutation?.status === "conflict"
+
+        if (!protectsDraft || !localQuestion) return question
+
+        return {
+          ...question,
+          ...localQuestion,
+          order: question.order,
+          revision: question.revision,
+        } as Question
+      })
 
       for (const pendingQuestion of pendingQuestions) {
         if (questions.some((question) => question.id === pendingQuestion.id)) {
@@ -79,8 +157,22 @@ export const useEditorStore = create<EditorStore>((set) => ({
         : null
 
       return {
-        survey: { ...survey, questions: normalizedQuestions },
+        survey: {
+          ...survey,
+          ...(protectsSurveyDraft
+            ? {
+                title: s.survey.title,
+                description: s.survey.description,
+                settings: s.survey.settings,
+              }
+            : {}),
+          questions: normalizedQuestions,
+        },
         selectedId,
+        questionBaselines: {
+          ...s.questionBaselines,
+          ...incomingBaselines,
+        },
       }
     }),
 
@@ -161,6 +253,10 @@ export const useEditorStore = create<EditorStore>((set) => ({
         selectedId:
           s.selectedId === temporaryId ? persistedQuestion.id : s.selectedId,
         pendingQuestionIds,
+        questionBaselines: {
+          ...s.questionBaselines,
+          [persistedQuestion.id]: persistedQuestion,
+        },
         dirty: true,
       }
     }),
@@ -209,6 +305,104 @@ export const useEditorStore = create<EditorStore>((set) => ({
       }
     }),
 
+  commitQuestionMutation: (submitted, persisted) =>
+    set((s) => {
+      if (!s.survey) return s
+
+      return {
+        survey: {
+          ...s.survey,
+          questions: s.survey.questions.map((current) => {
+            if (current.id !== persisted.id) return current
+            if (questionContentEquals(current, submitted)) return persisted
+
+            return {
+              ...current,
+              revision: persisted.revision,
+            } as Question
+          }),
+        },
+        questionBaselines: {
+          ...s.questionBaselines,
+          [persisted.id]: persisted,
+        },
+      }
+    }),
+
+  restoreQuestionBaseline: (id) =>
+    set((s) => {
+      if (!s.survey || !s.questionBaselines[id]) return s
+      const baseline = s.questionBaselines[id]
+      return {
+        survey: {
+          ...s.survey,
+          questions: s.survey.questions.map((question) =>
+            question.id === id ? baseline : question
+          ),
+        },
+      }
+    }),
+
+  setQuestionBaseline: (question) =>
+    set((s) => ({
+      questionBaselines: {
+        ...s.questionBaselines,
+        [question.id]: question,
+      },
+      survey: s.survey
+        ? {
+            ...s.survey,
+            questions: s.survey.questions.map((current) =>
+              current.id === question.id
+                ? ({ ...current, revision: question.revision } as Question)
+                : current
+            ),
+          }
+        : s.survey,
+    })),
+
+  commitSurveyMutation: (submitted, persisted) =>
+    set((s) => {
+      if (!s.survey || !surveyDetailsEqual(s.survey, submitted)) return s
+
+      return {
+        survey: {
+          ...s.survey,
+          title: persisted.title,
+          description: persisted.description,
+          settings: persisted.settings,
+        },
+      }
+    }),
+
+  setMutationState: (key, status, message) =>
+    set((s) => ({
+      mutationStates: {
+        ...s.mutationStates,
+        [key]: { status, message, updatedAt: Date.now() },
+      },
+    })),
+
+  clearMutationState: (key) =>
+    set((s) => {
+      const mutationStates = { ...s.mutationStates }
+      delete mutationStates[key]
+      return { mutationStates }
+    }),
+
+  setStructureRevision: (revision) =>
+    set((s) =>
+      s.survey ? { survey: { ...s.survey, structureRevision: revision } } : s
+    ),
+
+  updateSurveySettings: (settings) =>
+    set((s) =>
+      s.survey ? { survey: { ...s.survey, settings }, dirty: true } : s
+    ),
+
+  setPublished: (published) =>
+    set((s) => (s.survey ? { survey: { ...s.survey, published } } : s)),
+
   deleteQuestion: (id) =>
     set((s) => {
       if (!s.survey) return s
@@ -218,6 +412,9 @@ export const useEditorStore = create<EditorStore>((set) => ({
       return {
         survey: { ...s.survey, questions },
         selectedId,
+        questionBaselines: Object.fromEntries(
+          Object.entries(s.questionBaselines).filter(([key]) => key !== id)
+        ),
         dirty: true,
       }
     }),
@@ -228,12 +425,12 @@ export const useEditorStore = create<EditorStore>((set) => ({
       const questions = [...s.survey.questions]
       const [removed] = questions.splice(fromIndex, 1)
       questions.splice(toIndex, 0, removed)
-      // 更新所有题目的 order
-      questions.forEach((q, idx) => {
-        q.order = idx
-      })
+      const reorderedQuestions = questions.map((question, order) => ({
+        ...question,
+        order,
+      })) as Question[]
       return {
-        survey: { ...s.survey, questions },
+        survey: { ...s.survey, questions: reorderedQuestions },
         dirty: true,
       }
     }),

@@ -10,6 +10,7 @@ import {
 
 const reorderSchema = z
   .object({
+    expectedStructureRevision: z.number().int().nonnegative(),
     questions: z
       .array(
         z.object({
@@ -84,9 +85,20 @@ export async function PUT(
   }
 
   try {
-    await prisma.$transaction(async (tx) => {
+    const structureRevision = await prisma.$transaction(async (tx) => {
       // 同一问卷的重排请求串行执行，避免两次事务交错写出混合顺序。
       await tx.$queryRaw`SELECT "id" FROM "Survey" WHERE "id" = ${id} FOR UPDATE`
+
+      const lockedSurvey = await tx.survey.findUnique({
+        where: { id },
+        select: { structureRevision: true },
+      })
+      if (
+        !lockedSurvey ||
+        lockedSurvey.structureRevision !== parsed.data.expectedStructureRevision
+      ) {
+        throw new ReorderConflictError()
+      }
 
       const persistedQuestions = await tx.question.findMany({
         where: { surveyId: id },
@@ -121,31 +133,48 @@ export async function PUT(
           throw new ReorderConflictError()
         }
       }
+
+      const updatedSurvey = await tx.survey.update({
+        where: { id },
+        data: { structureRevision: { increment: 1 } },
+        select: { structureRevision: true },
+      })
+
+      return updatedSurvey.structureRevision
     })
+
+    // 数据库排序成功即可响应；实时通知在响应后发送。
+    scheduleSurveyBroadcast({
+      surveyId: id,
+      event: COLLABORATION_EVENTS.QUESTIONS_REORDERED,
+      operation: "questions-reorder",
+      payload: {
+        questions: parsed.data.questions.map((q) => ({
+          id: q.id,
+          order: q.order,
+        })),
+        structureRevision,
+        fromUserId: session.user.id,
+        clientId: getRealtimeClientIdFromRequest(request),
+      },
+    })
+
+    return NextResponse.json({ success: true, structureRevision })
   } catch (error) {
     if (error instanceof ReorderConflictError) {
+      const current = await prisma.survey.findUnique({
+        where: { id },
+        select: { structureRevision: true },
+      })
       return NextResponse.json(
-        { error: "题目列表已发生变化，请刷新后重试" },
+        {
+          error: "题目列表已发生变化，请刷新后重试",
+          code: "STRUCTURE_REVISION_CONFLICT",
+          currentStructureRevision: current?.structureRevision,
+        },
         { status: 409 }
       )
     }
     throw error
   }
-
-  // 数据库排序成功即可响应；实时通知在响应后发送。
-  scheduleSurveyBroadcast({
-    surveyId: id,
-    event: COLLABORATION_EVENTS.QUESTIONS_REORDERED,
-    operation: "questions-reorder",
-    payload: {
-      questions: parsed.data.questions.map((q) => ({
-        id: q.id,
-        order: q.order,
-      })),
-      fromUserId: session.user.id,
-      clientId: getRealtimeClientIdFromRequest(request),
-    },
-  })
-
-  return NextResponse.json({ success: true })
 }

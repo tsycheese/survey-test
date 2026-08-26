@@ -58,6 +58,7 @@ export type QuestionData = {
   description?: string
   required: boolean
   order: number
+  revision?: number
   config: Record<string, unknown>
 }
 
@@ -75,6 +76,7 @@ export type SyncEventData = {
   questionId?: string
   question?: QuestionData
   questions?: QuestionData[]
+  structureRevision?: number
   survey?: SurveyData
   fromUserId: string
   timestamp: string

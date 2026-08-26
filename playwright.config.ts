@@ -4,7 +4,11 @@ import { config as loadEnv } from "dotenv"
 loadEnv({ path: ".env" })
 loadEnv({ path: ".env.e2e.local", override: true })
 
-const databaseUrl = process.env.E2E_DATABASE_URL || process.env.DATABASE_URL
+// 显式覆盖优先，用于本地 E2E 凭据过期时安全地切换到另一套本地数据库。
+const databaseUrl =
+  process.env.E2E_DATABASE_URL_OVERRIDE ||
+  process.env.E2E_DATABASE_URL ||
+  process.env.DATABASE_URL
 
 if (!databaseUrl) {
   throw new Error(

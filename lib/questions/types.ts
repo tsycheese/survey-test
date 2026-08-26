@@ -7,6 +7,8 @@ export type BaseQuestion = {
   description?: string
   required: boolean
   order: number
+  /** 持久化题目的并发修订号；新建的临时题目从 0 开始。 */
+  revision?: number
 }
 
 // ============ 选择类 ============
@@ -333,6 +335,7 @@ export type Survey = {
   title: string
   description: string | null
   published: boolean
+  structureRevision: number
   userId?: string
   questions: Question[]
   settings?: SurveySettings
