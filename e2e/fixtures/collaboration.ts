@@ -103,15 +103,32 @@ async function createScenario(): Promise<CollaborationScenario> {
 }
 
 async function login(context: BrowserContext, email: string): Promise<void> {
-  const response = await context.request.post("/api/auth/login", {
-    data: { email, password: TEST_PASSWORD },
-  })
+  let lastError: unknown
 
-  if (!response.ok()) {
-    throw new Error(
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    let response
+    try {
+      response = await context.request.post("/api/auth/login", {
+        data: { email, password: TEST_PASSWORD },
+      })
+    } catch (error) {
+      lastError = error
+      if (attempt === 3) throw error
+      await new Promise((resolve) => setTimeout(resolve, attempt * 200))
+      continue
+    }
+
+    if (response.ok()) return
+
+    const requestError = new Error(
       `E2E 登录失败 (${email}): ${response.status()} ${await response.text()}`
     )
+    if (response.status() < 500 || attempt === 3) throw requestError
+    lastError = requestError
+    await new Promise((resolve) => setTimeout(resolve, attempt * 200))
   }
+
+  throw lastError ?? new Error(`E2E 登录失败 (${email})`)
 }
 
 export const test = base.extend<CollaborationFixtures>({

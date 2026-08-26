@@ -47,7 +47,7 @@ interface AIClarifyDialogProps {
     questions: Question[],
     surveyTitle?: string,
     surveyDescription?: string
-  ) => void
+  ) => Promise<boolean>
 }
 
 function getQuestionTypeLabel(type: string) {
@@ -85,13 +85,13 @@ export function AIClarifyDialog({ onConfirm }: AIClarifyDialogProps) {
   )
   const [answers, setAnswers] = useState<Record<string, string | string[]>>({})
   const [clarifyLoading, setClarifyLoading] = useState(false)
+  const [confirmLoading, setConfirmLoading] = useState(false)
   const [clarifyError, setClarifyError] = useState<string | null>(null)
 
   const {
     object,
     submit,
     isLoading: isGenerating,
-    error: generateError,
     stop,
   } = useObject({
     api: "/api/ai/generate-stream",
@@ -196,15 +196,22 @@ export function AIClarifyDialog({ onConfirm }: AIClarifyDialogProps) {
     }
   }
 
-  const handleConfirm = () => {
-    if (generatedQuestions.length > 0) {
-      onConfirm(
+  const handleConfirm = async () => {
+    if (generatedQuestions.length === 0 || confirmLoading) return
+
+    setConfirmLoading(true)
+    try {
+      const saved = await onConfirm(
         generatedQuestions,
         surveyTitle || undefined,
         surveyDescription || undefined
       )
+      if (!saved) return
+
       setOpen(false)
       resetState()
+    } finally {
+      setConfirmLoading(false)
     }
   }
 
@@ -275,6 +282,7 @@ export function AIClarifyDialog({ onConfirm }: AIClarifyDialogProps) {
     <Dialog
       open={open}
       onOpenChange={(v) => {
+        if (!v && confirmLoading) return
         if (!v) {
           stop()
           resetState()
@@ -568,14 +576,31 @@ export function AIClarifyDialog({ onConfirm }: AIClarifyDialogProps) {
               </ScrollArea>
 
               <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={handleReset}>
+                <Button
+                  variant="outline"
+                  onClick={handleReset}
+                  disabled={confirmLoading}
+                >
                   重新生成
                 </Button>
                 <Button
                   onClick={handleConfirm}
-                  disabled={isStreaming || generatedQuestions.length === 0}
+                  disabled={
+                    isStreaming ||
+                    confirmLoading ||
+                    generatedQuestions.length === 0
+                  }
                 >
-                  {isStreaming ? "生成中..." : "确认添加"}
+                  {confirmLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      正在添加...
+                    </>
+                  ) : isStreaming ? (
+                    "生成中..."
+                  ) : (
+                    "确认添加"
+                  )}
                 </Button>
               </div>
             </>

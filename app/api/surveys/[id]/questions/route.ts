@@ -1,7 +1,7 @@
 import { after, NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/prisma"
-import { z } from "zod"
+import { questionMutationSchema } from "@/lib/questions/mutation-schema"
 import {
   pusherServer,
   realtimeProvider,
@@ -9,44 +9,6 @@ import {
   COLLABORATION_EVENTS,
 } from "@/lib/pusher"
 import { getRealtimeClientIdFromRequest } from "@/lib/realtime-shared"
-
-const questionSchema = z.object({
-  operationId: z.string().uuid("无效的操作ID"),
-  title: z.string().min(1, "题目不能为空"),
-  description: z.string().optional(),
-  type: z.enum([
-    "SINGLE_CHOICE",
-    "MULTIPLE_CHOICE",
-    "TEXT",
-    "RATING",
-    "DROPDOWN",
-    "TEXTAREA",
-    "NUMBER",
-    "NPS",
-    "CES",
-    "PHONE",
-    "EMAIL",
-    "DATETIME",
-    "RANKING",
-    "GENDER",
-    "NAME",
-    "BIRTHDAY",
-    "MATRIX_SINGLE",
-    "IMAGE_SINGLE_CHOICE",
-    "IMAGE_MULTIPLE_CHOICE",
-  ]),
-  required: z.boolean().default(false),
-  order: z.number().int().nonnegative().optional(),
-  config: z
-    .record(z.unknown())
-    .optional()
-    .transform(
-      (v) =>
-        v as
-          | import("@/prisma/generated/prisma/client").Prisma.InputJsonValue
-          | undefined
-    ),
-})
 
 type PerformanceTimings = Record<string, number>
 
@@ -125,7 +87,7 @@ export async function POST(
   }
 
   const body = await measure(timings, "body", () => request.json())
-  const parsed = questionSchema.safeParse(body)
+  const parsed = questionMutationSchema.safeParse(body)
   if (!parsed.success) {
     return NextResponse.json(
       { error: parsed.error.errors[0].message },

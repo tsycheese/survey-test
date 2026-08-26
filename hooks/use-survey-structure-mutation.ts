@@ -223,43 +223,67 @@ export function useSurveyStructureMutation({
   async function addBatch(questions: Question[]) {
     const latestSurvey = useEditorStore.getState().survey
     if (!latestSurvey || latestSurvey.id !== surveyId) return
+    if (questions.length === 0) return
 
-    let nextOrder = latestSurvey.questions.length
-    let addedCount = 0
-    for (const question of questions) {
-      const response = await fetch(`/api/surveys/${surveyId}/questions`, {
-        method: "POST",
-        headers: getEditorMutationHeaders(clientId),
-        body: JSON.stringify({
-          operationId: crypto.randomUUID(),
-          title: question.title,
-          type: question.type,
-          required: question.required,
-          order: nextOrder,
-          config: question.config,
-        }),
-      })
-      if (!response.ok) continue
+    const targetSurveyId = latestSurvey.id
+    const batchId = crypto.randomUUID()
+    const submissions = questions.map((question) => ({
+      operationId: crypto.randomUUID(),
+      title: question.title,
+      description: question.description,
+      type: question.type,
+      required: question.required,
+      config: question.config,
+    }))
 
-      const created = (await response.json()) as PersistedQuestionResponse
-      useEditorStore.getState().addQuestion({
-        ...question,
-        id: created.id,
-        order: created.order,
-        revision: created.revision,
-      })
-      if (typeof created.structureRevision === "number") {
-        useEditorStore
-          .getState()
-          .setStructureRevision(created.structureRevision)
+    return coordinator.enqueue(`survey-create:${targetSurveyId}`, async () => {
+      const currentSurvey = useEditorStore.getState().survey
+      if (!currentSurvey || currentSurvey.id !== targetSurveyId) return
+
+      const response = await fetch(
+        `/api/surveys/${targetSurveyId}/questions/batch`,
+        {
+          method: "POST",
+          headers: getEditorMutationHeaders(clientId),
+          body: JSON.stringify({
+            batchId,
+            expectedStructureRevision: currentSurvey.structureRevision,
+            questions: submissions,
+          }),
+        }
+      )
+      const data = (await response.json().catch(() => ({}))) as {
+        error?: string
+        code?: string
+        questions?: PersistedQuestionResponse[]
+        structureRevision?: number
       }
-      nextOrder += 1
-      addedCount += 1
-    }
+      if (!response.ok || !data.questions) {
+        if (response.status === 409) {
+          await reconcileFromServer("batch-create-conflict")
+        }
+        throw new MutationRequestError(
+          data.error || "批量添加题目失败",
+          response.status,
+          data.code
+        )
+      }
 
-    if (addedCount !== questions.length) {
-      throw new Error(`仅成功添加 ${addedCount}/${questions.length} 道题目`)
-    }
+      const latestState = useEditorStore.getState()
+      if (latestState.survey?.id !== targetSurveyId) return
+
+      data.questions.forEach((created, index) => {
+        latestState.addQuestion({
+          ...questions[index],
+          id: created.id,
+          order: created.order,
+          revision: created.revision,
+        })
+      })
+      if (typeof data.structureRevision === "number") {
+        useEditorStore.getState().setStructureRevision(data.structureRevision)
+      }
+    })
   }
 
   async function remove(questionId: string) {

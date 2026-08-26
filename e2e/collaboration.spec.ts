@@ -181,6 +181,143 @@ test.describe("问卷双账号协作", () => {
       .toBe(true)
   })
 
+  test("AI 批量新增整批提交且重放不重复", async ({
+    scenario,
+    ownerPage,
+    collaboratorPage,
+  }) => {
+    const batchId = crypto.randomUUID()
+    const operationIds = [
+      crypto.randomUUID(),
+      crypto.randomUUID(),
+      crypto.randomUUID(),
+    ]
+    const questions = operationIds.map((operationId, index) => ({
+      operationId,
+      title: `AI 批量题目 ${index + 1}`,
+      type: "TEXT" as const,
+      required: false,
+      config: { placeholder: `批量输入 ${index + 1}`, format: "any" },
+    }))
+    const batchUrl = `/api/surveys/${scenario.surveyId}/questions/batch`
+
+    const invalidResponse = await collaboratorPage.request.post(batchUrl, {
+      data: {
+        batchId,
+        expectedStructureRevision: 0,
+        questions: questions.map((question, index) =>
+          index === 1 ? { ...question, title: "" } : question
+        ),
+      },
+    })
+    expect(invalidResponse.status()).toBe(400)
+    await expect
+      .poll(() =>
+        prisma.question.count({
+          where: {
+            surveyId: scenario.surveyId,
+            clientMutationId: { in: operationIds },
+          },
+        })
+      )
+      .toBe(0)
+
+    const requestData = {
+      batchId,
+      expectedStructureRevision: 0,
+      questions,
+    }
+    const createdResponse = await collaboratorPage.request.post(batchUrl, {
+      data: requestData,
+    })
+    expect(createdResponse.status()).toBe(201)
+    expect(createdResponse.headers()["x-idempotent-replay"]).toBe("false")
+    expect(await createdResponse.json()).toMatchObject({
+      batchId,
+      structureRevision: 1,
+      questions: questions.map((question, index) => ({
+        title: question.title,
+        order: index + 2,
+      })),
+    })
+
+    const replayResponse = await collaboratorPage.request.post(batchUrl, {
+      data: requestData,
+    })
+    expect(replayResponse.status()).toBe(200)
+    expect(replayResponse.headers()["x-idempotent-replay"]).toBe("true")
+
+    const rejectedOperationId = crypto.randomUUID()
+    const partialReplayResponse = await collaboratorPage.request.post(
+      batchUrl,
+      {
+        data: {
+          batchId: crypto.randomUUID(),
+          expectedStructureRevision: 1,
+          questions: [
+            questions[0],
+            {
+              operationId: rejectedOperationId,
+              title: "不应部分写入的题目",
+              type: "TEXT",
+              required: false,
+              config: { placeholder: "", format: "any" },
+            },
+          ],
+        },
+      }
+    )
+    expect(partialReplayResponse.status()).toBe(409)
+    expect(await partialReplayResponse.json()).toMatchObject({
+      code: "BATCH_OPERATION_CONFLICT",
+    })
+
+    await expect
+      .poll(async () => {
+        const [survey, batchQuestionCount, rejectedQuestionCount] =
+          await Promise.all([
+            prisma.survey.findUnique({
+              where: { id: scenario.surveyId },
+              select: { structureRevision: true },
+            }),
+            prisma.question.count({
+              where: {
+                surveyId: scenario.surveyId,
+                clientMutationId: { in: operationIds },
+              },
+            }),
+            prisma.question.count({
+              where: {
+                surveyId: scenario.surveyId,
+                clientMutationId: rejectedOperationId,
+              },
+            }),
+          ])
+        return {
+          structureRevision: survey?.structureRevision,
+          batchQuestionCount,
+          rejectedQuestionCount,
+        }
+      })
+      .toEqual({
+        structureRevision: 1,
+        batchQuestionCount: 3,
+        rejectedQuestionCount: 0,
+      })
+
+    await Promise.all([
+      ownerPage.goto(`/surveys/${scenario.surveyId}/edit`),
+      collaboratorPage.goto(`/surveys/${scenario.surveyId}/edit`),
+    ])
+    await expect(collaboratorPage.locator("[data-question-id]")).toHaveCount(
+      5,
+      { timeout: 15_000 }
+    )
+    await expect(ownerPage.locator("[data-question-id]")).toHaveCount(5, {
+      timeout: 15_000,
+    })
+  })
+
   test("题目保存失败时保留本地草稿并可重试", async ({
     scenario,
     ownerPage,

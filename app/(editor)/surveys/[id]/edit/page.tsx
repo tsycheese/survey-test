@@ -370,21 +370,26 @@ export default function EditSurveyPage() {
     newTitle?: string,
     newDescription?: string
   ) {
-    if (!survey) return
+    if (!survey) return false
 
     try {
       // 如果有新的问卷标题/描述，先更新
-      if (newTitle || newDescription) {
-        const title = newTitle || survey.title
-        const description = newDescription ?? survey.description ?? ""
+      const title = newTitle || survey.title
+      const description = newDescription ?? survey.description ?? ""
+      if (
+        title !== survey.title ||
+        description !== (survey.description ?? "")
+      ) {
         updateSurveyInfo(title, description)
         await surveyDetailsMutation.saveNow()
       }
 
       await structureMutation.addBatch(questions)
       toast.success(`已添加 ${questions.length} 道题目`)
+      return true
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "添加失败")
+      return false
     }
   }
 
