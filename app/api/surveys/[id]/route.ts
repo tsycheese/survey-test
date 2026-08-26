@@ -9,8 +9,9 @@ import {
 } from "@/lib/realtime-shared"
 
 const updateSurveySchema = z.object({
+  expectedDetailsRevision: z.number().int().nonnegative(),
   title: z.string().min(1).max(100).optional(),
-  description: z.string().max(500).optional(),
+  description: z.string().max(500).nullable().optional(),
   settings: z.record(z.boolean()).optional(),
 })
 
@@ -91,31 +92,82 @@ export async function PUT(
     )
   }
 
-  const existing = await prisma.survey.findUnique({
-    where: { id },
-    include: {
-      collaborators: {
-        where: { userId },
-        select: { canEdit: true },
+  const result = await prisma.$transaction(async (tx) => {
+    const lockedRows = await tx.$queryRaw<
+      Array<{ id: string; detailsRevision: number }>
+    >`
+      SELECT "id", "detailsRevision"
+      FROM "Survey"
+      WHERE "id" = ${id}
+      FOR UPDATE
+    `
+    const locked = lockedRows[0]
+    if (!locked) return { kind: "not-found" } as const
+
+    const existing = await tx.survey.findUnique({
+      where: { id },
+      include: {
+        collaborators: {
+          where: { userId },
+          select: { canEdit: true },
+        },
       },
-    },
+    })
+    if (!existing) return { kind: "not-found" } as const
+
+    const isOwner = existing.userId === userId
+    const canEdit = isOwner || existing.collaborators[0]?.canEdit
+    if (!canEdit) return { kind: "forbidden" } as const
+
+    if (locked.detailsRevision !== parsed.data.expectedDetailsRevision) {
+      return {
+        kind: "conflict",
+        current: {
+          title: existing.title,
+          description: existing.description,
+          settings: existing.settings,
+          detailsRevision: existing.detailsRevision,
+        },
+      } as const
+    }
+
+    const survey = await tx.survey.update({
+      where: { id },
+      data: {
+        ...(parsed.data.title !== undefined
+          ? { title: parsed.data.title }
+          : {}),
+        ...(parsed.data.description !== undefined
+          ? { description: parsed.data.description }
+          : {}),
+        ...(parsed.data.settings !== undefined
+          ? { settings: parsed.data.settings }
+          : {}),
+        detailsRevision: { increment: 1 },
+      },
+    })
+
+    return { kind: "updated", survey } as const
   })
 
-  if (!existing) {
+  if (result.kind === "not-found") {
     return NextResponse.json({ error: "问卷不存在" }, { status: 404 })
   }
-
-  const isOwner = existing.userId === userId
-  const canEdit = isOwner || existing.collaborators[0]?.canEdit
-
-  if (!canEdit) {
+  if (result.kind === "forbidden") {
     return NextResponse.json({ error: "无权限编辑" }, { status: 403 })
   }
+  if (result.kind === "conflict") {
+    return NextResponse.json(
+      {
+        error: "问卷信息已被其他协作者更新",
+        code: "SURVEY_DETAILS_REVISION_CONFLICT",
+        current: result.current,
+      },
+      { status: 409 }
+    )
+  }
 
-  const survey = await prisma.survey.update({
-    where: { id },
-    data: parsed.data,
-  })
+  const { survey } = result
 
   // 数据库更新成功即可响应；实时通知在响应后发送。
   scheduleSurveyBroadcast({
@@ -127,6 +179,7 @@ export async function PUT(
         title: survey.title,
         description: survey.description,
         settings: survey.settings as Record<string, unknown>,
+        detailsRevision: survey.detailsRevision,
       },
       fromUserId: session.user.id,
       clientId: getRealtimeClientIdFromRequest(request),

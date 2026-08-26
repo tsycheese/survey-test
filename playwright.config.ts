@@ -33,7 +33,8 @@ export default defineConfig({
   workers: 1,
   retries: process.env.CI ? 2 : 0,
   reporter: [["list"], ["html", { open: "never" }]],
-  timeout: 30_000,
+  // 双账号首轮会并发触发编辑页与协作接口的 Turbopack 冷编译。
+  timeout: 45_000,
   expect: {
     timeout: 10_000,
   },

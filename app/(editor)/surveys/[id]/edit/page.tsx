@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { toast } from "sonner"
 import {
@@ -34,7 +34,6 @@ import {
 } from "@dnd-kit/core"
 import {
   SortableContext,
-  arrayMove,
   useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable"
@@ -47,28 +46,18 @@ import { cn } from "@/lib/utils"
 import { useEditorStore } from "@/lib/editor-store"
 import {
   editorMutationKey,
+  getEditorMutationHeaders,
   KeyedMutationCoordinator,
-  MutationRequestError,
   type EditorMutationState,
 } from "@/lib/editor-mutations"
-import {
-  getQuestionDef,
-  createQuestion,
-  QUESTION_DEFS,
-} from "@/lib/questions/registry"
+import { getQuestionDef, QUESTION_DEFS } from "@/lib/questions/registry"
 import type {
   Question,
   QuestionType,
   Survey,
-  SurveySettings,
   QuestionCategory,
 } from "@/lib/questions/types"
-import {
-  COLLABORATION_EVENTS,
-  REALTIME_CLIENT_ID_HEADER,
-  type LockInfo,
-  type SyncEventData,
-} from "@/lib/realtime-shared"
+import { type LockInfo } from "@/lib/realtime-shared"
 import { QUESTION_CATEGORIES } from "@/lib/questions/types"
 import { SurveySettingsPanel } from "@/components/editor/survey-settings-panel"
 import { AIClarifyDialog } from "@/components/ai/ai-clarify-dialog"
@@ -86,116 +75,15 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog"
-
-function getClientPerformanceTime(): number {
-  return performance.now()
-}
-
-function waitForNextPaint(): Promise<number> {
-  return new Promise((resolve) => {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => resolve(getClientPerformanceTime()))
-    })
-  })
-}
-
-type SurveyQuestionSnapshot = {
-  id: string
-  type: string
-  title: string
-  description: string | null
-  required: boolean
-  order: number
-  revision: number
-  config: Record<string, unknown> | null
-  lockedBy?: string | null
-  lockedAt?: string | null
-}
-
-type SurveySnapshot = {
-  id: string
-  title: string
-  description: string | null
-  published: boolean
-  structureRevision: number
-  userId: string
-  settings?: SurveySettings
-  questions?: SurveyQuestionSnapshot[]
-}
-
-type PersistedQuestionResponse = SurveyQuestionSnapshot & {
-  structureRevision?: number
-}
-
-type SurveyDetails = Pick<Survey, "title" | "description" | "settings">
-
-type PersistedSurveyDetailsResponse = {
-  title: string
-  description: string | null
-  settings?: SurveySettings | null
-}
-
-function toSurveyDetails(survey: Survey): SurveyDetails {
-  return {
-    title: survey.title,
-    description: survey.description,
-    settings: survey.settings,
-  }
-}
-
-function toEditorQuestion(question: SurveyQuestionSnapshot): Question {
-  return {
-    id: question.id,
-    type: question.type,
-    title: question.title,
-    description: question.description ?? undefined,
-    required: question.required,
-    order: question.order,
-    revision: question.revision,
-    config: question.config ?? {},
-  } as Question
-}
-
-function toEditorSurvey(snapshot: SurveySnapshot): Survey {
-  return {
-    id: snapshot.id,
-    title: snapshot.title,
-    description: snapshot.description,
-    published: snapshot.published,
-    structureRevision: snapshot.structureRevision ?? 0,
-    userId: snapshot.userId,
-    settings: snapshot.settings,
-    questions: (snapshot.questions ?? []).map(toEditorQuestion),
-  }
-}
-
-function toLockedQuestions(
-  snapshot: SurveySnapshot,
-  currentUserId: string | null
-): Map<string, LockInfo> {
-  const locks = new Map<string, LockInfo>()
-
-  for (const question of snapshot.questions ?? []) {
-    if (!question.lockedBy || question.lockedBy === currentUserId) continue
-    locks.set(question.id, {
-      questionId: question.id,
-      userId: question.lockedBy,
-      userName: null,
-      lockedAt: question.lockedAt
-        ? new Date(question.lockedAt).toISOString()
-        : new Date().toISOString(),
-    })
-  }
-
-  return locks
-}
-
-function getRealtimeRequestHeaders(clientId: string | null) {
-  return {
-    "Content-Type": "application/json",
-    ...(clientId ? { [REALTIME_CLIENT_ID_HEADER]: clientId } : {}),
-  }
-}
+import {
+  toEditorSurvey,
+  toLockedQuestions,
+  type SurveySnapshot,
+} from "@/lib/editor-snapshots"
+import { useSurveyReconciliation } from "@/hooks/use-survey-reconciliation"
+import { useSurveyDetailsMutation } from "@/hooks/use-survey-details-mutation"
+import { useQuestionMutation } from "@/hooks/use-question-mutation"
+import { useSurveyStructureMutation } from "@/hooks/use-survey-structure-mutation"
 
 export default function EditSurveyPage() {
   const { id } = useParams<{ id: string }>()
@@ -206,24 +94,9 @@ export default function EditSurveyPage() {
     pendingQuestionIds,
     mutationStates,
     setSurvey,
-    reconcileSurvey,
     selectQuestion,
-    addQuestion,
-    addPendingQuestion,
-    confirmPendingQuestion,
-    rollbackPendingQuestion,
     updateQuestion,
-    commitQuestionMutation,
-    commitSurveyMutation,
-    restoreQuestionBaseline,
-    setQuestionBaseline,
-    setMutationState,
-    clearMutationState,
-    setStructureRevision,
-    updateSurveySettings,
     setPublished,
-    deleteQuestion,
-    reorderQuestions,
     updateSurveyInfo,
   } = useEditorStore()
   const [activeTab, setActiveTab] = useState<"survey" | "question">("survey")
@@ -254,14 +127,7 @@ export default function EditSurveyPage() {
   const lockQueueRef = useRef<Promise<void>>(Promise.resolve())
   const mutationCoordinatorRef = useRef<KeyedMutationCoordinator | null>(null)
   mutationCoordinatorRef.current ??= new KeyedMutationCoordinator()
-  const surveySaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const surveyDraftVersionRef = useRef(0)
-  const surveyEnqueuedVersionRef = useRef(-1)
-  const reconciliationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null
-  )
-  const reconciliationControllerRef = useRef<AbortController | null>(null)
-  const reconciliationSequenceRef = useRef(0)
+  const mutationCoordinator = mutationCoordinatorRef.current
 
   // 协作功能（Presence Channel 自动处理加入/离开）
   const {
@@ -279,133 +145,49 @@ export default function EditSurveyPage() {
     permission.userId
   )
 
-  const reconcileFromServer = useCallback(
-    async (reason: string) => {
-      if (!permission.canAccess) return
-
-      reconciliationControllerRef.current?.abort()
-      const controller = new AbortController()
-      reconciliationControllerRef.current = controller
-      const sequence = ++reconciliationSequenceRef.current
-      const snapshotStartedAt = Date.now()
-      const startedAt = getClientPerformanceTime()
-
-      try {
-        const response = await fetch(`/api/surveys/${id}`, {
-          signal: controller.signal,
-        })
-        if (!response.ok) return
-
-        const snapshot = (await response.json()) as SurveySnapshot
-        if (
-          controller.signal.aborted ||
-          sequence !== reconciliationSequenceRef.current ||
-          useEditorStore.getState().survey?.id !== id
-        ) {
-          return
-        }
-
-        reconcileSurvey(toEditorSurvey(snapshot))
-        reconcileLockedQuestions(
-          toLockedQuestions(snapshot, permission.userId),
-          snapshotStartedAt
-        )
-        console.info("[Realtime Snapshot Reconciliation]", {
-          reason,
-          duration: `${(getClientPerformanceTime() - startedAt).toFixed(1)}ms`,
-          questionCount: snapshot.questions?.length ?? 0,
-        })
-      } catch (error) {
-        if (controller.signal.aborted) return
-        console.error("[Realtime Snapshot Reconciliation Error]", {
-          reason,
-          error,
-        })
-      }
-    },
-    [
-      id,
-      permission.canAccess,
-      permission.userId,
+  const { reconcileFromServer, scheduleReconciliation } =
+    useSurveyReconciliation({
+      surveyId: id,
+      canAccess: permission.canAccess,
+      currentUserId: permission.userId,
+      clientId,
+      subscriptionEpoch,
+      onEvent,
       reconcileLockedQuestions,
-      reconcileSurvey,
-    ]
-  )
+    })
 
-  const scheduleReconciliation = useCallback(
-    (reason: string, delay = 40) => {
-      if (reconciliationTimerRef.current) {
-        clearTimeout(reconciliationTimerRef.current)
-      }
-      reconciliationTimerRef.current = setTimeout(() => {
-        reconciliationTimerRef.current = null
-        void reconcileFromServer(reason)
-      }, delay)
-    },
-    [reconcileFromServer]
-  )
-
-  // 实时事件只作为“数据已失效”的提示，最终状态统一从数据库快照恢复。
-  // 这样重复事件、乱序事件和事件间隙都不会在旧闭包上叠加出错误状态。
-  useEffect(() => {
-    if (!permission.canAccess) return
-
-    const subscriptions = [
-      [COLLABORATION_EVENTS.QUESTION_UPDATED, "题目已被其他协作者更新"],
-      [COLLABORATION_EVENTS.QUESTION_CREATED, "有新题目添加"],
-      [COLLABORATION_EVENTS.QUESTION_DELETED, "有题目被删除"],
-      [COLLABORATION_EVENTS.QUESTIONS_REORDERED, null],
-      [COLLABORATION_EVENTS.SURVEY_UPDATED, "问卷信息已更新"],
-    ] as const
-
-    const unsubscribers = subscriptions.map(([event, message]) =>
-      onEvent(event, (data) => {
-        scheduleReconciliation(event)
-        const eventClientId = (data as SyncEventData | undefined)?.clientId
-        if (message && eventClientId !== clientId) {
-          toast.info(message, { duration: 2000 })
-        }
-      })
-    )
-
-    return () => unsubscribers.forEach((unsubscribe) => unsubscribe())
-  }, [clientId, onEvent, permission.canAccess, scheduleReconciliation])
-
-  // Presence 重新订阅成功代表连接可能经历过中断；每次都重新对账。
-  useEffect(() => {
-    if (subscriptionEpoch === 0) return
-    scheduleReconciliation("subscription-succeeded", 0)
-  }, [scheduleReconciliation, subscriptionEpoch])
-
-  // 浏览器恢复联网或标签页重新可见时补一次对账，覆盖广播失败与休眠场景。
-  useEffect(() => {
-    const handleOnline = () => scheduleReconciliation("browser-online", 0)
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        scheduleReconciliation("page-visible", 0)
-      }
-    }
-
-    window.addEventListener("online", handleOnline)
-    document.addEventListener("visibilitychange", handleVisibilityChange)
-    return () => {
-      window.removeEventListener("online", handleOnline)
-      document.removeEventListener("visibilitychange", handleVisibilityChange)
-    }
-  }, [scheduleReconciliation])
-
-  useEffect(
-    () => () => {
-      if (surveySaveTimerRef.current) {
-        clearTimeout(surveySaveTimerRef.current)
-      }
-      if (reconciliationTimerRef.current) {
-        clearTimeout(reconciliationTimerRef.current)
-      }
-      reconciliationControllerRef.current?.abort()
-    },
-    [id]
-  )
+  const surveyDetailsMutation = useSurveyDetailsMutation({
+    surveyId: id,
+    clientId,
+    coordinator: mutationCoordinator,
+  })
+  const {
+    scheduleSave: scheduleSurveyDetailsSave,
+    flushSave: flushSurveyDetailsSave,
+    updateSettings: handleUpdateSurveySettings,
+    retry: handleRetrySurveyDetails,
+    useServerVersion: handleUseServerSurveyDetails,
+  } = surveyDetailsMutation
+  const {
+    update: handleUpdateQuestion,
+    retry: handleRetryQuestion,
+    useServerVersion: handleUseServerQuestion,
+  } = useQuestionMutation({
+    surveyId: id,
+    clientId,
+    currentUserId: permission.userId,
+    lockedQuestions,
+    coordinator: mutationCoordinator,
+  })
+  const structureMutation = useSurveyStructureMutation({
+    surveyId: id,
+    clientId,
+    coordinator: mutationCoordinator,
+    reconcileFromServer,
+    scheduleReconciliation,
+    onCreated: () => setActiveTab("question"),
+  })
+  const handleDeleteQuestion = structureMutation.remove
 
   // 选中题目时自动切换到题目面板
   const handleSelectQuestion = (id: string) => {
@@ -473,13 +255,13 @@ export default function EditSurveyPage() {
     if (draggingType && survey) {
       // 拖拽到空画布
       if (over.id === "empty-canvas-dropzone") {
-        await handleAddQuestionAtPosition(draggingType, 0)
+        await structureMutation.create(draggingType, 0, true)
         return
       }
 
       const overIndex = survey.questions.findIndex((q) => q.id === over.id)
       if (overIndex >= 0) {
-        await handleAddQuestionAtPosition(draggingType, overIndex)
+        await structureMutation.create(draggingType, overIndex, true)
       }
       return
     }
@@ -487,73 +269,9 @@ export default function EditSurveyPage() {
     // 已有题目重排
     if (!draggingId || !survey) return
 
-    if (pendingQuestionIds.size > 0) {
-      toast.info("请等待新题目保存完成后再调整顺序")
-      return
-    }
-
     const fromIndex = survey.questions.findIndex((q) => q.id === draggingId)
     const toIndex = survey.questions.findIndex((q) => q.id === over.id)
-
-    if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0) return
-
-    // 更新本地状态
-    reorderQuestions(fromIndex, toIndex)
-
-    // 调用 API 保存新顺序
-    const newQuestions = arrayMove(survey.questions, fromIndex, toIndex).map(
-      (q, idx) => ({ ...q, order: idx })
-    )
-    const key = editorMutationKey.order(id)
-    const coordinator = mutationCoordinatorRef.current!
-    coordinator.unblock(key)
-    setMutationState(key, "pending")
-
-    void coordinator.enqueue(key, async () => {
-      setMutationState(key, "pending")
-      try {
-        const expectedStructureRevision =
-          useEditorStore.getState().survey?.structureRevision ?? 0
-        const res = await fetch(`/api/surveys/${id}/questions/reorder`, {
-          method: "PUT",
-          headers: getRealtimeRequestHeaders(clientId),
-          body: JSON.stringify({
-            expectedStructureRevision,
-            questions: newQuestions.map((q) => ({
-              id: q.id,
-              order: q.order,
-            })),
-          }),
-        })
-        const data = (await res.json().catch(() => ({}))) as {
-          error?: string
-          code?: string
-          structureRevision?: number
-        }
-        if (!res.ok) {
-          throw new MutationRequestError(
-            data.error || "更新题目顺序失败",
-            res.status,
-            data.code
-          )
-        }
-
-        if (typeof data.structureRevision === "number") {
-          setStructureRevision(data.structureRevision)
-        }
-        setMutationState(key, "saved")
-      } catch (error) {
-        coordinator.block(key)
-        const isConflict =
-          error instanceof MutationRequestError && error.status === 409
-        const message =
-          error instanceof Error ? error.message : "更新题目顺序失败"
-        setMutationState(key, isConflict ? "conflict" : "failed", message)
-        toast.error(message)
-        await reconcileFromServer("reorder-failed")
-        clearMutationState(key)
-      }
-    })
+    structureMutation.reorder(fromIndex, toIndex)
   }
 
   useEffect(() => {
@@ -637,305 +355,10 @@ export default function EditSurveyPage() {
     return () => controller.abort()
   }, [id, setSurvey, setLockedQuestions])
 
-  function enqueueSurveyDetailsSave(): Promise<void> {
-    const latestSurvey = useEditorStore.getState().survey
-    if (!latestSurvey || latestSurvey.id !== id) return Promise.resolve()
-
-    const submitted = toSurveyDetails(latestSurvey)
-    const submittedVersion = surveyDraftVersionRef.current
-    const key = editorMutationKey.surveyDetails(id)
-    const coordinator = mutationCoordinatorRef.current!
-    surveyEnqueuedVersionRef.current = submittedVersion
-    coordinator.unblock(key)
-    setMutationState(key, "pending")
-
-    return coordinator.enqueue(key, async () => {
-      setMutationState(key, "pending")
-
-      try {
-        const res = await fetch(`/api/surveys/${id}`, {
-          method: "PUT",
-          headers: getRealtimeRequestHeaders(clientId),
-          body: JSON.stringify({
-            title: submitted.title,
-            description: submitted.description,
-            settings: submitted.settings,
-          }),
-        })
-        const data = (await res.json().catch(() => ({}))) as
-          | PersistedSurveyDetailsResponse
-          | { error?: string; code?: string }
-
-        if (!res.ok) {
-          const errorData = data as { error?: string; code?: string }
-          throw new MutationRequestError(
-            errorData.error || "保存问卷失败",
-            res.status,
-            errorData.code
-          )
-        }
-
-        const persisted = data as PersistedSurveyDetailsResponse
-        commitSurveyMutation(submitted, {
-          title: persisted.title,
-          description: persisted.description,
-          settings: persisted.settings ?? undefined,
-        })
-        if (submittedVersion === surveyDraftVersionRef.current) {
-          setMutationState(key, "saved")
-        }
-      } catch (error) {
-        coordinator.block(key)
-        const isConflict =
-          error instanceof MutationRequestError && error.status === 409
-        const message =
-          error instanceof Error ? error.message : "保存问卷失败，请稍后重试"
-        setMutationState(key, isConflict ? "conflict" : "failed", message)
-        toast.error(message)
-      }
-    })
-  }
-
-  function scheduleSurveyDetailsSave() {
-    surveyDraftVersionRef.current += 1
-    const key = editorMutationKey.surveyDetails(id)
-    setMutationState(key, "pending")
-
-    if (surveySaveTimerRef.current) {
-      clearTimeout(surveySaveTimerRef.current)
-    }
-    surveySaveTimerRef.current = setTimeout(() => {
-      surveySaveTimerRef.current = null
-      void enqueueSurveyDetailsSave()
-    }, 500)
-  }
-
-  function flushSurveyDetailsSave(): Promise<void> {
-    const key = editorMutationKey.surveyDetails(id)
-    if (surveySaveTimerRef.current) {
-      clearTimeout(surveySaveTimerRef.current)
-      surveySaveTimerRef.current = null
-    } else if (
-      surveyEnqueuedVersionRef.current === surveyDraftVersionRef.current &&
-      mutationCoordinatorRef.current!.hasPending(key)
-    ) {
-      return mutationCoordinatorRef.current!.waitForKey(key)
-    }
-    return enqueueSurveyDetailsSave()
-  }
-
-  function handleUpdateSurveySettings(settings: SurveySettings) {
-    const latestSurvey = useEditorStore.getState().survey
-    if (!latestSurvey || latestSurvey.id !== id) return
-    const newSettings = { ...latestSurvey.settings, ...settings }
-    updateSurveySettings(newSettings)
-    surveyDraftVersionRef.current += 1
-    void flushSurveyDetailsSave()
-  }
-
-  function handleRetrySurveyDetails() {
-    surveyEnqueuedVersionRef.current = -1
-    void flushSurveyDetailsSave()
-  }
-
-  function createQuestionOptimistically(
-    type: QuestionType,
-    requestedIndex: number,
-    showSuccessToast = false
-  ): Promise<void> {
-    const latestSurvey = useEditorStore.getState().survey
-    if (!latestSurvey || latestSurvey.id !== id) return Promise.resolve()
-
-    const targetSurveyId = latestSurvey.id
-    const index = Math.min(
-      Math.max(requestedIndex, 0),
-      latestSurvey.questions.length
-    )
-    const operationId = crypto.randomUUID()
-    const requestId = operationId
-    const temporaryId = `temporary-${operationId}`
-    const clickStartedAt = getClientPerformanceTime()
-    const questionCountBefore = latestSurvey.questions.length
-    const visibilityStateAtClick = document.visibilityState
-    const question = {
-      ...createQuestion(type, index),
-      id: temporaryId,
-      revision: 0,
-    }
-
-    addPendingQuestion(question)
-    const optimisticStateUpdatedAt = getClientPerformanceTime()
-    const optimisticPaintPromise = waitForNextPaint()
-
-    const persistQuestion = async () => {
-      const requestStartedAt = getClientPerformanceTime()
-      let saveAttempts = 0
-
-      try {
-        const requestBody = JSON.stringify({
-          operationId,
-          title: question.title,
-          type: question.type,
-          required: question.required,
-          order: index,
-          config: question.config,
-        })
-        const sendCreateRequest = async (): Promise<Response> => {
-          let lastNetworkError: unknown
-
-          for (let attempt = 1; attempt <= 3; attempt += 1) {
-            saveAttempts = attempt
-
-            try {
-              const response = await fetch(
-                `/api/surveys/${targetSurveyId}/questions`,
-                {
-                  method: "POST",
-                  headers: {
-                    ...getRealtimeRequestHeaders(clientId),
-                    "X-Request-Id": requestId,
-                  },
-                  body: requestBody,
-                }
-              )
-
-              if (response.ok || response.status < 500 || attempt === 3) {
-                return response
-              }
-            } catch (error) {
-              lastNetworkError = error
-              if (attempt === 3) throw error
-            }
-
-            await new Promise((resolve) => setTimeout(resolve, attempt * 150))
-          }
-
-          throw lastNetworkError ?? new Error("创建题目请求失败")
-        }
-
-        const res = await sendCreateRequest()
-        const responseReceivedAt = getClientPerformanceTime()
-
-        if (!res.ok) {
-          throw new Error(`创建题目失败：HTTP ${res.status}`)
-        }
-
-        const created = (await res.json()) as PersistedQuestionResponse
-        const responseParsedAt = getClientPerformanceTime()
-
-        const currentEditorState = useEditorStore.getState()
-        const canApplyToCurrentEditor =
-          currentEditorState.survey?.id === targetSurveyId &&
-          currentEditorState.pendingQuestionIds.has(temporaryId)
-
-        if (canApplyToCurrentEditor) {
-          confirmPendingQuestion(targetSurveyId, temporaryId, {
-            ...question,
-            id: created.id,
-            order: created.order,
-            revision: created.revision,
-          })
-          if (typeof created.structureRevision === "number") {
-            setStructureRevision(created.structureRevision)
-          }
-        }
-        const confirmedAt = getClientPerformanceTime()
-        const [optimisticPaintedAt, confirmedPaintedAt] = await Promise.all([
-          optimisticPaintPromise,
-          canApplyToCurrentEditor
-            ? waitForNextPaint()
-            : Promise.resolve(confirmedAt),
-        ])
-
-        if (showSuccessToast && canApplyToCurrentEditor) {
-          setActiveTab("question")
-          toast.success("题目已添加")
-        }
-
-        console.groupCollapsed(
-          `[Question Add Performance] ${requestId.slice(0, 8)}`
-        )
-        console.table([
-          {
-            phase: "乐观状态更新",
-            duration: `${(optimisticStateUpdatedAt - clickStartedAt).toFixed(
-              1
-            )}ms`,
-          },
-          {
-            phase: "点击到乐观绘制",
-            duration: `${(optimisticPaintedAt - clickStartedAt).toFixed(1)}ms`,
-          },
-          {
-            phase: "后台队列等待",
-            duration: `${(requestStartedAt - optimisticStateUpdatedAt).toFixed(
-              1
-            )}ms`,
-          },
-          {
-            phase: "保存请求往返",
-            duration: `${(responseReceivedAt - requestStartedAt).toFixed(1)}ms`,
-          },
-          {
-            phase: "正式 ID 确认",
-            duration: `${(confirmedAt - responseParsedAt).toFixed(1)}ms`,
-          },
-          {
-            phase: "点击到持久化完成",
-            duration: `${(confirmedPaintedAt - clickStartedAt).toFixed(1)}ms`,
-          },
-        ])
-        console.info("Server-Timing:", res.headers.get("server-timing") ?? "无")
-        console.info("Test Context:", {
-          questionType: type,
-          questionCountBefore,
-          requestedIndex: index,
-          saveAttempts,
-          idempotentReplay: res.headers.get("x-idempotent-replay") === "true",
-          visibilityStateAtClick,
-          visibilityStateAtPaint: document.visibilityState,
-        })
-        console.info("Request ID:", requestId)
-        console.groupEnd()
-      } catch (error) {
-        const currentEditorState = useEditorStore.getState()
-        const canApplyToCurrentEditor =
-          currentEditorState.survey?.id === targetSurveyId &&
-          currentEditorState.pendingQuestionIds.has(temporaryId)
-
-        if (canApplyToCurrentEditor) {
-          rollbackPendingQuestion(targetSurveyId, temporaryId)
-          await waitForNextPaint()
-        }
-        console.error("[Question Add Performance] 保存失败", {
-          requestId,
-          saveAttempts,
-          rolledBack: canApplyToCurrentEditor,
-          duration: `${(getClientPerformanceTime() - clickStartedAt).toFixed(
-            1
-          )}ms`,
-          error,
-        })
-        if (canApplyToCurrentEditor) {
-          toast.error("添加失败，已撤销临时题目")
-        }
-      }
-    }
-
-    return mutationCoordinatorRef.current!.enqueue(
-      `survey-create:${targetSurveyId}`,
-      persistQuestion
-    )
-  }
-
   function handleAddQuestion(type: QuestionType) {
     const questionCount =
       useEditorStore.getState().survey?.questions.length ?? 0
-    void createQuestionOptimistically(type, questionCount)
-  }
-
-  function handleAddQuestionAtPosition(type: QuestionType, index: number) {
-    return createQuestionOptimistically(type, index, true)
+    void structureMutation.create(type, questionCount)
   }
 
   async function handleAddAIQuestions(
@@ -951,159 +374,14 @@ export default function EditSurveyPage() {
         const title = newTitle || survey.title
         const description = newDescription ?? survey.description ?? ""
         updateSurveyInfo(title, description)
-        surveyDraftVersionRef.current += 1
-        await flushSurveyDetailsSave()
+        await surveyDetailsMutation.saveNow()
       }
 
-      // 批量添加题目
-      let nextOrder = survey.questions.length
-      for (const q of questions) {
-        const res = await fetch(`/api/surveys/${id}/questions`, {
-          method: "POST",
-          headers: getRealtimeRequestHeaders(clientId),
-          body: JSON.stringify({
-            operationId: crypto.randomUUID(),
-            title: q.title,
-            type: q.type,
-            required: q.required,
-            order: nextOrder,
-            config: q.config,
-          }),
-        })
-        if (res.ok) {
-          const created = (await res.json()) as PersistedQuestionResponse
-          addQuestion({
-            ...q,
-            id: created.id,
-            order: created.order,
-            revision: created.revision,
-          })
-          if (typeof created.structureRevision === "number") {
-            setStructureRevision(created.structureRevision)
-          }
-          nextOrder++
-        }
-      }
+      await structureMutation.addBatch(questions)
       toast.success(`已添加 ${questions.length} 道题目`)
-    } catch {
-      toast.error("添加失败")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "添加失败")
     }
-  }
-
-  async function handleDeleteQuestion(qid: string) {
-    const currentQuestion = useEditorStore
-      .getState()
-      .survey?.questions.find((question) => question.id === qid)
-    if (!currentQuestion) return
-
-    const res = await fetch(`/api/surveys/${id}/questions/${qid}`, {
-      method: "DELETE",
-      headers: getRealtimeRequestHeaders(clientId),
-      body: JSON.stringify({
-        expectedRevision: currentQuestion.revision ?? 0,
-      }),
-    })
-    if (res.ok) {
-      const data = (await res.json()) as { structureRevision?: number }
-      deleteQuestion(qid)
-      if (typeof data.structureRevision === "number") {
-        setStructureRevision(data.structureRevision)
-      }
-    } else {
-      const data = (await res.json().catch(() => ({}))) as {
-        error?: string
-      }
-      toast.error(data.error || "删除失败")
-      if (res.status === 409) {
-        scheduleReconciliation("delete-conflict", 0)
-      }
-    }
-  }
-
-  function handleUpdateQuestion(updated: Question) {
-    // 检查题目是否被锁定
-    const lockInfo = lockedQuestions.get(updated.id)
-    if (lockInfo && lockInfo.userId !== permission.userId) {
-      toast.error(`该题目正在被 ${lockInfo.userName || "其他用户"} 编辑`)
-      return
-    }
-
-    updateQuestion(updated)
-    const key = editorMutationKey.question(updated.id)
-    const coordinator = mutationCoordinatorRef.current!
-    coordinator.unblock(key)
-    setMutationState(key, "pending")
-
-    void coordinator.enqueue(key, async () => {
-      setMutationState(key, "pending")
-      const baseline =
-        useEditorStore.getState().questionBaselines[updated.id] ?? updated
-
-      try {
-        const res = await fetch(`/api/surveys/${id}/questions/${updated.id}`, {
-          method: "PUT",
-          headers: getRealtimeRequestHeaders(clientId),
-          body: JSON.stringify({
-            expectedRevision: baseline.revision ?? 0,
-            title: updated.title,
-            description: updated.description,
-            required: updated.required,
-            config: updated.config,
-          }),
-        })
-        const data = (await res.json().catch(() => ({}))) as
-          | PersistedQuestionResponse
-          | {
-              error?: string
-              code?: string
-              current?: SurveyQuestionSnapshot
-            }
-
-        if (!res.ok) {
-          const errorData = data as {
-            error?: string
-            code?: string
-            current?: SurveyQuestionSnapshot
-          }
-          if (errorData.current) {
-            setQuestionBaseline(toEditorQuestion(errorData.current))
-          }
-
-          throw new MutationRequestError(
-            errorData.error || "保存失败",
-            res.status,
-            errorData.code
-          )
-        }
-
-        const persisted = toEditorQuestion(data as PersistedQuestionResponse)
-        commitQuestionMutation(updated, persisted)
-        setMutationState(key, "saved")
-      } catch (error) {
-        coordinator.block(key)
-        const isConflict =
-          error instanceof MutationRequestError && error.status === 409
-        const message =
-          error instanceof Error ? error.message : "保存失败，请稍后重试"
-        setMutationState(key, isConflict ? "conflict" : "failed", message)
-        toast.error(message)
-      }
-    })
-  }
-
-  function handleRetryQuestion(questionId: string) {
-    const question = useEditorStore
-      .getState()
-      .survey?.questions.find((item) => item.id === questionId)
-    if (question) handleUpdateQuestion(question)
-  }
-
-  function handleUseServerQuestion(questionId: string) {
-    const key = editorMutationKey.question(questionId)
-    mutationCoordinatorRef.current!.unblock(key)
-    restoreQuestionBaseline(questionId)
-    clearMutationState(key)
-    toast.success("已恢复服务器版本")
   }
 
   // 选中题目时尝试锁定
@@ -1134,7 +412,7 @@ export default function EditSurveyPage() {
         if (!lockInfo || lockInfo.userId === permission.userId) {
           const response = await fetch("/api/surveys/collaboration/lock", {
             method: "POST",
-            headers: getRealtimeRequestHeaders(clientId),
+            headers: getEditorMutationHeaders(clientId),
             body: JSON.stringify({ surveyId: id, questionId }),
           })
 
@@ -1273,6 +551,7 @@ export default function EditSurveyPage() {
             pendingCreateCount={pendingQuestionIds.size}
             surveyMutationState={surveyMutationState}
             onRetrySurvey={handleRetrySurveyDetails}
+            onUseServerSurvey={handleUseServerSurveyDetails}
           />
           <div className="h-4 w-px bg-border" />
           <CollaborationDialog surveyId={id} />

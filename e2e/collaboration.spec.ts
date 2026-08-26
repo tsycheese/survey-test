@@ -366,6 +366,60 @@ test.describe("问卷双账号协作", () => {
       .toEqual({ settings: { showQuestionNumber: false } })
   })
 
+  test("并发修改问卷详情时只有一个修订可以成功", async ({
+    scenario,
+    ownerPage,
+    collaboratorPage,
+  }) => {
+    const ownerUpdate = ownerPage.request.put(
+      `/api/surveys/${scenario.surveyId}`,
+      {
+        data: {
+          expectedDetailsRevision: 0,
+          title: "所有者并发标题",
+          description: "所有者提交",
+          settings: { showQuestionNumber: true },
+        },
+      }
+    )
+    const collaboratorUpdate = collaboratorPage.request.put(
+      `/api/surveys/${scenario.surveyId}`,
+      {
+        data: {
+          expectedDetailsRevision: 0,
+          title: "协作者并发标题",
+          description: "协作者提交",
+          settings: { showQuestionNumber: false },
+        },
+      }
+    )
+
+    const responses = await Promise.all([ownerUpdate, collaboratorUpdate])
+    expect(responses.map((response) => response.status()).sort()).toEqual([
+      200, 409,
+    ])
+
+    const conflictResponse = responses.find(
+      (response) => response.status() === 409
+    )
+    expect(await conflictResponse?.json()).toMatchObject({
+      code: "SURVEY_DETAILS_REVISION_CONFLICT",
+      current: { detailsRevision: 1 },
+    })
+
+    const persisted = await prisma.survey.findUnique({
+      where: { id: scenario.surveyId },
+      select: {
+        title: true,
+        description: true,
+        settings: true,
+        detailsRevision: true,
+      },
+    })
+    expect(persisted?.detailsRevision).toBe(1)
+    expect(["所有者并发标题", "协作者并发标题"]).toContain(persisted?.title)
+  })
+
   test("陈旧题目修订号会返回冲突而不是覆盖新内容", async ({
     scenario,
     ownerPage,

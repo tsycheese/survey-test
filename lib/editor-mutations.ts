@@ -1,3 +1,6 @@
+import type { Survey } from "@/lib/questions/types"
+import { REALTIME_CLIENT_ID_HEADER } from "@/lib/realtime-shared"
+
 export type EditorMutationStatus =
   | "idle"
   | "pending"
@@ -11,12 +14,27 @@ export type EditorMutationState = {
   updatedAt: number
 }
 
+export type SurveyDetailsDraft = Pick<
+  Survey,
+  "title" | "description" | "settings"
+>
+
+export type PersistedSurveyDetails = SurveyDetailsDraft &
+  Pick<Survey, "detailsRevision">
+
 export const editorMutationKey = {
   question: (questionId: string) => `question:${questionId}`,
   create: (operationId: string) => `question-create:${operationId}`,
   order: (surveyId: string) => `survey-order:${surveyId}`,
   surveyDetails: (surveyId: string) => `survey-details:${surveyId}`,
 } as const
+
+export function getEditorMutationHeaders(clientId: string | null) {
+  return {
+    "Content-Type": "application/json",
+    ...(clientId ? { [REALTIME_CLIENT_ID_HEADER]: clientId } : {}),
+  }
+}
 
 /**
  * Serializes mutations for the same resource while allowing unrelated

@@ -8,11 +8,13 @@ export function EditorSaveStatus({
   pendingCreateCount,
   surveyMutationState,
   onRetrySurvey,
+  onUseServerSurvey,
 }: {
   mutationStates: Record<string, EditorMutationState>
   pendingCreateCount: number
   surveyMutationState?: EditorMutationState
   onRetrySurvey?: () => void
+  onUseServerSurvey?: () => void
 }) {
   const states = Object.values(mutationStates)
   const failedCount = states.filter(
@@ -38,9 +40,22 @@ export function EditorSaveStatus({
               onClick={onRetrySurvey}
             >
               <RefreshCw className="mr-1 h-3 w-3" />
-              重试问卷
+              {surveyMutationState.status === "conflict"
+                ? "保留我的修改"
+                : "重试问卷"}
             </Button>
           )}
+        {surveyMutationState?.status === "conflict" && onUseServerSurvey && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-6 px-2 text-xs"
+            onClick={onUseServerSurvey}
+          >
+            使用服务器版本
+          </Button>
+        )}
       </div>
     )
   }

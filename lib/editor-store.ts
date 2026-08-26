@@ -3,6 +3,8 @@ import type { Question, Survey } from "@/lib/questions/types"
 import type {
   EditorMutationState,
   EditorMutationStatus,
+  PersistedSurveyDetails,
+  SurveyDetailsDraft,
 } from "@/lib/editor-mutations"
 import { editorMutationKey } from "@/lib/editor-mutations"
 
@@ -17,8 +19,8 @@ function questionContentEquals(left: Question, right: Question): boolean {
 }
 
 function surveyDetailsEqual(
-  left: Pick<Survey, "title" | "description" | "settings">,
-  right: Pick<Survey, "title" | "description" | "settings">
+  left: SurveyDetailsDraft,
+  right: SurveyDetailsDraft
 ): boolean {
   return (
     left.title === right.title &&
@@ -32,8 +34,8 @@ type EditorStore = {
   selectedId: string | null
   pendingQuestionIds: Set<string>
   questionBaselines: Record<string, Question>
+  surveyDetailsBaseline: PersistedSurveyDetails | null
   mutationStates: Record<string, EditorMutationState>
-  dirty: boolean
 
   setSurvey: (survey: Survey) => void
   reconcileSurvey: (survey: Survey) => void
@@ -51,9 +53,11 @@ type EditorStore = {
   restoreQuestionBaseline: (id: string) => void
   setQuestionBaseline: (question: Question) => void
   commitSurveyMutation: (
-    submitted: Pick<Survey, "title" | "description" | "settings">,
-    persisted: Pick<Survey, "title" | "description" | "settings">
+    submitted: SurveyDetailsDraft,
+    persisted: PersistedSurveyDetails
   ) => void
+  setSurveyDetailsBaseline: (details: PersistedSurveyDetails) => void
+  restoreSurveyDetailsBaseline: () => void
   setMutationState: (
     key: string,
     status: EditorMutationStatus,
@@ -66,7 +70,6 @@ type EditorStore = {
   deleteQuestion: (id: string) => void
   reorderQuestions: (fromIndex: number, toIndex: number) => void
   updateSurveyInfo: (title: string, description: string) => void
-  markSaved: () => void
 }
 
 export const useEditorStore = create<EditorStore>((set) => ({
@@ -74,8 +77,8 @@ export const useEditorStore = create<EditorStore>((set) => ({
   selectedId: null,
   pendingQuestionIds: new Set(),
   questionBaselines: {},
+  surveyDetailsBaseline: null,
   mutationStates: {},
-  dirty: false,
 
   setSurvey: (survey) =>
     set((s) => {
@@ -93,8 +96,13 @@ export const useEditorStore = create<EditorStore>((set) => ({
         questionBaselines: Object.fromEntries(
           survey.questions.map((question) => [question.id, question])
         ),
+        surveyDetailsBaseline: {
+          title: survey.title,
+          description: survey.description,
+          settings: survey.settings,
+          detailsRevision: survey.detailsRevision,
+        },
         mutationStates: {},
-        dirty: false,
       }
     }),
 
@@ -173,6 +181,12 @@ export const useEditorStore = create<EditorStore>((set) => ({
           ...s.questionBaselines,
           ...incomingBaselines,
         },
+        surveyDetailsBaseline: {
+          title: survey.title,
+          description: survey.description,
+          settings: survey.settings,
+          detailsRevision: survey.detailsRevision,
+        },
       }
     }),
 
@@ -184,7 +198,6 @@ export const useEditorStore = create<EditorStore>((set) => ({
       return {
         survey: { ...s.survey, questions: [...s.survey.questions, question] },
         selectedId: question.id,
-        dirty: true,
       }
     }),
 
@@ -210,7 +223,6 @@ export const useEditorStore = create<EditorStore>((set) => ({
         },
         selectedId: question.id,
         pendingQuestionIds,
-        dirty: true,
       }
     }),
 
@@ -257,7 +269,6 @@ export const useEditorStore = create<EditorStore>((set) => ({
           ...s.questionBaselines,
           [persistedQuestion.id]: persistedQuestion,
         },
-        dirty: true,
       }
     }),
 
@@ -287,7 +298,6 @@ export const useEditorStore = create<EditorStore>((set) => ({
         },
         selectedId: s.selectedId === temporaryId ? null : s.selectedId,
         pendingQuestionIds,
-        dirty: true,
       }
     }),
 
@@ -301,7 +311,6 @@ export const useEditorStore = create<EditorStore>((set) => ({
             q.id === question.id ? question : q
           ),
         },
-        dirty: true,
       }
     }),
 
@@ -363,14 +372,41 @@ export const useEditorStore = create<EditorStore>((set) => ({
 
   commitSurveyMutation: (submitted, persisted) =>
     set((s) => {
-      if (!s.survey || !surveyDetailsEqual(s.survey, submitted)) return s
+      if (!s.survey) return s
+
+      const contentMatches = surveyDetailsEqual(s.survey, submitted)
 
       return {
         survey: {
           ...s.survey,
-          title: persisted.title,
-          description: persisted.description,
-          settings: persisted.settings,
+          ...(contentMatches
+            ? {
+                title: persisted.title,
+                description: persisted.description,
+                settings: persisted.settings,
+              }
+            : {}),
+          detailsRevision: persisted.detailsRevision,
+        },
+        surveyDetailsBaseline: persisted,
+      }
+    }),
+
+  setSurveyDetailsBaseline: (details) =>
+    set((s) => ({
+      survey: s.survey
+        ? { ...s.survey, detailsRevision: details.detailsRevision }
+        : s.survey,
+      surveyDetailsBaseline: details,
+    })),
+
+  restoreSurveyDetailsBaseline: () =>
+    set((s) => {
+      if (!s.survey || !s.surveyDetailsBaseline) return s
+      return {
+        survey: {
+          ...s.survey,
+          ...s.surveyDetailsBaseline,
         },
       }
     }),
@@ -396,9 +432,7 @@ export const useEditorStore = create<EditorStore>((set) => ({
     ),
 
   updateSurveySettings: (settings) =>
-    set((s) =>
-      s.survey ? { survey: { ...s.survey, settings }, dirty: true } : s
-    ),
+    set((s) => (s.survey ? { survey: { ...s.survey, settings } } : s)),
 
   setPublished: (published) =>
     set((s) => (s.survey ? { survey: { ...s.survey, published } } : s)),
@@ -415,7 +449,6 @@ export const useEditorStore = create<EditorStore>((set) => ({
         questionBaselines: Object.fromEntries(
           Object.entries(s.questionBaselines).filter(([key]) => key !== id)
         ),
-        dirty: true,
       }
     }),
 
@@ -431,7 +464,6 @@ export const useEditorStore = create<EditorStore>((set) => ({
       })) as Question[]
       return {
         survey: { ...s.survey, questions: reorderedQuestions },
-        dirty: true,
       }
     }),
 
@@ -440,9 +472,6 @@ export const useEditorStore = create<EditorStore>((set) => ({
       if (!s.survey) return s
       return {
         survey: { ...s.survey, title, description: description || null },
-        dirty: true,
       }
     }),
-
-  markSaved: () => set({ dirty: false }),
 }))

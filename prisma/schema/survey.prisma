@@ -9,6 +9,7 @@ model Survey {
   maxCollaborators Int      @default(10)
   currentVersionId String?  // 当前发布的版本ID
   structureRevision Int     @default(0) // 题目集合或顺序的并发修订号
+  detailsRevision   Int     @default(0) // 标题、描述和整卷设置的并发修订号
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 

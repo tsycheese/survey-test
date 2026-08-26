@@ -701,7 +701,8 @@
             <h3>Revision 负责“过期判断”</h3>
             <p>
               题目内容使用 <code>revision</code>，题目集合和顺序使用
-              <code>structureRevision</code>。陈旧请求不能悄悄覆盖新结果。
+              <code>structureRevision</code>，问卷详情使用
+              <code>detailsRevision</code>。陈旧请求不能悄悄覆盖新结果。
             </p>
           </article>
           <article class="layer">
@@ -757,7 +758,9 @@
             <p>
               三者共用
               <code>survey-details</code>
-              队列。文本输入防抖，失焦立即刷新；设置变更立即保存，失败后从顶部重试。
+              队列和
+              <code>detailsRevision</code
+              >。文本输入防抖，失焦立即刷新；设置变更立即保存，冲突时可以选择保留本地修改或恢复服务器版本。
             </p>
           </article>
         </div>
@@ -806,33 +809,32 @@
 
         <div class="open-ends">
           <details open>
-            <summary>问卷详情还缺少跨协作者的服务端修订号</summary>
+            <summary>补上 Hook 级别的行为测试</summary>
             <p>
-              当前队列解决了同一客户端的乱序；两名协作者同时改标题或整卷设置时，仍然是最后写入者生效。后续可以增加独立的详情
-              revision。
+              服务端并发用例已经覆盖问卷详情修订冲突；下一步更值得补的是防抖、连续输入、失败重试和“使用服务器版本”的组件行为测试。
             </p>
           </details>
           <details>
-            <summary>编辑页仍然承担了太多职责</summary>
+            <summary>锁管理仍然留在编辑页</summary>
             <p>
-              保存队列、协作订阅、快照对账、锁管理和 UI
-              都集中在页面中。稳定后可以抽出
-              <code>useSurveyMutation</code>、<code>useQuestionMutation</code>
-              和对账 Hook。
+              保存队列、结构变更、单题保存和快照对账已经拆成独立
+              Hook；点击题目后的乐观锁定与串行解锁仍在页面里，后续可以继续收敛成一个锁管理
+              Hook。
             </p>
           </details>
           <details>
-            <summary>旧 dirty 状态和旧 EditorHeader 可以清理</summary>
+            <summary>批量新增需要更明确的原子性</summary>
             <p>
-              新的 Mutation 状态已经成为保存事实来源，旧的
-              <code>dirty / markSaved</code>
-              语义不再完整；未使用的旧头部组件也容易让以后的人误判真实链路。
+              AI
+              批量新增目前逐题提交，失败时可能只保存了一部分。若后续把它当成核心入口，应提供批量事务接口，或在界面中明确展示部分成功结果。
             </p>
           </details>
           <details>
-            <summary>Playwright 在 Windows 下的结束卡顿仍是独立问题</summary>
+            <summary>自动化测试的 Windows 进程权限要固定下来</summary>
             <p>
-              用例本身可以通过，但开发服务器偶尔无法在结束阶段干净退出。它不影响保存逻辑判断，不过会影响本地测试体验和自动化稳定性。
+              Playwright 卡在结束阶段的原因是受限环境无法终止 Next.js
+              子进程树；在允许进程清理的执行环境中可以正常退出。CI
+              和本地脚本应保持同样的权限前提。
             </p>
           </details>
         </div>
