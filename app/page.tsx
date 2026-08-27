@@ -12,6 +12,7 @@ import {
   FeatureCards,
 } from "@/components/landing"
 import { SocialAuthButtons } from "@/components/auth/social-auth-buttons"
+import { APP_NAME, APP_TAGLINE } from "@/lib/brand"
 
 export default function Page() {
   const { status } = useSession()
@@ -74,7 +75,7 @@ export default function Page() {
           }`}
         >
           <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
-            Survey Test
+            {APP_NAME}
           </h1>
         </div>
 
@@ -87,10 +88,10 @@ export default function Page() {
           }`}
         >
           <p className="max-w-md text-lg text-muted-foreground">
-            轻量 · 协作 · 实时
+            {APP_TAGLINE}
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
-            创建精美的问卷，与团队实时协作
+            轻松创建问卷，与团队实时协作，用 AI 提炼洞察
           </p>
         </div>
 

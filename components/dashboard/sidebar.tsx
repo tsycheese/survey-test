@@ -4,8 +4,8 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
   ClipboardList,
-  LayoutDashboard,
   LogOut,
+  MessageSquareQuote,
   Settings,
   User,
   Users,
@@ -17,6 +17,7 @@ import {
   HoverCardTrigger,
 } from "@/components/ui/hover-card"
 import { Button } from "@/components/ui/button"
+import { APP_NAME } from "@/lib/brand"
 
 type SidebarUser = {
   name?: string | null
@@ -50,8 +51,8 @@ export function Sidebar({ user }: { user: SidebarUser }) {
       {/* Logo */}
       <div className="flex h-14 items-center border-b px-4">
         <Link href="/surveys" className="flex items-center gap-2 font-bold">
-          <LayoutDashboard className="h-5 w-5 text-primary" />
-          <span>Survey Test</span>
+          <MessageSquareQuote className="h-5 w-5 text-primary" />
+          <span>{APP_NAME}</span>
         </Link>
       </div>
 

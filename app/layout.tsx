@@ -1,10 +1,21 @@
+import type { Metadata } from "next"
 import { Geist, Geist_Mono } from "next/font/google"
 import { SessionProvider } from "next-auth/react"
 
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { ToasterProvider } from "@/components/toaster"
+import { APP_DESCRIPTION, APP_NAME } from "@/lib/brand"
 import { cn } from "@/lib/utils"
+
+export const metadata: Metadata = {
+  applicationName: APP_NAME,
+  title: {
+    default: APP_NAME,
+    template: `%s | ${APP_NAME}`,
+  },
+  description: APP_DESCRIPTION,
+}
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-sans" })
 
@@ -20,7 +31,7 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
+      lang="zh-CN"
       suppressHydrationWarning
       className={cn(
         "antialiased",

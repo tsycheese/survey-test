@@ -107,7 +107,7 @@ export function RegisterForm() {
             </div>
             <h1 className="mt-4 text-2xl font-bold">创建账户</h1>
             <p className="text-sm text-muted-foreground">
-              输入邮箱，立即开始使用
+              加入问见，开始你的第一份问卷
             </p>
           </div>
 

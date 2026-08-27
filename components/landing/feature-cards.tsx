@@ -2,13 +2,13 @@
 
 import { useEffect, useState } from "react"
 import { cn } from "@/lib/utils"
-import { FileText, Users, Zap } from "lucide-react"
+import { FileText, Sparkles, Users } from "lucide-react"
 
 const features = [
   {
     icon: FileText,
-    title: "17 种题型",
-    description: "单选、多选、评分、NPS 等丰富题型",
+    title: "19 种题型",
+    description: "从基础选择到矩阵与图片题型",
     color: "text-blue-500",
     bg: "bg-blue-500/10",
   },
@@ -20,11 +20,11 @@ const features = [
     bg: "bg-green-500/10",
   },
   {
-    icon: Zap,
-    title: "免费开源",
-    description: "完全免费，代码开源可定制",
-    color: "text-yellow-500",
-    bg: "bg-yellow-500/10",
+    icon: Sparkles,
+    title: "AI 智能辅助",
+    description: "从需求澄清到问卷生成与数据洞察",
+    color: "text-violet-500",
+    bg: "bg-violet-500/10",
   },
 ]
 

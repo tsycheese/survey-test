@@ -87,7 +87,7 @@ export function LoginForm() {
             </div>
             <h1 className="mt-4 text-2xl font-bold">欢迎回来</h1>
             <p className="text-sm text-muted-foreground">
-              登录到你的账户，继续创建问卷
+              登录问见，继续创建与分析问卷
             </p>
           </div>
 
