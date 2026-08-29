@@ -1,5 +1,5 @@
 import type { Question, Survey, SurveySettings } from "@/lib/questions/types"
-import type { LockInfo } from "@/lib/realtime-shared"
+import type { LockInfo, SyncEventData } from "@/lib/realtime-shared"
 
 export type SurveyQuestionSnapshot = {
   id: string
@@ -48,6 +48,44 @@ export function toEditorQuestion(question: SurveyQuestionSnapshot): Question {
     revision: question.revision,
     config: question.config ?? {},
   } as Question
+}
+
+export function toEditorQuestionFromSyncEvent(data: unknown): Question | null {
+  if (!data || typeof data !== "object") return null
+
+  const event = data as Partial<SyncEventData>
+  const question = event.question
+  if (
+    !event.questionId ||
+    !question ||
+    event.questionId !== question.id ||
+    typeof question.id !== "string" ||
+    typeof question.type !== "string" ||
+    typeof question.title !== "string" ||
+    (question.description !== undefined &&
+      typeof question.description !== "string") ||
+    typeof question.required !== "boolean" ||
+    !Number.isInteger(question.order) ||
+    question.order < 0 ||
+    !Number.isInteger(question.revision) ||
+    (question.revision ?? -1) < 0 ||
+    !question.config ||
+    typeof question.config !== "object" ||
+    Array.isArray(question.config)
+  ) {
+    return null
+  }
+
+  return toEditorQuestion({
+    id: question.id,
+    type: question.type,
+    title: question.title,
+    description: question.description ?? null,
+    required: question.required,
+    order: question.order,
+    revision: question.revision!,
+    config: question.config,
+  })
 }
 
 export function toEditorSurvey(snapshot: SurveySnapshot): Survey {

@@ -32,7 +32,7 @@ export function useQuestionMutation({
   lockedQuestions,
   coordinator,
 }: UseQuestionMutationOptions) {
-  function update(updated: Question) {
+  function update(updated: Question, forceConflictRetry = false) {
     const lockInfo = lockedQuestions.get(updated.id)
     if (lockInfo && lockInfo.userId !== currentUserId) {
       toast.error(`该题目正在被 ${lockInfo.userName || "其他用户"} 编辑`)
@@ -42,6 +42,12 @@ export function useQuestionMutation({
     const store = useEditorStore.getState()
     store.updateQuestion(updated)
     const key = editorMutationKey.question(updated.id)
+    if (
+      store.mutationStates[key]?.status === "conflict" &&
+      !forceConflictRetry
+    ) {
+      return
+    }
     coordinator.unblock(key)
     store.setMutationState(key, "pending")
 
@@ -122,7 +128,7 @@ export function useQuestionMutation({
     const question = useEditorStore
       .getState()
       .survey?.questions.find((item) => item.id === questionId)
-    if (question) update(question)
+    if (question) update(question, true)
   }
 
   function useServerVersion(questionId: string) {

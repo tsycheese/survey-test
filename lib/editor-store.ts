@@ -29,6 +29,28 @@ function surveyDetailsEqual(
   )
 }
 
+const PROTECTED_MUTATION_STATUSES = new Set<EditorMutationStatus>([
+  "pending",
+  "failed",
+  "conflict",
+])
+
+export type RemoteQuestionUpdateOutcome = {
+  status: "applied" | "ignored" | "fallback"
+  reason:
+    | "newer-revision"
+    | "stale-revision"
+    | "duplicate-revision"
+    | "revision-content-mismatch"
+    | "survey-unavailable"
+    | "question-unavailable"
+    | "baseline-unavailable"
+    | "local-draft"
+    | "mutation-protected"
+  knownRevision: number | null
+  incomingRevision: number
+}
+
 type EditorStore = {
   survey: Survey | null
   selectedId: string | null
@@ -50,6 +72,10 @@ type EditorStore = {
   rollbackPendingQuestion: (surveyId: string, temporaryId: string) => void
   updateQuestion: (question: Question) => void
   commitQuestionMutation: (submitted: Question, persisted: Question) => void
+  applyRemoteQuestionUpdate: (
+    surveyId: string,
+    question: Question
+  ) => RemoteQuestionUpdateOutcome
   restoreQuestionBaseline: (id: string) => void
   setQuestionBaseline: (question: Question) => void
   commitSurveyMutation: (
@@ -337,6 +363,127 @@ export const useEditorStore = create<EditorStore>((set) => ({
         },
       }
     }),
+
+  applyRemoteQuestionUpdate: (surveyId, incoming) => {
+    let outcome: RemoteQuestionUpdateOutcome = {
+      status: "fallback",
+      reason: "survey-unavailable",
+      knownRevision: null,
+      incomingRevision: incoming.revision ?? 0,
+    }
+
+    set((s) => {
+      if (!s.survey || s.survey.id !== surveyId) return s
+
+      const current = s.survey.questions.find(
+        (question) => question.id === incoming.id
+      )
+      if (!current) {
+        outcome = {
+          ...outcome,
+          reason: "question-unavailable",
+        }
+        return s
+      }
+
+      const baseline = s.questionBaselines[incoming.id]
+      if (!baseline) {
+        outcome = {
+          ...outcome,
+          reason: "baseline-unavailable",
+        }
+        return s
+      }
+
+      const knownRevision = Math.max(
+        current.revision ?? 0,
+        baseline.revision ?? 0
+      )
+      const incomingRevision = incoming.revision ?? 0
+      const mutationKey = editorMutationKey.question(incoming.id)
+      const mutation = s.mutationStates[mutationKey]
+      const mutationProtected = Boolean(
+        mutation && PROTECTED_MUTATION_STATUSES.has(mutation.status)
+      )
+      const hasLocalDraft = !questionContentEquals(current, baseline)
+
+      if (incomingRevision < knownRevision) {
+        outcome = {
+          status: "ignored",
+          reason: "stale-revision",
+          knownRevision,
+          incomingRevision,
+        }
+        return s
+      }
+
+      if (incomingRevision === knownRevision) {
+        const contentMatches =
+          questionContentEquals(incoming, baseline) ||
+          questionContentEquals(incoming, current)
+        outcome = {
+          status: contentMatches ? "ignored" : "fallback",
+          reason: contentMatches
+            ? "duplicate-revision"
+            : "revision-content-mismatch",
+          knownRevision,
+          incomingRevision,
+        }
+        return s
+      }
+
+      if (mutationProtected || hasLocalDraft) {
+        outcome = {
+          status: "fallback",
+          reason: mutationProtected ? "mutation-protected" : "local-draft",
+          knownRevision,
+          incomingRevision,
+        }
+
+        if (!mutationProtected && hasLocalDraft) {
+          return {
+            mutationStates: {
+              ...s.mutationStates,
+              [mutationKey]: {
+                status: "conflict",
+                message:
+                  "题目已被其他协作者更新，请选择保留本地修改或使用服务器版本",
+                updatedAt: Date.now(),
+              },
+            },
+          }
+        }
+
+        return s
+      }
+
+      const appliedQuestion = {
+        ...incoming,
+        order: current.order,
+      } as Question
+      outcome = {
+        status: "applied",
+        reason: "newer-revision",
+        knownRevision,
+        incomingRevision,
+      }
+
+      return {
+        survey: {
+          ...s.survey,
+          questions: s.survey.questions.map((question) =>
+            question.id === appliedQuestion.id ? appliedQuestion : question
+          ),
+        },
+        questionBaselines: {
+          ...s.questionBaselines,
+          [appliedQuestion.id]: appliedQuestion,
+        },
+      }
+    })
+
+    return outcome
+  },
 
   restoreQuestionBaseline: (id) =>
     set((s) => {

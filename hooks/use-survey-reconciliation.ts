@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef } from "react"
 import { toast } from "sonner"
 import { useEditorStore } from "@/lib/editor-store"
 import {
+  toEditorQuestionFromSyncEvent,
   toEditorSurvey,
   toLockedQuestions,
   type SurveySnapshot,
@@ -41,6 +42,9 @@ export function useSurveyReconciliation({
   reconcileLockedQuestions,
 }: UseSurveyReconciliationOptions) {
   const reconcileSurvey = useEditorStore((state) => state.reconcileSurvey)
+  const applyRemoteQuestionUpdate = useEditorStore(
+    (state) => state.applyRemoteQuestionUpdate
+  )
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const controllerRef = useRef<AbortController | null>(null)
   const sequenceRef = useRef(0)
@@ -118,8 +122,52 @@ export function useSurveyReconciliation({
   useEffect(() => {
     if (!canAccess) return
 
+    const unsubscribeQuestionUpdated = onEvent(
+      COLLABORATION_EVENTS.QUESTION_UPDATED,
+      (data) => {
+        const event = data as SyncEventData | undefined
+        if (event?.clientId && event.clientId === clientId) return
+
+        const startedAt = performance.now()
+        const question = toEditorQuestionFromSyncEvent(data)
+        if (!question) {
+          logPerformance("[Realtime Incremental Reconciliation]", {
+            eventName: COLLABORATION_EVENTS.QUESTION_UPDATED,
+            requestId: event?.requestId ?? "unknown",
+            result: "snapshot-fallback",
+            reason: "invalid-event-payload",
+            duration: `${(performance.now() - startedAt).toFixed(1)}ms`,
+          })
+          scheduleReconciliation("question-updated-invalid-payload")
+          toast.info("题目已被其他协作者更新", { duration: 2000 })
+          return
+        }
+
+        const outcome = applyRemoteQuestionUpdate(surveyId, question)
+        logPerformance("[Realtime Incremental Reconciliation]", {
+          eventName: COLLABORATION_EVENTS.QUESTION_UPDATED,
+          requestId: event?.requestId ?? "unknown",
+          questionId: question.id,
+          result:
+            outcome.status === "fallback"
+              ? "snapshot-fallback"
+              : outcome.status,
+          reason: outcome.reason,
+          knownRevision: outcome.knownRevision,
+          incomingRevision: outcome.incomingRevision,
+          duration: `${(performance.now() - startedAt).toFixed(1)}ms`,
+        })
+
+        if (outcome.status === "fallback") {
+          scheduleReconciliation(`question-updated-${outcome.reason}`)
+        }
+        if (outcome.status !== "ignored") {
+          toast.info("题目已被其他协作者更新", { duration: 2000 })
+        }
+      }
+    )
+
     const subscriptions = [
-      [COLLABORATION_EVENTS.QUESTION_UPDATED, "题目已被其他协作者更新"],
       [COLLABORATION_EVENTS.QUESTION_CREATED, "有新题目添加"],
       [COLLABORATION_EVENTS.QUESTION_DELETED, "有题目被删除"],
       [COLLABORATION_EVENTS.QUESTIONS_REORDERED, null],
@@ -138,8 +186,18 @@ export function useSurveyReconciliation({
       })
     )
 
-    return () => unsubscribers.forEach((unsubscribe) => unsubscribe())
-  }, [canAccess, clientId, onEvent, scheduleReconciliation])
+    return () => {
+      unsubscribeQuestionUpdated()
+      unsubscribers.forEach((unsubscribe) => unsubscribe())
+    }
+  }, [
+    applyRemoteQuestionUpdate,
+    canAccess,
+    clientId,
+    onEvent,
+    scheduleReconciliation,
+    surveyId,
+  ])
 
   useEffect(() => {
     if (subscriptionEpoch === 0) return

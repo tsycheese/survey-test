@@ -1,5 +1,48 @@
 import type { Page } from "@playwright/test"
+import Pusher from "pusher"
 import { expect, prisma, test } from "./fixtures/collaboration"
+import { COLLABORATION_EVENTS, getSurveyChannel } from "../lib/realtime-shared"
+
+const realtimeTestPublisher = new Pusher({
+  appId: process.env.SOKETI_APP_ID ?? "survey-local",
+  key: process.env.SOKETI_APP_KEY ?? "survey-local-key",
+  secret: process.env.SOKETI_APP_SECRET ?? "survey-local-secret",
+  host: process.env.SOKETI_HOST ?? "127.0.0.1",
+  port: process.env.SOKETI_PORT ?? "6001",
+  useTLS: false,
+  timeout: 2000,
+})
+
+async function publishQuestionUpdate(
+  surveyId: string,
+  question: {
+    id: string
+    type: string
+    title: string
+    description: string | null
+    required: boolean
+    order: number
+    revision: number
+    config: unknown
+  }
+) {
+  await realtimeTestPublisher.trigger(
+    getSurveyChannel(surveyId),
+    COLLABORATION_EVENTS.QUESTION_UPDATED,
+    {
+      requestId: crypto.randomUUID(),
+      clientId: "playwright-synthetic-remote",
+      questionId: question.id,
+      question: {
+        ...question,
+        description: question.description ?? undefined,
+        config: question.config as Record<string, unknown>,
+      },
+      fromUserId: "playwright-synthetic-remote",
+      timestamp: new Date().toISOString(),
+    }
+  )
+}
 
 function questionCard(page: Page, questionId: string) {
   return page.locator(`[data-question-id="${questionId}"]`)
@@ -117,7 +160,7 @@ test.describe("问卷双账号协作", () => {
     ).toBeGreaterThanOrEqual(0)
   })
 
-  test("自己保存后仅远端客户端拉取一致性快照", async ({
+  test("自己保存与远端增量更新都不重复拉取快照", async ({
     scenario,
     ownerPage,
     collaboratorPage,
@@ -137,8 +180,7 @@ test.describe("问卷双账号协作", () => {
     let collaboratorSnapshotRequests = 0
     let updateServerTiming: string | undefined
     let updateRequestId: string | undefined
-    let snapshotServerTiming: string | undefined
-    let snapshotRequestId: string | undefined
+    const incrementalResults: Array<Record<string, unknown>> = []
     ownerPage.on("request", (request) => {
       if (
         request.method() === "GET" &&
@@ -164,13 +206,13 @@ test.describe("问卷双账号协作", () => {
         updateRequestId = response.headers()["x-request-id"]
       }
     })
-    collaboratorPage.on("response", (response) => {
-      if (
-        response.request().method() === "GET" &&
-        new URL(response.url()).pathname === snapshotPath
-      ) {
-        snapshotServerTiming = response.headers()["server-timing"]
-        snapshotRequestId = response.headers()["x-request-id"]
+    collaboratorPage.on("console", async (message) => {
+      if (!message.text().includes("[Realtime Incremental Reconciliation]")) {
+        return
+      }
+      const payload = await message.args()[1]?.jsonValue()
+      if (payload && typeof payload === "object") {
+        incrementalResults.push(payload as Record<string, unknown>)
       }
     })
 
@@ -190,14 +232,167 @@ test.describe("问卷双账号协作", () => {
       )
     ).toBeVisible({ timeout: 15_000 })
 
-    await expect.poll(() => collaboratorSnapshotRequests).toBe(1)
+    await expect
+      .poll(() =>
+        incrementalResults.some(
+          (result) =>
+            result.result === "applied" &&
+            result.questionId === scenario.firstQuestionId
+        )
+      )
+      .toBe(true)
     expect(ownerSnapshotRequests).toBe(0)
+    expect(collaboratorSnapshotRequests).toBe(0)
     expect(updateServerTiming).toMatch(
       /auth;dur=.*permission;dur=.*database;dur=/
     )
-    expect(snapshotServerTiming).toMatch(/auth;dur=.*database;dur=.*total;dur=/)
     expect(updateRequestId).toBeTruthy()
-    expect(snapshotRequestId).toBeTruthy()
+
+    const snapshotResponse = await collaboratorPage.request.get(snapshotPath)
+    expect(snapshotResponse.headers()["server-timing"]).toMatch(
+      /auth;dur=.*database;dur=.*total;dur=/
+    )
+    expect(snapshotResponse.headers()["x-request-id"]).toBeTruthy()
+  })
+
+  test("远端陈旧事件被忽略，无效事件回退服务器快照", async ({
+    scenario,
+    ownerPage,
+    collaboratorPage,
+  }) => {
+    await openEditorPair(
+      ownerPage,
+      collaboratorPage,
+      scenario.surveyId,
+      scenario.firstQuestionId
+    )
+    await ownerPage.waitForTimeout(300)
+
+    const snapshotPath = `/api/surveys/${scenario.surveyId}`
+    let ownerSnapshotRequests = 0
+    ownerPage.on("request", (request) => {
+      if (
+        request.method() === "GET" &&
+        new URL(request.url()).pathname === snapshotPath
+      ) {
+        ownerSnapshotRequests += 1
+      }
+    })
+
+    const persisted = await prisma.question.findUniqueOrThrow({
+      where: { id: scenario.firstQuestionId },
+    })
+    await publishQuestionUpdate(scenario.surveyId, {
+      ...persisted,
+      title: "增量事件中的新标题",
+      revision: persisted.revision + 1,
+    })
+    await expect(
+      questionCard(ownerPage, scenario.firstQuestionId).getByText(
+        "增量事件中的新标题",
+        { exact: true }
+      )
+    ).toBeVisible()
+    expect(ownerSnapshotRequests).toBe(0)
+
+    await publishQuestionUpdate(scenario.surveyId, {
+      ...persisted,
+      title: "不应覆盖新标题的陈旧事件",
+    })
+    await ownerPage.waitForTimeout(150)
+    await expect(
+      questionCard(ownerPage, scenario.firstQuestionId).getByText(
+        "增量事件中的新标题",
+        { exact: true }
+      )
+    ).toBeVisible()
+    expect(ownerSnapshotRequests).toBe(0)
+
+    await realtimeTestPublisher.trigger(
+      getSurveyChannel(scenario.surveyId),
+      COLLABORATION_EVENTS.QUESTION_UPDATED,
+      {
+        requestId: crypto.randomUUID(),
+        clientId: "playwright-synthetic-remote",
+        questionId: scenario.firstQuestionId,
+        question: {
+          id: scenario.firstQuestionId,
+          revision: persisted.revision + 2,
+        },
+        fromUserId: "playwright-synthetic-remote",
+        timestamp: new Date().toISOString(),
+      }
+    )
+
+    await expect.poll(() => ownerSnapshotRequests).toBe(1)
+    await expect(
+      questionCard(ownerPage, scenario.firstQuestionId).getByText(
+        "E2E 第一题",
+        { exact: true }
+      )
+    ).toBeVisible()
+  })
+
+  test("远端更新撞上本地草稿时保留草稿并进入冲突处理", async ({
+    scenario,
+    ownerPage,
+    collaboratorPage,
+  }) => {
+    await openEditorPair(
+      ownerPage,
+      collaboratorPage,
+      scenario.surveyId,
+      scenario.firstQuestionId
+    )
+    await ownerPage.waitForTimeout(300)
+
+    const snapshotPath = `/api/surveys/${scenario.surveyId}`
+    let ownerSnapshotRequests = 0
+    ownerPage.on("request", (request) => {
+      if (
+        request.method() === "GET" &&
+        new URL(request.url()).pathname === snapshotPath
+      ) {
+        ownerSnapshotRequests += 1
+      }
+    })
+
+    const ownerFirst = questionCard(ownerPage, scenario.firstQuestionId)
+    await ownerFirst.getByText("E2E 第一题", { exact: true }).click()
+    await expect(ownerFirst).toHaveAttribute("data-lock-state", "mine")
+    const titleEditor = ownerPage.locator("aside textarea").first()
+    await titleEditor.fill("尚未保存的本地草稿")
+
+    const persisted = await prisma.question.update({
+      where: { id: scenario.firstQuestionId },
+      data: {
+        title: "远端已经保存的标题",
+        revision: { increment: 1 },
+      },
+    })
+    await publishQuestionUpdate(scenario.surveyId, persisted)
+
+    await expect.poll(() => ownerSnapshotRequests).toBe(1)
+    await expect(titleEditor).toHaveValue("尚未保存的本地草稿")
+    await expect(
+      ownerPage.getByText(
+        "题目已被其他协作者更新，请选择保留本地修改或使用服务器版本"
+      )
+    ).toBeVisible()
+
+    await titleEditor.blur()
+    await ownerPage.waitForTimeout(150)
+    await expect
+      .poll(() =>
+        prisma.question.findUnique({
+          where: { id: scenario.firstQuestionId },
+          select: { title: true },
+        })
+      )
+      .toEqual({ title: "远端已经保存的标题" })
+
+    await ownerPage.getByRole("button", { name: "使用服务器版本" }).click()
+    await expect(titleEditor).toHaveValue("远端已经保存的标题")
   })
 
   test("协作者换锁并离开后，两端与数据库都正确释放锁", async ({
