@@ -9,28 +9,12 @@ import {
 } from "@/lib/realtime-shared"
 import { scheduleSurveyBroadcast } from "@/lib/realtime-broadcast"
 import { logPerformance } from "@/lib/performance-logging"
-
-type PerformanceTimings = Record<string, number>
-
-async function measure<T>(
-  timings: PerformanceTimings,
-  name: string,
-  action: () => Promise<T>
-): Promise<T> {
-  const startedAt = performance.now()
-
-  try {
-    return await action()
-  } finally {
-    timings[name] = performance.now() - startedAt
-  }
-}
-
-function formatServerTiming(timings: PerformanceTimings): string {
-  return Object.entries(timings)
-    .map(([name, duration]) => `${name};dur=${duration.toFixed(1)}`)
-    .join(", ")
-}
+import {
+  formatPerformanceTimings,
+  formatServerTiming,
+  measurePerformance,
+  type PerformanceTimings,
+} from "@/lib/server-performance"
 
 class SurveyChangedDuringCreateError extends Error {}
 
@@ -44,7 +28,7 @@ export async function POST(
   const requestStartedAt = performance.now()
   const timings: PerformanceTimings = {}
 
-  const session = await measure(timings, "auth", () => auth())
+  const session = await measurePerformance(timings, "auth", () => auth())
   if (!session?.user?.id) {
     return NextResponse.json({ error: "未登录" }, { status: 401 })
   }
@@ -52,7 +36,7 @@ export async function POST(
   const { id } = await params
   const userId = session.user.id
 
-  const survey = await measure(timings, "permission", () =>
+  const survey = await measurePerformance(timings, "permission", () =>
     prisma.survey.findUnique({
       where: { id },
       select: {
@@ -69,16 +53,19 @@ export async function POST(
   let canEdit = isOwner
 
   if (!isOwner) {
-    const collaborator = await measure(timings, "collaboratorLookup", () =>
-      prisma.surveyCollaborator.findUnique({
-        where: {
-          surveyId_userId: {
-            surveyId: id,
-            userId,
+    const collaborator = await measurePerformance(
+      timings,
+      "collaboratorLookup",
+      () =>
+        prisma.surveyCollaborator.findUnique({
+          where: {
+            surveyId_userId: {
+              surveyId: id,
+              userId,
+            },
           },
-        },
-        select: { canEdit: true },
-      })
+          select: { canEdit: true },
+        })
     )
     canEdit = collaborator?.canEdit ?? false
   }
@@ -87,7 +74,7 @@ export async function POST(
     return NextResponse.json({ error: "无权限编辑" }, { status: 403 })
   }
 
-  const body = await measure(timings, "body", () => request.json())
+  const body = await measurePerformance(timings, "body", () => request.json())
   const parsed = questionMutationSchema.safeParse(body)
   if (!parsed.success) {
     return NextResponse.json(
@@ -104,7 +91,7 @@ export async function POST(
   }
 
   try {
-    persistedResult = await measure(timings, "database", () =>
+    persistedResult = await measurePerformance(timings, "database", () =>
       prisma.$transaction(async (tx) => {
         // 创建与重排共用问卷行锁，确保 count、移位和写入基于同一顺序快照。
         const lockedSurveys = await tx.$queryRaw<Array<{ id: string }>>`
@@ -217,12 +204,7 @@ export async function POST(
     requestId,
     operationId,
     replayed,
-    ...Object.fromEntries(
-      Object.entries(timings).map(([name, duration]) => [
-        name,
-        `${duration.toFixed(1)}ms`,
-      ])
-    ),
+    ...formatPerformanceTimings(timings),
   })
 
   return NextResponse.json(

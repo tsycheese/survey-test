@@ -10,6 +10,7 @@ import {
 } from "@/lib/editor-snapshots"
 import {
   COLLABORATION_EVENTS,
+  REALTIME_REQUEST_ID_HEADER,
   type LockInfo,
   type SyncEventData,
 } from "@/lib/realtime-shared"
@@ -54,10 +55,12 @@ export function useSurveyReconciliation({
       const sequence = ++sequenceRef.current
       const snapshotStartedEventSequence = getRealtimeEventSequence()
       const startedAt = performance.now()
+      const requestId = crypto.randomUUID()
 
       try {
         const response = await fetch(`/api/surveys/${surveyId}`, {
           signal: controller.signal,
+          headers: { [REALTIME_REQUEST_ID_HEADER]: requestId },
         })
         if (!response.ok) return
 
@@ -77,7 +80,10 @@ export function useSurveyReconciliation({
         )
         logPerformance("[Realtime Snapshot Reconciliation]", {
           reason,
+          requestId,
           duration: `${(performance.now() - startedAt).toFixed(1)}ms`,
+          serverTiming: response.headers.get("server-timing") ?? "unavailable",
+          vercelId: response.headers.get("x-vercel-id") ?? "local",
           questionCount: snapshot.questions?.length ?? 0,
         })
       } catch (error) {
@@ -122,8 +128,10 @@ export function useSurveyReconciliation({
 
     const unsubscribers = subscriptions.map(([event, message]) =>
       onEvent(event, (data) => {
-        scheduleReconciliation(event)
         const eventClientId = (data as SyncEventData | undefined)?.clientId
+        if (!eventClientId || eventClientId !== clientId) {
+          scheduleReconciliation(event)
+        }
         if (message && eventClientId !== clientId) {
           toast.info(message, { duration: 2000 })
         }

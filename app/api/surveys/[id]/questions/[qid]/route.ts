@@ -8,6 +8,13 @@ import {
   getRealtimeClientIdFromRequest,
   getRealtimeRequestIdFromRequest,
 } from "@/lib/realtime-shared"
+import { logPerformance } from "@/lib/performance-logging"
+import {
+  formatPerformanceTimings,
+  formatServerTiming,
+  measurePerformance,
+  type PerformanceTimings,
+} from "@/lib/server-performance"
 
 const updateQuestionSchema = z.object({
   expectedRevision: z.number().int().nonnegative(),
@@ -79,7 +86,14 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string; qid: string }> }
 ) {
-  const session = await auth()
+  const requestId =
+    getRealtimeRequestIdFromRequest(request) ?? crypto.randomUUID()
+  const clientId = getRealtimeClientIdFromRequest(request)
+  const requestStartedAt = performance.now()
+  const timings: PerformanceTimings = {}
+  const vercelId = request.headers.get("x-vercel-id") ?? "local"
+
+  const session = await measurePerformance(timings, "auth", () => auth())
   if (!session?.user?.id) {
     return NextResponse.json({ error: "未登录" }, { status: 401 })
   }
@@ -88,15 +102,17 @@ export async function PUT(
   const userId = session.user.id
 
   // 检查是否是创建者或协作者
-  const survey = await prisma.survey.findUnique({
-    where: { id },
-    include: {
-      collaborators: {
-        where: { userId },
-        select: { canEdit: true },
+  const survey = await measurePerformance(timings, "permission", () =>
+    prisma.survey.findUnique({
+      where: { id },
+      include: {
+        collaborators: {
+          where: { userId },
+          select: { canEdit: true },
+        },
       },
-    },
-  })
+    })
+  )
 
   if (!survey) {
     return NextResponse.json({ error: "问卷不存在" }, { status: 404 })
@@ -109,7 +125,7 @@ export async function PUT(
     return NextResponse.json({ error: "无权限编辑" }, { status: 403 })
   }
 
-  const body = await request.json()
+  const body = await measurePerformance(timings, "body", () => request.json())
   const parsed = updateQuestionSchema.safeParse(body)
   if (!parsed.success) {
     return NextResponse.json(
@@ -119,31 +135,35 @@ export async function PUT(
   }
 
   const { expectedRevision, ...changes } = parsed.data
-  const result = await prisma.$transaction(async (tx) => {
-    const lockedRows = await tx.$queryRaw<Array<{ id: string }>>`
-      SELECT "id" FROM "Question"
-      WHERE "id" = ${qid} AND "surveyId" = ${id}
-      FOR UPDATE
-    `
-    if (lockedRows.length === 0) return { kind: "not-found" as const }
+  const result = await measurePerformance(timings, "database", () =>
+    prisma.$transaction(async (tx) => {
+      const lockedRows = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT "id" FROM "Question"
+        WHERE "id" = ${qid} AND "surveyId" = ${id}
+        FOR UPDATE
+      `
+      if (lockedRows.length === 0) return { kind: "not-found" as const }
 
-    const current = await tx.question.findUniqueOrThrow({ where: { id: qid } })
-    if (current.lockedBy && current.lockedBy !== userId) {
-      return { kind: "locked" as const, current }
-    }
-    if (current.revision !== expectedRevision) {
-      return { kind: "conflict" as const, current }
-    }
+      const current = await tx.question.findUniqueOrThrow({
+        where: { id: qid },
+      })
+      if (current.lockedBy && current.lockedBy !== userId) {
+        return { kind: "locked" as const, current }
+      }
+      if (current.revision !== expectedRevision) {
+        return { kind: "conflict" as const, current }
+      }
 
-    const question = await tx.question.update({
-      where: { id: qid },
-      data: {
-        ...changes,
-        revision: { increment: 1 },
-      },
+      const question = await tx.question.update({
+        where: { id: qid },
+        data: {
+          ...changes,
+          revision: { increment: 1 },
+        },
+      })
+      return { kind: "updated" as const, question }
     })
-    return { kind: "updated" as const, question }
-  })
+  )
 
   if (result.kind === "not-found") {
     return NextResponse.json({ error: "题目不存在" }, { status: 404 })
@@ -176,7 +196,7 @@ export async function PUT(
     surveyId: id,
     event: COLLABORATION_EVENTS.QUESTION_UPDATED,
     operation: "question-update",
-    requestId: getRealtimeRequestIdFromRequest(request),
+    requestId,
     payload: {
       questionId: qid,
       question: {
@@ -190,11 +210,23 @@ export async function PUT(
         config: question.config as Record<string, unknown>,
       },
       fromUserId: userId,
-      clientId: getRealtimeClientIdFromRequest(request),
+      clientId,
     },
   })
 
-  return NextResponse.json(question)
+  timings.total = performance.now() - requestStartedAt
+  logPerformance("[Question Update Performance]", {
+    requestId,
+    vercelId,
+    ...formatPerformanceTimings(timings),
+  })
+
+  return NextResponse.json(question, {
+    headers: {
+      "Server-Timing": formatServerTiming(timings),
+      "X-Request-Id": requestId,
+    },
+  })
 }
 
 export async function DELETE(

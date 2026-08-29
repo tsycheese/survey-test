@@ -15,6 +15,7 @@ import {
 import { useEditorStore } from "@/lib/editor-store"
 import type { Question } from "@/lib/questions/types"
 import type { LockInfo } from "@/lib/realtime-shared"
+import { logPerformance } from "@/lib/performance-logging"
 
 type UseQuestionMutationOptions = {
   surveyId: string
@@ -48,13 +49,15 @@ export function useQuestionMutation({
       useEditorStore.getState().setMutationState(key, "pending")
       const baseline =
         useEditorStore.getState().questionBaselines[updated.id] ?? updated
+      const requestId = crypto.randomUUID()
+      const startedAt = performance.now()
 
       try {
         const response = await fetch(
           `/api/surveys/${surveyId}/questions/${updated.id}`,
           {
             method: "PUT",
-            headers: getEditorMutationHeaders(clientId),
+            headers: getEditorMutationHeaders(clientId, requestId),
             body: JSON.stringify({
               expectedRevision: baseline.revision ?? 0,
               title: updated.title,
@@ -64,6 +67,13 @@ export function useQuestionMutation({
             }),
           }
         )
+        logPerformance("[Question Update Request Performance]", {
+          requestId,
+          status: response.status,
+          duration: `${(performance.now() - startedAt).toFixed(1)}ms`,
+          serverTiming: response.headers.get("server-timing") ?? "unavailable",
+          vercelId: response.headers.get("x-vercel-id") ?? "local",
+        })
         const data = (await response.json().catch(() => ({}))) as
           | PersistedQuestionResponse
           | {

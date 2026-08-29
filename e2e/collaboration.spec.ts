@@ -117,6 +117,89 @@ test.describe("问卷双账号协作", () => {
     ).toBeGreaterThanOrEqual(0)
   })
 
+  test("自己保存后仅远端客户端拉取一致性快照", async ({
+    scenario,
+    ownerPage,
+    collaboratorPage,
+  }) => {
+    await openEditorPair(
+      ownerPage,
+      collaboratorPage,
+      scenario.surveyId,
+      scenario.firstQuestionId
+    )
+
+    await ownerPage.waitForTimeout(300)
+
+    const snapshotPath = `/api/surveys/${scenario.surveyId}`
+    const updatePath = `${snapshotPath}/questions/${scenario.firstQuestionId}`
+    let ownerSnapshotRequests = 0
+    let collaboratorSnapshotRequests = 0
+    let updateServerTiming: string | undefined
+    let updateRequestId: string | undefined
+    let snapshotServerTiming: string | undefined
+    let snapshotRequestId: string | undefined
+    ownerPage.on("request", (request) => {
+      if (
+        request.method() === "GET" &&
+        new URL(request.url()).pathname === snapshotPath
+      ) {
+        ownerSnapshotRequests += 1
+      }
+    })
+    collaboratorPage.on("request", (request) => {
+      if (
+        request.method() === "GET" &&
+        new URL(request.url()).pathname === snapshotPath
+      ) {
+        collaboratorSnapshotRequests += 1
+      }
+    })
+    ownerPage.on("response", (response) => {
+      if (
+        response.request().method() === "PUT" &&
+        new URL(response.url()).pathname === updatePath
+      ) {
+        updateServerTiming = response.headers()["server-timing"]
+        updateRequestId = response.headers()["x-request-id"]
+      }
+    })
+    collaboratorPage.on("response", (response) => {
+      if (
+        response.request().method() === "GET" &&
+        new URL(response.url()).pathname === snapshotPath
+      ) {
+        snapshotServerTiming = response.headers()["server-timing"]
+        snapshotRequestId = response.headers()["x-request-id"]
+      }
+    })
+
+    const ownerFirst = questionCard(ownerPage, scenario.firstQuestionId)
+    await ownerFirst.getByText("E2E 第一题", { exact: true }).click()
+    await expect(ownerFirst).toHaveAttribute("data-lock-state", "mine")
+
+    const titleEditor = ownerPage.locator("aside textarea").first()
+    await titleEditor.fill("只由远端拉取快照的标题")
+    await titleEditor.blur()
+
+    await expect(ownerPage.getByText("已保存", { exact: true })).toBeVisible()
+    await expect(
+      questionCard(collaboratorPage, scenario.firstQuestionId).getByText(
+        "只由远端拉取快照的标题",
+        { exact: true }
+      )
+    ).toBeVisible({ timeout: 15_000 })
+
+    await expect.poll(() => collaboratorSnapshotRequests).toBe(1)
+    expect(ownerSnapshotRequests).toBe(0)
+    expect(updateServerTiming).toMatch(
+      /auth;dur=.*permission;dur=.*database;dur=/
+    )
+    expect(snapshotServerTiming).toMatch(/auth;dur=.*database;dur=.*total;dur=/)
+    expect(updateRequestId).toBeTruthy()
+    expect(snapshotRequestId).toBeTruthy()
+  })
+
   test("协作者换锁并离开后，两端与数据库都正确释放锁", async ({
     scenario,
     ownerPage,

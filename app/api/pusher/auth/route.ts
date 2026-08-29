@@ -1,30 +1,14 @@
 import { auth } from "@/lib/auth"
 import { logPerformance } from "@/lib/performance-logging"
 import { pusherServer, realtimeProvider } from "@/lib/pusher"
+import {
+  formatPerformanceTimings,
+  formatServerTiming,
+  measurePerformance,
+  type PerformanceTimings,
+} from "@/lib/server-performance"
 import { prisma } from "@/prisma"
 import { NextResponse } from "next/server"
-
-type PerformanceTimings = Record<string, number>
-
-async function measure<T>(
-  timings: PerformanceTimings,
-  name: string,
-  action: () => Promise<T>
-): Promise<T> {
-  const startedAt = performance.now()
-
-  try {
-    return await action()
-  } finally {
-    timings[name] = performance.now() - startedAt
-  }
-}
-
-function formatServerTiming(timings: PerformanceTimings): string {
-  return Object.entries(timings)
-    .map(([name, duration]) => `${name};dur=${duration.toFixed(1)}`)
-    .join(", ")
-}
 
 /**
  * Pusher Presence 频道认证端点
@@ -36,13 +20,15 @@ export async function POST(request: Request) {
   const timings: PerformanceTimings = {}
 
   try {
-    const session = await measure(timings, "auth", () => auth())
+    const session = await measurePerformance(timings, "auth", () => auth())
     if (!session?.user?.id) {
       return NextResponse.json({ error: "未登录" }, { status: 401 })
     }
     const userId = session.user.id
 
-    const formData = await measure(timings, "body", () => request.formData())
+    const formData = await measurePerformance(timings, "body", () =>
+      request.formData()
+    )
     const socketId = formData.get("socket_id") as string
     const channel = formData.get("channel_name") as string
 
@@ -59,7 +45,7 @@ export async function POST(request: Request) {
     const surveyId = match[1]
 
     // 验证用户是否有权限访问该问卷
-    const survey = await measure(timings, "permission", () =>
+    const survey = await measurePerformance(timings, "permission", () =>
       prisma.survey.findUnique({
         where: { id: surveyId },
         include: {
@@ -92,8 +78,10 @@ export async function POST(request: Request) {
       },
     }
 
-    const authResponse = await measure(timings, "authorize", async () =>
-      pusherServer.authorizeChannel(socketId, channel, channelData)
+    const authResponse = await measurePerformance(
+      timings,
+      "authorize",
+      async () => pusherServer.authorizeChannel(socketId, channel, channelData)
     )
 
     timings.total = performance.now() - requestStartedAt
@@ -101,12 +89,7 @@ export async function POST(request: Request) {
     logPerformance("[Realtime Auth Performance]", {
       requestId,
       provider: realtimeProvider,
-      ...Object.fromEntries(
-        Object.entries(timings).map(([name, duration]) => [
-          name,
-          `${duration.toFixed(1)}ms`,
-        ])
-      ),
+      ...formatPerformanceTimings(timings),
     })
 
     return NextResponse.json(authResponse, {

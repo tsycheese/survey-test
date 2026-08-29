@@ -8,6 +8,13 @@ import {
   getRealtimeClientIdFromRequest,
   getRealtimeRequestIdFromRequest,
 } from "@/lib/realtime-shared"
+import { logPerformance } from "@/lib/performance-logging"
+import {
+  formatPerformanceTimings,
+  formatServerTiming,
+  measurePerformance,
+  type PerformanceTimings,
+} from "@/lib/server-performance"
 
 const updateSurveySchema = z.object({
   expectedDetailsRevision: z.number().int().nonnegative(),
@@ -17,10 +24,16 @@ const updateSurveySchema = z.object({
 })
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth()
+  const requestId =
+    getRealtimeRequestIdFromRequest(request) ?? crypto.randomUUID()
+  const requestStartedAt = performance.now()
+  const timings: PerformanceTimings = {}
+  const vercelId = request.headers.get("x-vercel-id") ?? "local"
+
+  const session = await measurePerformance(timings, "auth", () => auth())
   if (!session?.user?.id) {
     return NextResponse.json({ error: "未登录" }, { status: 401 })
   }
@@ -29,31 +42,33 @@ export async function GET(
   const userId = session.user.id
 
   // 先尝试查找问卷（不限制 userId，可能是协作者访问）
-  const survey = await prisma.survey.findUnique({
-    where: { id },
-    include: {
-      questions: {
-        orderBy: { order: "asc" },
-        select: {
-          id: true,
-          title: true,
-          description: true,
-          type: true,
-          order: true,
-          required: true,
-          config: true,
-          revision: true,
-          lockedBy: true,
-          lockedAt: true,
+  const survey = await measurePerformance(timings, "database", () =>
+    prisma.survey.findUnique({
+      where: { id },
+      include: {
+        questions: {
+          orderBy: { order: "asc" },
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            type: true,
+            order: true,
+            required: true,
+            config: true,
+            revision: true,
+            lockedBy: true,
+            lockedAt: true,
+          },
+        },
+        _count: { select: { responses: true } },
+        collaborators: {
+          where: { userId },
+          select: { id: true },
         },
       },
-      _count: { select: { responses: true } },
-      collaborators: {
-        where: { userId },
-        select: { id: true },
-      },
-    },
-  })
+    })
+  )
 
   if (!survey) {
     return NextResponse.json({ error: "问卷不存在" }, { status: 404 })
@@ -67,10 +82,26 @@ export async function GET(
     return NextResponse.json({ error: "无权限访问" }, { status: 403 })
   }
 
-  return NextResponse.json({
-    ...survey,
-    settings: survey.settings ?? { showQuestionNumber: true },
+  timings.total = performance.now() - requestStartedAt
+  logPerformance("[Survey Snapshot Performance]", {
+    requestId,
+    vercelId,
+    questionCount: survey.questions.length,
+    ...formatPerformanceTimings(timings),
   })
+
+  return NextResponse.json(
+    {
+      ...survey,
+      settings: survey.settings ?? { showQuestionNumber: true },
+    },
+    {
+      headers: {
+        "Server-Timing": formatServerTiming(timings),
+        "X-Request-Id": requestId,
+      },
+    }
+  )
 }
 
 export async function PUT(
