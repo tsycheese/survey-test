@@ -1,14 +1,14 @@
-import { after, NextRequest, NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/prisma"
 import { questionMutationSchema } from "@/lib/questions/mutation-schema"
 import {
-  pusherServer,
-  realtimeProvider,
-  getSurveyChannel,
   COLLABORATION_EVENTS,
-} from "@/lib/pusher"
-import { getRealtimeClientIdFromRequest } from "@/lib/realtime-shared"
+  getRealtimeClientIdFromRequest,
+  getRealtimeRequestIdFromRequest,
+} from "@/lib/realtime-shared"
+import { scheduleSurveyBroadcast } from "@/lib/realtime-broadcast"
+import { logPerformance } from "@/lib/performance-logging"
 
 type PerformanceTimings = Record<string, number>
 
@@ -38,7 +38,8 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const requestId = request.headers.get("x-request-id") ?? crypto.randomUUID()
+  const requestId =
+    getRealtimeRequestIdFromRequest(request) ?? crypto.randomUUID()
   const clientId = getRealtimeClientIdFromRequest(request)
   const requestStartedAt = performance.now()
   const timings: PerformanceTimings = {}
@@ -184,54 +185,35 @@ export async function POST(
 
   const { question, replayed, structureRevision } = persistedResult
 
-  const eventPayload = {
-    requestId,
-    clientId,
-    operationId,
-    question: {
-      id: question.id,
-      type: question.type,
-      title: question.title,
-      description: question.description ?? undefined,
-      required: question.required,
-      order: question.order,
-      revision: question.revision,
-      config: question.config as Record<string, unknown>,
-    },
-    structureRevision,
-    fromUserId: userId,
-    timestamp: new Date().toISOString(),
-  }
-
   // 幂等重放不再次广播，避免协作者收到重复的题目创建事件。
   if (!replayed) {
-    after(async () => {
-      const pusherStartedAt = performance.now()
-
-      try {
-        await pusherServer.trigger(
-          getSurveyChannel(id),
-          COLLABORATION_EVENTS.QUESTION_CREATED,
-          eventPayload
-        )
-        console.info("[Question Create Pusher Performance]", {
-          requestId,
-          provider: realtimeProvider,
-          duration: `${(performance.now() - pusherStartedAt).toFixed(1)}ms`,
-        })
-      } catch (error) {
-        console.error("[Question Create Pusher Error]", {
-          requestId,
-          provider: realtimeProvider,
-          error,
-        })
-      }
+    scheduleSurveyBroadcast({
+      surveyId: id,
+      event: COLLABORATION_EVENTS.QUESTION_CREATED,
+      operation: "question-create",
+      requestId,
+      payload: {
+        clientId,
+        operationId,
+        question: {
+          id: question.id,
+          type: question.type,
+          title: question.title,
+          description: question.description ?? undefined,
+          required: question.required,
+          order: question.order,
+          revision: question.revision,
+          config: question.config as Record<string, unknown>,
+        },
+        structureRevision,
+        fromUserId: userId,
+      },
     })
   }
 
   timings.total = performance.now() - requestStartedAt
 
-  console.info("[Question Create Performance]", {
+  logPerformance("[Question Create Performance]", {
     requestId,
     operationId,
     replayed,

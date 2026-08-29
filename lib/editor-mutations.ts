@@ -1,5 +1,5 @@
 import type { Survey } from "@/lib/questions/types"
-import { REALTIME_CLIENT_ID_HEADER } from "@/lib/realtime-shared"
+import { getRealtimeRequestHeaders } from "@/lib/realtime-performance"
 
 export type EditorMutationStatus =
   | "idle"
@@ -29,11 +29,11 @@ export const editorMutationKey = {
   surveyDetails: (surveyId: string) => `survey-details:${surveyId}`,
 } as const
 
-export function getEditorMutationHeaders(clientId: string | null) {
-  return {
-    "Content-Type": "application/json",
-    ...(clientId ? { [REALTIME_CLIENT_ID_HEADER]: clientId } : {}),
-  }
+export function getEditorMutationHeaders(
+  clientId: string | null,
+  requestId?: string
+) {
+  return getRealtimeRequestHeaders(clientId, requestId)
 }
 
 /**

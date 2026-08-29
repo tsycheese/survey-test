@@ -7,6 +7,7 @@ import {
   pusherServer,
   realtimeProvider,
 } from "@/lib/pusher"
+import { logPerformance } from "@/lib/performance-logging"
 
 type CollaborationEvent =
   (typeof COLLABORATION_EVENTS)[keyof typeof COLLABORATION_EVENTS]
@@ -45,7 +46,7 @@ export function scheduleSurveyBroadcast({
         event,
         eventPayload
       )
-      console.info("[Realtime Broadcast Performance]", {
+      logPerformance("[Realtime Broadcast Performance]", {
         requestId,
         provider: realtimeProvider,
         operation,

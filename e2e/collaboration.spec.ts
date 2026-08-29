@@ -55,6 +55,68 @@ test.describe("问卷双账号协作", () => {
       .toBe(0)
   })
 
+  test("浏览器时钟偏差不会产生负的实时往返耗时", async ({
+    scenario,
+    ownerPage,
+    collaboratorPage,
+  }) => {
+    await ownerPage.addInitScript(() => {
+      const nativeNow = Date.now
+      Date.now = () => nativeNow() - 5_000
+    })
+
+    const deliverySamples: Array<{
+      eventName?: string
+      measurement?: string
+      requestToReceived?: string
+    }> = []
+
+    ownerPage.on("console", async (message) => {
+      if (!message.text().includes("[Realtime Event Delivery Performance]")) {
+        return
+      }
+
+      const payload = await message
+        .args()[1]
+        ?.jsonValue()
+        .catch(() => null)
+      if (payload && typeof payload === "object") {
+        deliverySamples.push(payload as (typeof deliverySamples)[number])
+      }
+    })
+
+    await openEditorPair(
+      ownerPage,
+      collaboratorPage,
+      scenario.surveyId,
+      scenario.firstQuestionId
+    )
+
+    const ownerFirst = questionCard(ownerPage, scenario.firstQuestionId)
+    await ownerFirst.getByText("E2E 第一题", { exact: true }).click()
+    await expect(ownerFirst).toHaveAttribute("data-lock-state", "mine")
+
+    await expect
+      .poll(
+        () =>
+          deliverySamples.find(
+            (sample) =>
+              sample.eventName === "question-locked" &&
+              sample.measurement === "same-client-round-trip"
+          )?.requestToReceived ?? null
+      )
+      .not.toBeNull()
+
+    const sample = deliverySamples.find(
+      (item) =>
+        item.eventName === "question-locked" &&
+        item.measurement === "same-client-round-trip"
+    )
+    expect(
+      Number.parseFloat(sample?.requestToReceived ?? "NaN")
+    ).toBeGreaterThanOrEqual(0)
+  })
+
   test("协作者换锁并离开后，两端与数据库都正确释放锁", async ({
     scenario,
     ownerPage,

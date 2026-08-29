@@ -4,11 +4,15 @@ import { useEffect, useRef, useState, useCallback } from "react"
 import Pusher from "pusher-js"
 import {
   COLLABORATION_EVENTS,
-  REALTIME_CLIENT_ID_HEADER,
   getSurveyChannel,
   type MemberInfo,
   type LockInfo,
 } from "@/lib/realtime-shared"
+import {
+  finishRealtimeRequest,
+  getRealtimeRequestHeaders,
+} from "@/lib/realtime-performance"
+import { logPerformance } from "@/lib/performance-logging"
 
 // Pusher 客户端单例（仅在客户端创建）
 let pusherClient: Pusher | null = null
@@ -68,14 +72,14 @@ function getPusherClient(): Pusher | null {
         : {}),
     })
 
-    console.info("[Realtime Provider]", {
+    logPerformance("[Realtime Provider]", {
       provider: useLocalRealtime ? "soketi" : "pusher",
     })
 
     pusherClient.connection.bind(
       "state_change",
       ({ previous, current }: { previous: string; current: string }) => {
-        console.info("[Realtime Connection State]", {
+        logPerformance("[Realtime Connection State]", {
           previous,
           current,
           durationSinceClientCreated: pusherClientCreatedAt
@@ -88,7 +92,7 @@ function getPusherClient(): Pusher | null {
     )
 
     pusherClient.connection.bind("connected", () => {
-      console.info("[Realtime Connection Performance]", {
+      logPerformance("[Realtime Connection Performance]", {
         phase: "client-created-to-connected",
         duration: pusherClientCreatedAt
           ? `${(getRealtimePerformanceTime() - pusherClientCreatedAt).toFixed(
@@ -121,8 +125,9 @@ export type CollaborationActions = {
   unlockAllQuestions: (userId?: string) => Promise<boolean>
   reconcileLockedQuestions: (
     snapshot: Map<string, LockInfo>,
-    snapshotStartedAt: number
+    snapshotStartedEventSequence: number
   ) => void
+  getRealtimeEventSequence: () => number
   onEvent: (event: string, callback: (data: unknown) => void) => () => void
   setLockedQuestions: React.Dispatch<
     React.SetStateAction<Map<string, LockInfo>>
@@ -146,16 +151,17 @@ export function useSurveyCollaboration(
     new Map()
   )
   const seenEventIdsRef = useRef<Map<string, number>>(new Map())
-  const lockEventTimestampsRef = useRef<Map<string, number>>(new Map())
-  const userUnlockTimestampsRef = useRef<Map<string, number>>(new Map())
+  const realtimeEventSequenceRef = useRef(0)
+  const lockEventSequencesRef = useRef<Map<string, number>>(new Map())
+  const userUnlockSequencesRef = useRef<Map<string, number>>(new Map())
 
   // 订阅 Presence Channel
   useEffect(() => {
     if (!surveyId || !userId) return
 
     const seenEventIds = seenEventIdsRef.current
-    const lockEventTimestamps = lockEventTimestampsRef.current
-    const userUnlockTimestamps = userUnlockTimestampsRef.current
+    const lockEventSequences = lockEventSequencesRef.current
+    const userUnlockSequences = userUnlockSequencesRef.current
 
     const pusher = getPusherClient()
     if (!pusher) {
@@ -189,13 +195,22 @@ export function useSurveyCollaboration(
       )
         return
 
-      const emittedAt = data?.timestamp ? Date.parse(data.timestamp) : NaN
-      console.info("[Realtime Event Delivery Performance]", {
+      const receivedAt = getRealtimePerformanceTime()
+      const eventSequence = ++realtimeEventSequenceRef.current
+      const requestToReceived = data?.requestId
+        ? finishRealtimeRequest(data.requestId, receivedAt)
+        : null
+      logPerformance("[Realtime Event Delivery Performance]", {
         eventName,
         requestId: data?.requestId ?? "unknown",
-        emittedToReceived: Number.isFinite(emittedAt)
-          ? `${(Date.now() - emittedAt).toFixed(1)}ms`
-          : "unknown",
+        requestToReceived:
+          requestToReceived === null
+            ? "not-measured-remote-origin"
+            : `${requestToReceived.toFixed(1)}ms`,
+        measurement:
+          requestToReceived === null
+            ? "cross-client-event"
+            : "same-client-round-trip",
       })
 
       const isOwnClientEvent = Boolean(
@@ -228,13 +243,6 @@ export function useSurveyCollaboration(
         lockedAt?: string
         unlockedAt?: string
       }
-      const eventTimestamp = Date.parse(
-        eventData.lockedAt ?? eventData.unlockedAt ?? eventData.timestamp ?? ""
-      )
-      const comparableTimestamp = Number.isFinite(eventTimestamp)
-        ? eventTimestamp
-        : Date.now()
-
       if (
         !isOwnClientEvent &&
         eventName === COLLABORATION_EVENTS.QUESTION_LOCKED &&
@@ -243,18 +251,15 @@ export function useSurveyCollaboration(
         eventData.lockedAt
       ) {
         const lastQuestionEvent =
-          lockEventTimestampsRef.current.get(eventData.questionId) ?? 0
+          lockEventSequencesRef.current.get(eventData.questionId) ?? 0
         const lastUserUnlock =
-          userUnlockTimestampsRef.current.get(eventData.userId) ?? 0
+          userUnlockSequencesRef.current.get(eventData.userId) ?? 0
 
         if (
-          comparableTimestamp > lastQuestionEvent &&
-          comparableTimestamp > lastUserUnlock
+          eventSequence > lastQuestionEvent &&
+          eventSequence > lastUserUnlock
         ) {
-          lockEventTimestampsRef.current.set(
-            eventData.questionId,
-            comparableTimestamp
-          )
+          lockEventSequencesRef.current.set(eventData.questionId, eventSequence)
           setLockedQuestions((prev) =>
             new Map(prev).set(eventData.questionId!, {
               questionId: eventData.questionId!,
@@ -272,12 +277,9 @@ export function useSurveyCollaboration(
         eventData.questionId
       ) {
         const lastQuestionEvent =
-          lockEventTimestampsRef.current.get(eventData.questionId) ?? 0
-        if (comparableTimestamp > lastQuestionEvent) {
-          lockEventTimestampsRef.current.set(
-            eventData.questionId,
-            comparableTimestamp
-          )
+          lockEventSequencesRef.current.get(eventData.questionId) ?? 0
+        if (eventSequence > lastQuestionEvent) {
+          lockEventSequencesRef.current.set(eventData.questionId, eventSequence)
           setLockedQuestions((prev) => {
             const next = new Map(prev)
             next.delete(eventData.questionId!)
@@ -292,21 +294,15 @@ export function useSurveyCollaboration(
         eventData.userId
       ) {
         const lastUserUnlock =
-          userUnlockTimestampsRef.current.get(eventData.userId) ?? 0
-        if (comparableTimestamp > lastUserUnlock) {
-          userUnlockTimestampsRef.current.set(
-            eventData.userId,
-            comparableTimestamp
-          )
+          userUnlockSequencesRef.current.get(eventData.userId) ?? 0
+        if (eventSequence > lastUserUnlock) {
+          userUnlockSequencesRef.current.set(eventData.userId, eventSequence)
           setLockedQuestions((prev) => {
             const next = new Map(prev)
             for (const [questionId, lock] of next.entries()) {
               if (lock.userId === eventData.userId) {
                 next.delete(questionId)
-                lockEventTimestampsRef.current.set(
-                  questionId,
-                  comparableTimestamp
-                )
+                lockEventSequencesRef.current.set(questionId, eventSequence)
               }
             }
             return next
@@ -332,7 +328,7 @@ export function useSurveyCollaboration(
         setIsConnected(true)
         setSubscriptionEpoch((epoch) => epoch + 1)
 
-        console.info("[Realtime Subscription Performance]", {
+        logPerformance("[Realtime Subscription Performance]", {
           channel: channelName,
           duration: `${(
             getRealtimePerformanceTime() - subscriptionStartedAt
@@ -418,10 +414,7 @@ export function useSurveyCollaboration(
       // 调用 API 解锁数据库中的题目
       fetch("/api/surveys/collaboration/unlock-all", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(clientId ? { [REALTIME_CLIENT_ID_HEADER]: clientId } : {}),
-        },
+        headers: getRealtimeRequestHeaders(clientId),
         body: JSON.stringify({ surveyId, userId: member.id }),
       }).catch(console.error)
     })
@@ -443,8 +436,9 @@ export function useSurveyCollaboration(
       setCurrentUser(null)
       setSubscriptionEpoch(0)
       seenEventIds.clear()
-      lockEventTimestamps.clear()
-      userUnlockTimestamps.clear()
+      lockEventSequences.clear()
+      userUnlockSequences.clear()
+      realtimeEventSequenceRef.current = 0
     }
   }, [clientId, surveyId, userId])
 
@@ -456,10 +450,7 @@ export function useSurveyCollaboration(
       try {
         const response = await fetch("/api/surveys/collaboration/lock", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(clientId ? { [REALTIME_CLIENT_ID_HEADER]: clientId } : {}),
-          },
+          headers: getRealtimeRequestHeaders(clientId),
           body: JSON.stringify({ surveyId, questionId }),
         })
 
@@ -480,10 +471,7 @@ export function useSurveyCollaboration(
       try {
         const response = await fetch("/api/surveys/collaboration/unlock", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(clientId ? { [REALTIME_CLIENT_ID_HEADER]: clientId } : {}),
-          },
+          headers: getRealtimeRequestHeaders(clientId),
           body: JSON.stringify({ surveyId, questionId }),
         })
 
@@ -504,10 +492,7 @@ export function useSurveyCollaboration(
       try {
         const response = await fetch("/api/surveys/collaboration/unlock-all", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(clientId ? { [REALTIME_CLIENT_ID_HEADER]: clientId } : {}),
-          },
+          headers: getRealtimeRequestHeaders(clientId),
           body: JSON.stringify({ surveyId, userId: targetUserId }),
         })
 
@@ -521,20 +506,20 @@ export function useSurveyCollaboration(
   )
 
   const reconcileLockedQuestions = useCallback(
-    (snapshot: Map<string, LockInfo>, snapshotStartedAt: number) => {
+    (snapshot: Map<string, LockInfo>, snapshotStartedEventSequence: number) => {
       setLockedQuestions((current) => {
         const next = new Map(snapshot)
         const questionIds = new Set([
           ...current.keys(),
           ...snapshot.keys(),
-          ...lockEventTimestampsRef.current.keys(),
+          ...lockEventSequencesRef.current.keys(),
         ])
 
         for (const questionId of questionIds) {
-          const lastEventAt =
-            lockEventTimestampsRef.current.get(questionId) ?? 0
+          const lastEventSequence =
+            lockEventSequencesRef.current.get(questionId) ?? 0
 
-          if (lastEventAt > snapshotStartedAt) {
+          if (lastEventSequence > snapshotStartedEventSequence) {
             const currentLock = current.get(questionId)
             if (currentLock) {
               next.set(questionId, currentLock)
@@ -544,12 +529,20 @@ export function useSurveyCollaboration(
             continue
           }
 
-          lockEventTimestampsRef.current.set(questionId, snapshotStartedAt)
+          lockEventSequencesRef.current.set(
+            questionId,
+            snapshotStartedEventSequence
+          )
         }
 
         return next
       })
     },
+    []
+  )
+
+  const getRealtimeEventSequence = useCallback(
+    () => realtimeEventSequenceRef.current,
     []
   )
 
@@ -582,6 +575,7 @@ export function useSurveyCollaboration(
     unlockQuestion,
     unlockAllQuestions,
     reconcileLockedQuestions,
+    getRealtimeEventSequence,
     onEvent,
     setLockedQuestions,
   }

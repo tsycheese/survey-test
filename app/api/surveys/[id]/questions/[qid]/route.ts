@@ -6,6 +6,7 @@ import { scheduleSurveyBroadcast } from "@/lib/realtime-broadcast"
 import {
   COLLABORATION_EVENTS,
   getRealtimeClientIdFromRequest,
+  getRealtimeRequestIdFromRequest,
 } from "@/lib/realtime-shared"
 
 const updateQuestionSchema = z.object({
@@ -175,6 +176,7 @@ export async function PUT(
     surveyId: id,
     event: COLLABORATION_EVENTS.QUESTION_UPDATED,
     operation: "question-update",
+    requestId: getRealtimeRequestIdFromRequest(request),
     payload: {
       questionId: qid,
       question: {
@@ -294,6 +296,7 @@ export async function DELETE(
     surveyId: id,
     event: COLLABORATION_EVENTS.QUESTION_DELETED,
     operation: "question-delete",
+    requestId: getRealtimeRequestIdFromRequest(request),
     payload: {
       questionId: qid,
       structureRevision: result.structureRevision,

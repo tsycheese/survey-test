@@ -6,6 +6,7 @@ import { scheduleSurveyBroadcast } from "@/lib/realtime-broadcast"
 import {
   COLLABORATION_EVENTS,
   getRealtimeClientIdFromRequest,
+  getRealtimeRequestIdFromRequest,
 } from "@/lib/realtime-shared"
 
 const reorderSchema = z
@@ -148,6 +149,7 @@ export async function PUT(
       surveyId: id,
       event: COLLABORATION_EVENTS.QUESTIONS_REORDERED,
       operation: "questions-reorder",
+      requestId: getRealtimeRequestIdFromRequest(request),
       payload: {
         questions: parsed.data.questions.map((q) => ({
           id: q.id,

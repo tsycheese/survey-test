@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth"
+import { logPerformance } from "@/lib/performance-logging"
 import { pusherServer, realtimeProvider } from "@/lib/pusher"
 import { prisma } from "@/prisma"
 import { NextResponse } from "next/server"
@@ -97,7 +98,7 @@ export async function POST(request: Request) {
 
     timings.total = performance.now() - requestStartedAt
 
-    console.info("[Realtime Auth Performance]", {
+    logPerformance("[Realtime Auth Performance]", {
       requestId,
       provider: realtimeProvider,
       ...Object.fromEntries(

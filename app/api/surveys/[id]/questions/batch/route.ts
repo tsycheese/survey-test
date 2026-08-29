@@ -4,6 +4,7 @@ import { scheduleSurveyBroadcast } from "@/lib/realtime-broadcast"
 import {
   COLLABORATION_EVENTS,
   getRealtimeClientIdFromRequest,
+  getRealtimeRequestIdFromRequest,
 } from "@/lib/realtime-shared"
 import { batchQuestionMutationSchema } from "@/lib/questions/mutation-schema"
 import { prisma } from "@/prisma"
@@ -154,6 +155,7 @@ export async function POST(
       surveyId: id,
       event: COLLABORATION_EVENTS.QUESTION_CREATED,
       operation: "questions-batch-create",
+      requestId: getRealtimeRequestIdFromRequest(request),
       payload: {
         batchId,
         questions: result.questions.map((question) => ({

@@ -12,6 +12,7 @@ import type { PersistedQuestionResponse } from "@/lib/editor-snapshots"
 import { useEditorStore } from "@/lib/editor-store"
 import { createQuestion } from "@/lib/questions/registry"
 import type { Question, QuestionType } from "@/lib/questions/types"
+import { PERFORMANCE_LOGS_ENABLED } from "@/lib/performance-logging"
 
 function waitForNextPaint(): Promise<number> {
   return new Promise((resolve) => {
@@ -92,8 +93,7 @@ export function useSurveyStructureMutation({
                 {
                   method: "POST",
                   headers: {
-                    ...getEditorMutationHeaders(clientId),
-                    "X-Request-Id": requestId,
+                    ...getEditorMutationHeaders(clientId, requestId),
                   },
                   body: requestBody,
                 }
@@ -149,51 +149,53 @@ export function useSurveyStructureMutation({
           toast.success("题目已添加")
         }
 
-        console.groupCollapsed(
-          `[Question Add Performance] ${requestId.slice(0, 8)}`
-        )
-        console.table([
-          {
-            phase: "乐观状态更新",
-            duration: `${(optimisticStateUpdatedAt - clickStartedAt).toFixed(1)}ms`,
-          },
-          {
-            phase: "点击到乐观绘制",
-            duration: `${(optimisticPaintedAt - clickStartedAt).toFixed(1)}ms`,
-          },
-          {
-            phase: "后台队列等待",
-            duration: `${(requestStartedAt - optimisticStateUpdatedAt).toFixed(1)}ms`,
-          },
-          {
-            phase: "保存请求往返",
-            duration: `${(responseReceivedAt - requestStartedAt).toFixed(1)}ms`,
-          },
-          {
-            phase: "正式 ID 确认",
-            duration: `${(confirmedAt - responseParsedAt).toFixed(1)}ms`,
-          },
-          {
-            phase: "点击到持久化完成",
-            duration: `${(confirmedPaintedAt - clickStartedAt).toFixed(1)}ms`,
-          },
-        ])
-        console.info(
-          "Server-Timing:",
-          response.headers.get("server-timing") ?? "无"
-        )
-        console.info("Test Context:", {
-          questionType: type,
-          questionCountBefore,
-          requestedIndex: index,
-          saveAttempts,
-          idempotentReplay:
-            response.headers.get("x-idempotent-replay") === "true",
-          visibilityStateAtClick,
-          visibilityStateAtPaint: document.visibilityState,
-        })
-        console.info("Request ID:", requestId)
-        console.groupEnd()
+        if (PERFORMANCE_LOGS_ENABLED) {
+          console.groupCollapsed(
+            `[Question Add Performance] ${requestId.slice(0, 8)}`
+          )
+          console.table([
+            {
+              phase: "乐观状态更新",
+              duration: `${(optimisticStateUpdatedAt - clickStartedAt).toFixed(1)}ms`,
+            },
+            {
+              phase: "点击到乐观绘制",
+              duration: `${(optimisticPaintedAt - clickStartedAt).toFixed(1)}ms`,
+            },
+            {
+              phase: "后台队列等待",
+              duration: `${(requestStartedAt - optimisticStateUpdatedAt).toFixed(1)}ms`,
+            },
+            {
+              phase: "保存请求往返",
+              duration: `${(responseReceivedAt - requestStartedAt).toFixed(1)}ms`,
+            },
+            {
+              phase: "正式 ID 确认",
+              duration: `${(confirmedAt - responseParsedAt).toFixed(1)}ms`,
+            },
+            {
+              phase: "点击到持久化完成",
+              duration: `${(confirmedPaintedAt - clickStartedAt).toFixed(1)}ms`,
+            },
+          ])
+          console.info(
+            "Server-Timing:",
+            response.headers.get("server-timing") ?? "无"
+          )
+          console.info("Test Context:", {
+            questionType: type,
+            questionCountBefore,
+            requestedIndex: index,
+            saveAttempts,
+            idempotentReplay:
+              response.headers.get("x-idempotent-replay") === "true",
+            visibilityStateAtClick,
+            visibilityStateAtPaint: document.visibilityState,
+          })
+          console.info("Request ID:", requestId)
+          console.groupEnd()
+        }
       } catch (error) {
         const currentState = useEditorStore.getState()
         const canApply =
@@ -203,11 +205,15 @@ export function useSurveyStructureMutation({
           currentState.rollbackPendingQuestion(targetSurveyId, temporaryId)
           await waitForNextPaint()
         }
-        console.error("[Question Add Performance] 保存失败", {
+        console.error("[Question Add Error] 保存失败", {
           requestId,
           saveAttempts,
           rolledBack: canApply,
-          duration: `${(performance.now() - clickStartedAt).toFixed(1)}ms`,
+          ...(PERFORMANCE_LOGS_ENABLED
+            ? {
+                duration: `${(performance.now() - clickStartedAt).toFixed(1)}ms`,
+              }
+            : {}),
           error,
         })
         if (canApply) toast.error("添加失败，已撤销临时题目")

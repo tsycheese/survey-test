@@ -4,6 +4,7 @@ import { scheduleSurveyBroadcast } from "@/lib/realtime-broadcast"
 import {
   COLLABORATION_EVENTS,
   getRealtimeClientIdFromRequest,
+  getRealtimeRequestIdFromRequest,
 } from "@/lib/realtime-shared"
 import { NextResponse } from "next/server"
 
@@ -43,6 +44,7 @@ export async function POST(request: Request) {
         surveyId,
         event: COLLABORATION_EVENTS.QUESTIONS_UNLOCK_ALL,
         operation: "collaboration-leave-unlock",
+        requestId: getRealtimeRequestIdFromRequest(request),
         payload: {
           userId: session.user.id,
           unlockedBy: session.user.id,

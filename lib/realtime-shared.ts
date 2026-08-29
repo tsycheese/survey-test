@@ -3,12 +3,20 @@ export const getSurveyChannel = (surveyId: string) =>
   `presence-survey-${surveyId}`
 
 export const REALTIME_CLIENT_ID_HEADER = "x-realtime-client-id"
+export const REALTIME_REQUEST_ID_HEADER = "x-request-id"
 
 export function getRealtimeClientIdFromRequest(
   request: Request
 ): string | undefined {
   const clientId = request.headers.get(REALTIME_CLIENT_ID_HEADER)?.trim()
   return clientId && clientId.length <= 128 ? clientId : undefined
+}
+
+export function getRealtimeRequestIdFromRequest(
+  request: Request
+): string | undefined {
+  const requestId = request.headers.get(REALTIME_REQUEST_ID_HEADER)?.trim()
+  return requestId && requestId.length <= 128 ? requestId : undefined
 }
 
 // 事件名称常量

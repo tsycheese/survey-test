@@ -3,6 +3,7 @@ import { scheduleSurveyBroadcast } from "@/lib/realtime-broadcast"
 import {
   COLLABORATION_EVENTS,
   getRealtimeClientIdFromRequest,
+  getRealtimeRequestIdFromRequest,
 } from "@/lib/realtime-shared"
 import { prisma } from "@/prisma"
 import { NextResponse } from "next/server"
@@ -77,6 +78,7 @@ export async function POST(request: Request) {
         surveyId,
         event: COLLABORATION_EVENTS.QUESTIONS_UNLOCK_ALL,
         operation: "questions-unlock-all",
+        requestId: getRealtimeRequestIdFromRequest(request),
         payload: {
           userId: targetUserId,
           unlockedBy: session.user.id,

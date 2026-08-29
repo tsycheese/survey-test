@@ -13,6 +13,7 @@ import {
   type LockInfo,
   type SyncEventData,
 } from "@/lib/realtime-shared"
+import { logPerformance } from "@/lib/performance-logging"
 
 type UseSurveyReconciliationOptions = {
   surveyId: string
@@ -21,9 +22,10 @@ type UseSurveyReconciliationOptions = {
   clientId: string | null
   subscriptionEpoch: number
   onEvent: (event: string, callback: (data: unknown) => void) => () => void
+  getRealtimeEventSequence: () => number
   reconcileLockedQuestions: (
     snapshot: Map<string, LockInfo>,
-    snapshotStartedAt: number
+    snapshotStartedEventSequence: number
   ) => void
 }
 
@@ -34,6 +36,7 @@ export function useSurveyReconciliation({
   clientId,
   subscriptionEpoch,
   onEvent,
+  getRealtimeEventSequence,
   reconcileLockedQuestions,
 }: UseSurveyReconciliationOptions) {
   const reconcileSurvey = useEditorStore((state) => state.reconcileSurvey)
@@ -49,7 +52,7 @@ export function useSurveyReconciliation({
       const controller = new AbortController()
       controllerRef.current = controller
       const sequence = ++sequenceRef.current
-      const snapshotStartedAt = Date.now()
+      const snapshotStartedEventSequence = getRealtimeEventSequence()
       const startedAt = performance.now()
 
       try {
@@ -70,9 +73,9 @@ export function useSurveyReconciliation({
         reconcileSurvey(toEditorSurvey(snapshot))
         reconcileLockedQuestions(
           toLockedQuestions(snapshot, currentUserId),
-          snapshotStartedAt
+          snapshotStartedEventSequence
         )
-        console.info("[Realtime Snapshot Reconciliation]", {
+        logPerformance("[Realtime Snapshot Reconciliation]", {
           reason,
           duration: `${(performance.now() - startedAt).toFixed(1)}ms`,
           questionCount: snapshot.questions?.length ?? 0,
@@ -88,6 +91,7 @@ export function useSurveyReconciliation({
     [
       canAccess,
       currentUserId,
+      getRealtimeEventSequence,
       reconcileLockedQuestions,
       reconcileSurvey,
       surveyId,

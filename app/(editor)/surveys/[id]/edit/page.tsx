@@ -138,6 +138,7 @@ export default function EditSurveyPage() {
     subscriptionEpoch,
     unlockQuestion,
     reconcileLockedQuestions,
+    getRealtimeEventSequence,
     onEvent,
     setLockedQuestions,
   } = useSurveyCollaboration(
@@ -163,6 +164,7 @@ export default function EditSurveyPage() {
       clientId,
       subscriptionEpoch,
       onEvent,
+      getRealtimeEventSequence,
       reconcileLockedQuestions,
     })
 
