@@ -48,6 +48,30 @@ function questionCard(page: Page, questionId: string) {
   return page.locator(`[data-question-id="${questionId}"]`)
 }
 
+function trackSurveySnapshotRequests(page: Page, surveyId: string) {
+  const snapshotPath = `/api/surveys/${surveyId}`
+  let count = 0
+
+  page.on("request", (request) => {
+    if (
+      request.method() === "GET" &&
+      new URL(request.url()).pathname === snapshotPath
+    ) {
+      count += 1
+    }
+  })
+
+  return () => count
+}
+
+async function questionIdsInDisplayOrder(page: Page) {
+  return page
+    .locator("[data-question-id]")
+    .evaluateAll((questions) =>
+      questions.map((question) => question.getAttribute("data-question-id"))
+    )
+}
+
 async function openEditorPair(
   ownerPage: Page,
   collaboratorPage: Page,
@@ -483,6 +507,15 @@ test.describe("问卷双账号协作", () => {
       scenario.firstQuestionId
     )
 
+    const ownerSnapshotRequests = trackSurveySnapshotRequests(
+      ownerPage,
+      scenario.surveyId
+    )
+    const collaboratorSnapshotRequests = trackSurveySnapshotRequests(
+      collaboratorPage,
+      scenario.surveyId
+    )
+
     const addTextQuestion = collaboratorPage.getByRole("button", {
       name: "单行文本",
       exact: true,
@@ -500,6 +533,8 @@ test.describe("问卷双账号协作", () => {
     await expect(ownerPage.locator("[data-question-id]")).toHaveCount(5, {
       timeout: 15_000,
     })
+    expect(ownerSnapshotRequests()).toBe(0)
+    expect(collaboratorSnapshotRequests()).toBe(0)
 
     await expect
       .poll(async () => {
@@ -521,11 +556,132 @@ test.describe("问卷双账号协作", () => {
       .toBe(true)
   })
 
+  test("远端排序和删除在两端增量生效且不拉取整卷快照", async ({
+    scenario,
+    ownerPage,
+    collaboratorPage,
+  }) => {
+    await openEditorPair(
+      ownerPage,
+      collaboratorPage,
+      scenario.surveyId,
+      scenario.firstQuestionId
+    )
+    const ownerSnapshotRequests = trackSurveySnapshotRequests(
+      ownerPage,
+      scenario.surveyId
+    )
+    const collaboratorSnapshotRequests = trackSurveySnapshotRequests(
+      collaboratorPage,
+      scenario.surveyId
+    )
+
+    const reorderResponse = await collaboratorPage.request.put(
+      `/api/surveys/${scenario.surveyId}/questions/reorder`,
+      {
+        data: {
+          expectedStructureRevision: 0,
+          questions: [
+            { id: scenario.secondQuestionId, order: 0 },
+            { id: scenario.firstQuestionId, order: 1 },
+          ],
+        },
+      }
+    )
+    expect(reorderResponse.ok()).toBe(true)
+
+    const reorderedIds = [scenario.secondQuestionId, scenario.firstQuestionId]
+    await expect
+      .poll(() => questionIdsInDisplayOrder(ownerPage))
+      .toEqual(reorderedIds)
+    await expect
+      .poll(() => questionIdsInDisplayOrder(collaboratorPage))
+      .toEqual(reorderedIds)
+    expect(ownerSnapshotRequests()).toBe(0)
+    expect(collaboratorSnapshotRequests()).toBe(0)
+
+    const secondQuestion = await prisma.question.findUniqueOrThrow({
+      where: { id: scenario.secondQuestionId },
+      select: { revision: true },
+    })
+    const deleteResponse = await collaboratorPage.request.delete(
+      `/api/surveys/${scenario.surveyId}/questions/${scenario.secondQuestionId}`,
+      { data: { expectedRevision: secondQuestion.revision } }
+    )
+    expect(deleteResponse.ok()).toBe(true)
+
+    await expect
+      .poll(() => questionIdsInDisplayOrder(ownerPage))
+      .toEqual([scenario.firstQuestionId])
+    await expect
+      .poll(() => questionIdsInDisplayOrder(collaboratorPage))
+      .toEqual([scenario.firstQuestionId])
+    expect(ownerSnapshotRequests()).toBe(0)
+    expect(collaboratorSnapshotRequests()).toBe(0)
+  })
+
+  test("结构事件存在修订缺口时回退一次服务器快照", async ({
+    scenario,
+    ownerPage,
+    collaboratorPage,
+  }) => {
+    await openEditorPair(
+      ownerPage,
+      collaboratorPage,
+      scenario.surveyId,
+      scenario.firstQuestionId
+    )
+    await ownerPage.waitForTimeout(300)
+    const ownerSnapshotRequests = trackSurveySnapshotRequests(
+      ownerPage,
+      scenario.surveyId
+    )
+
+    await realtimeTestPublisher.trigger(
+      getSurveyChannel(scenario.surveyId),
+      COLLABORATION_EVENTS.QUESTION_CREATED,
+      {
+        requestId: crypto.randomUUID(),
+        clientId: "playwright-synthetic-remote",
+        question: {
+          id: crypto.randomUUID(),
+          type: "TEXT",
+          title: "不应直接应用的缺口题目",
+          required: false,
+          order: 2,
+          revision: 0,
+          config: { placeholder: "", format: "any" },
+        },
+        structureRevision: 2,
+        fromUserId: "playwright-synthetic-remote",
+        timestamp: new Date().toISOString(),
+      }
+    )
+
+    await expect.poll(() => ownerSnapshotRequests()).toBe(1)
+    await expect(ownerPage.locator("[data-question-id]")).toHaveCount(2)
+  })
+
   test("AI 批量新增整批提交且重放不重复", async ({
     scenario,
     ownerPage,
     collaboratorPage,
   }) => {
+    await openEditorPair(
+      ownerPage,
+      collaboratorPage,
+      scenario.surveyId,
+      scenario.firstQuestionId
+    )
+    const ownerSnapshotRequests = trackSurveySnapshotRequests(
+      ownerPage,
+      scenario.surveyId
+    )
+    const collaboratorSnapshotRequests = trackSurveySnapshotRequests(
+      collaboratorPage,
+      scenario.surveyId
+    )
+
     const batchId = crypto.randomUUID()
     const operationIds = [
       crypto.randomUUID(),
@@ -587,6 +743,16 @@ test.describe("问卷双账号协作", () => {
     expect(replayResponse.status()).toBe(200)
     expect(replayResponse.headers()["x-idempotent-replay"]).toBe("true")
 
+    await expect(collaboratorPage.locator("[data-question-id]")).toHaveCount(
+      5,
+      { timeout: 15_000 }
+    )
+    await expect(ownerPage.locator("[data-question-id]")).toHaveCount(5, {
+      timeout: 15_000,
+    })
+    expect(ownerSnapshotRequests()).toBe(0)
+    expect(collaboratorSnapshotRequests()).toBe(0)
+
     const rejectedOperationId = crypto.randomUUID()
     const partialReplayResponse = await collaboratorPage.request.post(
       batchUrl,
@@ -645,17 +811,8 @@ test.describe("问卷双账号协作", () => {
         rejectedQuestionCount: 0,
       })
 
-    await Promise.all([
-      ownerPage.goto(`/surveys/${scenario.surveyId}/edit`),
-      collaboratorPage.goto(`/surveys/${scenario.surveyId}/edit`),
-    ])
-    await expect(collaboratorPage.locator("[data-question-id]")).toHaveCount(
-      5,
-      { timeout: 15_000 }
-    )
-    await expect(ownerPage.locator("[data-question-id]")).toHaveCount(5, {
-      timeout: 15_000,
-    })
+    expect(ownerSnapshotRequests()).toBe(0)
+    expect(collaboratorSnapshotRequests()).toBe(0)
   })
 
   test("题目保存失败时保留本地草稿并可重试", async ({
@@ -736,6 +893,15 @@ test.describe("问卷双账号协作", () => {
       scenario.firstQuestionId
     )
 
+    const ownerSnapshotRequests = trackSurveySnapshotRequests(
+      ownerPage,
+      scenario.surveyId
+    )
+    const collaboratorSnapshotRequests = trackSurveySnapshotRequests(
+      collaboratorPage,
+      scenario.surveyId
+    )
+
     const updateUrl = `**/api/surveys/${scenario.surveyId}`
     const submittedBodies: Array<Record<string, unknown>> = []
     await collaboratorPage.route(updateUrl, async (route) => {
@@ -780,6 +946,14 @@ test.describe("问卷双账号协作", () => {
         title: "串行保存后的问卷标题",
         description: "串行保存后的问卷描述",
       })
+    await expect(ownerPage.locator("header input").first()).toHaveValue(
+      "串行保存后的问卷标题"
+    )
+    await expect(
+      ownerPage.getByText("串行保存后的问卷描述", { exact: true })
+    ).toBeVisible()
+    expect(ownerSnapshotRequests()).toBe(0)
+    expect(collaboratorSnapshotRequests()).toBe(0)
   })
 
   test("整卷设置保存失败时保留选择并可从顶部重试", async ({

@@ -2,11 +2,18 @@
 
 import { useCallback, useEffect, useRef } from "react"
 import { toast } from "sonner"
-import { useEditorStore } from "@/lib/editor-store"
+import {
+  useEditorStore,
+  type RemoteEditorEventOutcome,
+} from "@/lib/editor-store"
 import {
   toEditorQuestionFromSyncEvent,
   toEditorSurvey,
   toLockedQuestions,
+  toRemoteQuestionDeletedPayload,
+  toRemoteQuestionsCreatedPayload,
+  toRemoteQuestionsReorderedPayload,
+  toRemoteSurveyDetailsPayload,
   type SurveySnapshot,
 } from "@/lib/editor-snapshots"
 import {
@@ -44,6 +51,18 @@ export function useSurveyReconciliation({
   const reconcileSurvey = useEditorStore((state) => state.reconcileSurvey)
   const applyRemoteQuestionUpdate = useEditorStore(
     (state) => state.applyRemoteQuestionUpdate
+  )
+  const applyRemoteQuestionsCreated = useEditorStore(
+    (state) => state.applyRemoteQuestionsCreated
+  )
+  const applyRemoteQuestionDeleted = useEditorStore(
+    (state) => state.applyRemoteQuestionDeleted
+  )
+  const applyRemoteQuestionsReordered = useEditorStore(
+    (state) => state.applyRemoteQuestionsReordered
+  )
+  const applyRemoteSurveyDetails = useEditorStore(
+    (state) => state.applyRemoteSurveyDetails
   )
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const controllerRef = useRef<AbortController | null>(null)
@@ -122,76 +141,202 @@ export function useSurveyReconciliation({
   useEffect(() => {
     if (!canAccess) return
 
-    const unsubscribeQuestionUpdated = onEvent(
-      COLLABORATION_EVENTS.QUESTION_UPDATED,
-      (data) => {
+    const isOwnEvent = (event: SyncEventData | undefined) =>
+      Boolean(event?.clientId && event.clientId === clientId)
+
+    const fallbackForInvalidPayload = (
+      eventName: string,
+      event: SyncEventData | undefined,
+      startedAt: number,
+      message: string
+    ) => {
+      logPerformance("[Realtime Incremental Reconciliation]", {
+        eventName,
+        requestId: event?.requestId ?? "unknown",
+        result: "snapshot-fallback",
+        reason: "invalid-event-payload",
+        duration: `${(performance.now() - startedAt).toFixed(1)}ms`,
+      })
+      scheduleReconciliation(`${eventName}-invalid-payload`)
+      toast.info(message, { duration: 2000 })
+    }
+
+    const finishIncrementalReconciliation = (
+      eventName: string,
+      event: SyncEventData | undefined,
+      outcome: RemoteEditorEventOutcome,
+      startedAt: number,
+      message: string,
+      details: Record<string, unknown> = {}
+    ) => {
+      logPerformance("[Realtime Incremental Reconciliation]", {
+        eventName,
+        requestId: event?.requestId ?? "unknown",
+        ...details,
+        result:
+          outcome.status === "fallback" ? "snapshot-fallback" : outcome.status,
+        reason: outcome.reason,
+        knownRevision: outcome.knownRevision,
+        incomingRevision: outcome.incomingRevision,
+        duration: `${(performance.now() - startedAt).toFixed(1)}ms`,
+      })
+
+      if (outcome.status === "fallback") {
+        scheduleReconciliation(`${eventName}-${outcome.reason}`)
+      }
+      if (outcome.status !== "ignored") {
+        toast.info(message, { duration: 2000 })
+      }
+    }
+
+    const unsubscribers = [
+      onEvent(COLLABORATION_EVENTS.QUESTION_UPDATED, (data) => {
         const event = data as SyncEventData | undefined
-        if (event?.clientId && event.clientId === clientId) return
+        if (isOwnEvent(event)) return
 
         const startedAt = performance.now()
         const question = toEditorQuestionFromSyncEvent(data)
         if (!question) {
-          logPerformance("[Realtime Incremental Reconciliation]", {
-            eventName: COLLABORATION_EVENTS.QUESTION_UPDATED,
-            requestId: event?.requestId ?? "unknown",
-            result: "snapshot-fallback",
-            reason: "invalid-event-payload",
-            duration: `${(performance.now() - startedAt).toFixed(1)}ms`,
-          })
-          scheduleReconciliation("question-updated-invalid-payload")
-          toast.info("题目已被其他协作者更新", { duration: 2000 })
+          fallbackForInvalidPayload(
+            COLLABORATION_EVENTS.QUESTION_UPDATED,
+            event,
+            startedAt,
+            "题目已被其他协作者更新"
+          )
           return
         }
 
-        const outcome = applyRemoteQuestionUpdate(surveyId, question)
-        logPerformance("[Realtime Incremental Reconciliation]", {
-          eventName: COLLABORATION_EVENTS.QUESTION_UPDATED,
-          requestId: event?.requestId ?? "unknown",
-          questionId: question.id,
-          result:
-            outcome.status === "fallback"
-              ? "snapshot-fallback"
-              : outcome.status,
-          reason: outcome.reason,
-          knownRevision: outcome.knownRevision,
-          incomingRevision: outcome.incomingRevision,
-          duration: `${(performance.now() - startedAt).toFixed(1)}ms`,
-        })
+        finishIncrementalReconciliation(
+          COLLABORATION_EVENTS.QUESTION_UPDATED,
+          event,
+          applyRemoteQuestionUpdate(surveyId, question),
+          startedAt,
+          "题目已被其他协作者更新",
+          { questionId: question.id }
+        )
+      }),
+      onEvent(COLLABORATION_EVENTS.QUESTION_CREATED, (data) => {
+        const event = data as SyncEventData | undefined
+        if (isOwnEvent(event)) return
 
-        if (outcome.status === "fallback") {
-          scheduleReconciliation(`question-updated-${outcome.reason}`)
+        const startedAt = performance.now()
+        const payload = toRemoteQuestionsCreatedPayload(data)
+        if (!payload) {
+          fallbackForInvalidPayload(
+            COLLABORATION_EVENTS.QUESTION_CREATED,
+            event,
+            startedAt,
+            "有新题目添加"
+          )
+          return
         }
-        if (outcome.status !== "ignored") {
-          toast.info("题目已被其他协作者更新", { duration: 2000 })
-        }
-      }
-    )
 
-    const subscriptions = [
-      [COLLABORATION_EVENTS.QUESTION_CREATED, "有新题目添加"],
-      [COLLABORATION_EVENTS.QUESTION_DELETED, "有题目被删除"],
-      [COLLABORATION_EVENTS.QUESTIONS_REORDERED, null],
-      [COLLABORATION_EVENTS.SURVEY_UPDATED, "问卷信息已更新"],
-    ] as const
+        finishIncrementalReconciliation(
+          COLLABORATION_EVENTS.QUESTION_CREATED,
+          event,
+          applyRemoteQuestionsCreated(
+            surveyId,
+            payload.questions,
+            payload.structureRevision
+          ),
+          startedAt,
+          "有新题目添加",
+          { questionCount: payload.questions.length }
+        )
+      }),
+      onEvent(COLLABORATION_EVENTS.QUESTION_DELETED, (data) => {
+        const event = data as SyncEventData | undefined
+        if (isOwnEvent(event)) return
 
-    const unsubscribers = subscriptions.map(([event, message]) =>
-      onEvent(event, (data) => {
-        const eventClientId = (data as SyncEventData | undefined)?.clientId
-        if (!eventClientId || eventClientId !== clientId) {
-          scheduleReconciliation(event)
+        const startedAt = performance.now()
+        const payload = toRemoteQuestionDeletedPayload(data)
+        if (!payload) {
+          fallbackForInvalidPayload(
+            COLLABORATION_EVENTS.QUESTION_DELETED,
+            event,
+            startedAt,
+            "有题目被删除"
+          )
+          return
         }
-        if (message && eventClientId !== clientId) {
-          toast.info(message, { duration: 2000 })
+
+        finishIncrementalReconciliation(
+          COLLABORATION_EVENTS.QUESTION_DELETED,
+          event,
+          applyRemoteQuestionDeleted(
+            surveyId,
+            payload.questionId,
+            payload.structureRevision
+          ),
+          startedAt,
+          "有题目被删除",
+          { questionId: payload.questionId }
+        )
+      }),
+      onEvent(COLLABORATION_EVENTS.QUESTIONS_REORDERED, (data) => {
+        const event = data as SyncEventData | undefined
+        if (isOwnEvent(event)) return
+
+        const startedAt = performance.now()
+        const payload = toRemoteQuestionsReorderedPayload(data)
+        if (!payload) {
+          fallbackForInvalidPayload(
+            COLLABORATION_EVENTS.QUESTIONS_REORDERED,
+            event,
+            startedAt,
+            "题目顺序已更新"
+          )
+          return
         }
-      })
-    )
+
+        finishIncrementalReconciliation(
+          COLLABORATION_EVENTS.QUESTIONS_REORDERED,
+          event,
+          applyRemoteQuestionsReordered(
+            surveyId,
+            payload.questions,
+            payload.structureRevision
+          ),
+          startedAt,
+          "题目顺序已更新",
+          { questionCount: payload.questions.length }
+        )
+      }),
+      onEvent(COLLABORATION_EVENTS.SURVEY_UPDATED, (data) => {
+        const event = data as SyncEventData | undefined
+        if (isOwnEvent(event)) return
+
+        const startedAt = performance.now()
+        const details = toRemoteSurveyDetailsPayload(data)
+        if (!details) {
+          fallbackForInvalidPayload(
+            COLLABORATION_EVENTS.SURVEY_UPDATED,
+            event,
+            startedAt,
+            "问卷信息已更新"
+          )
+          return
+        }
+
+        finishIncrementalReconciliation(
+          COLLABORATION_EVENTS.SURVEY_UPDATED,
+          event,
+          applyRemoteSurveyDetails(surveyId, details),
+          startedAt,
+          "问卷信息已更新"
+        )
+      }),
+    ]
 
     return () => {
-      unsubscribeQuestionUpdated()
       unsubscribers.forEach((unsubscribe) => unsubscribe())
     }
   }, [
+    applyRemoteQuestionDeleted,
     applyRemoteQuestionUpdate,
+    applyRemoteQuestionsCreated,
+    applyRemoteQuestionsReordered,
+    applyRemoteSurveyDetails,
     canAccess,
     clientId,
     onEvent,

@@ -29,13 +29,30 @@ function surveyDetailsEqual(
   )
 }
 
+function alignQuestionBaselines(
+  baselines: Record<string, Question>,
+  questions: Question[]
+): Record<string, Question> {
+  return Object.fromEntries(
+    questions.map((question) => {
+      const baseline = baselines[question.id]
+      return [
+        question.id,
+        baseline
+          ? ({ ...baseline, order: question.order } as Question)
+          : question,
+      ]
+    })
+  )
+}
+
 const PROTECTED_MUTATION_STATUSES = new Set<EditorMutationStatus>([
   "pending",
   "failed",
   "conflict",
 ])
 
-export type RemoteQuestionUpdateOutcome = {
+export type RemoteEditorEventOutcome = {
   status: "applied" | "ignored" | "fallback"
   reason:
     | "newer-revision"
@@ -47,9 +64,17 @@ export type RemoteQuestionUpdateOutcome = {
     | "baseline-unavailable"
     | "local-draft"
     | "mutation-protected"
+    | "revision-gap"
+    | "state-mismatch"
+    | "local-structure-pending"
+    | "structure-mutation-protected"
+    | "survey-details-unavailable"
+    | "local-survey-draft"
   knownRevision: number | null
   incomingRevision: number
 }
+
+export type RemoteQuestionUpdateOutcome = RemoteEditorEventOutcome
 
 type EditorStore = {
   survey: Survey | null
@@ -76,6 +101,25 @@ type EditorStore = {
     surveyId: string,
     question: Question
   ) => RemoteQuestionUpdateOutcome
+  applyRemoteQuestionsCreated: (
+    surveyId: string,
+    questions: Question[],
+    structureRevision: number
+  ) => RemoteEditorEventOutcome
+  applyRemoteQuestionDeleted: (
+    surveyId: string,
+    questionId: string,
+    structureRevision: number
+  ) => RemoteEditorEventOutcome
+  applyRemoteQuestionsReordered: (
+    surveyId: string,
+    questions: Array<{ id: string; order: number }>,
+    structureRevision: number
+  ) => RemoteEditorEventOutcome
+  applyRemoteSurveyDetails: (
+    surveyId: string,
+    details: PersistedSurveyDetails
+  ) => RemoteEditorEventOutcome
   restoreQuestionBaseline: (id: string) => void
   setQuestionBaseline: (question: Question) => void
   commitSurveyMutation: (
@@ -479,6 +523,488 @@ export const useEditorStore = create<EditorStore>((set) => ({
           ...s.questionBaselines,
           [appliedQuestion.id]: appliedQuestion,
         },
+      }
+    })
+
+    return outcome
+  },
+
+  applyRemoteQuestionsCreated: (
+    surveyId,
+    incomingQuestions,
+    incomingRevision
+  ) => {
+    let outcome: RemoteEditorEventOutcome = {
+      status: "fallback",
+      reason: "survey-unavailable",
+      knownRevision: null,
+      incomingRevision,
+    }
+
+    set((s) => {
+      if (!s.survey || s.survey.id !== surveyId) return s
+
+      const knownRevision = s.survey.structureRevision
+      if (incomingRevision < knownRevision) {
+        outcome = {
+          status: "ignored",
+          reason: "stale-revision",
+          knownRevision,
+          incomingRevision,
+        }
+        return s
+      }
+
+      if (incomingRevision === knownRevision) {
+        const contentMatches = incomingQuestions.every((incoming) => {
+          const current = s.survey?.questions.find(
+            (question) => question.id === incoming.id
+          )
+          return (
+            current &&
+            current.order === incoming.order &&
+            questionContentEquals(current, incoming)
+          )
+        })
+        outcome = {
+          status: contentMatches ? "ignored" : "fallback",
+          reason: contentMatches
+            ? "duplicate-revision"
+            : "revision-content-mismatch",
+          knownRevision,
+          incomingRevision,
+        }
+        return s
+      }
+
+      if (incomingRevision !== knownRevision + 1) {
+        outcome = {
+          status: "fallback",
+          reason: "revision-gap",
+          knownRevision,
+          incomingRevision,
+        }
+        return s
+      }
+
+      const orderMutation = s.mutationStates[editorMutationKey.order(surveyId)]
+      if (
+        orderMutation &&
+        PROTECTED_MUTATION_STATUSES.has(orderMutation.status)
+      ) {
+        outcome = {
+          status: "fallback",
+          reason: "structure-mutation-protected",
+          knownRevision,
+          incomingRevision,
+        }
+        return s
+      }
+      if (s.pendingQuestionIds.size > 0) {
+        outcome = {
+          status: "fallback",
+          reason: "local-structure-pending",
+          knownRevision,
+          incomingRevision,
+        }
+        return s
+      }
+      if (
+        incomingQuestions.some((incoming) =>
+          s.survey?.questions.some((question) => question.id === incoming.id)
+        )
+      ) {
+        outcome = {
+          status: "fallback",
+          reason: "state-mismatch",
+          knownRevision,
+          incomingRevision,
+        }
+        return s
+      }
+
+      const questions = [...s.survey.questions]
+      for (const incoming of [...incomingQuestions].sort(
+        (left, right) => left.order - right.order
+      )) {
+        questions.splice(
+          Math.min(Math.max(incoming.order, 0), questions.length),
+          0,
+          incoming
+        )
+      }
+      const normalizedQuestions = questions.map((question, order) =>
+        question.order === order
+          ? question
+          : ({ ...question, order } as Question)
+      )
+
+      outcome = {
+        status: "applied",
+        reason: "newer-revision",
+        knownRevision,
+        incomingRevision,
+      }
+      return {
+        survey: {
+          ...s.survey,
+          structureRevision: incomingRevision,
+          questions: normalizedQuestions,
+        },
+        questionBaselines: alignQuestionBaselines(
+          s.questionBaselines,
+          normalizedQuestions
+        ),
+      }
+    })
+
+    return outcome
+  },
+
+  applyRemoteQuestionDeleted: (surveyId, questionId, incomingRevision) => {
+    let outcome: RemoteEditorEventOutcome = {
+      status: "fallback",
+      reason: "survey-unavailable",
+      knownRevision: null,
+      incomingRevision,
+    }
+
+    set((s) => {
+      if (!s.survey || s.survey.id !== surveyId) return s
+
+      const knownRevision = s.survey.structureRevision
+      const current = s.survey.questions.find(
+        (question) => question.id === questionId
+      )
+      if (incomingRevision < knownRevision) {
+        outcome = {
+          status: "ignored",
+          reason: "stale-revision",
+          knownRevision,
+          incomingRevision,
+        }
+        return s
+      }
+      if (incomingRevision === knownRevision) {
+        outcome = {
+          status: current ? "fallback" : "ignored",
+          reason: current ? "state-mismatch" : "duplicate-revision",
+          knownRevision,
+          incomingRevision,
+        }
+        return s
+      }
+      if (incomingRevision !== knownRevision + 1) {
+        outcome = {
+          status: "fallback",
+          reason: "revision-gap",
+          knownRevision,
+          incomingRevision,
+        }
+        return s
+      }
+      if (!current) {
+        outcome = {
+          status: "fallback",
+          reason: "question-unavailable",
+          knownRevision,
+          incomingRevision,
+        }
+        return s
+      }
+
+      const orderMutation = s.mutationStates[editorMutationKey.order(surveyId)]
+      if (
+        orderMutation &&
+        PROTECTED_MUTATION_STATUSES.has(orderMutation.status)
+      ) {
+        outcome = {
+          status: "fallback",
+          reason: "structure-mutation-protected",
+          knownRevision,
+          incomingRevision,
+        }
+        return s
+      }
+      if (s.pendingQuestionIds.size > 0) {
+        outcome = {
+          status: "fallback",
+          reason: "local-structure-pending",
+          knownRevision,
+          incomingRevision,
+        }
+        return s
+      }
+
+      const baseline = s.questionBaselines[questionId]
+      const questionMutation =
+        s.mutationStates[editorMutationKey.question(questionId)]
+      const mutationProtected = Boolean(
+        questionMutation &&
+        PROTECTED_MUTATION_STATUSES.has(questionMutation.status)
+      )
+      const hasLocalDraft = Boolean(
+        baseline && !questionContentEquals(current, baseline)
+      )
+      if (!baseline || mutationProtected || hasLocalDraft) {
+        outcome = {
+          status: "fallback",
+          reason: !baseline
+            ? "baseline-unavailable"
+            : mutationProtected
+              ? "mutation-protected"
+              : "local-draft",
+          knownRevision,
+          incomingRevision,
+        }
+        return s
+      }
+
+      const questions = s.survey.questions
+        .filter((question) => question.id !== questionId)
+        .map((question, order) =>
+          question.order === order
+            ? question
+            : ({ ...question, order } as Question)
+        )
+      const mutationStates = { ...s.mutationStates }
+      delete mutationStates[editorMutationKey.question(questionId)]
+
+      outcome = {
+        status: "applied",
+        reason: "newer-revision",
+        knownRevision,
+        incomingRevision,
+      }
+      return {
+        survey: {
+          ...s.survey,
+          structureRevision: incomingRevision,
+          questions,
+        },
+        selectedId:
+          s.selectedId === questionId
+            ? (questions[0]?.id ?? null)
+            : s.selectedId,
+        questionBaselines: alignQuestionBaselines(
+          s.questionBaselines,
+          questions
+        ),
+        mutationStates,
+      }
+    })
+
+    return outcome
+  },
+
+  applyRemoteQuestionsReordered: (
+    surveyId,
+    incomingQuestions,
+    incomingRevision
+  ) => {
+    let outcome: RemoteEditorEventOutcome = {
+      status: "fallback",
+      reason: "survey-unavailable",
+      knownRevision: null,
+      incomingRevision,
+    }
+
+    set((s) => {
+      if (!s.survey || s.survey.id !== surveyId) return s
+
+      const knownRevision = s.survey.structureRevision
+      const incomingOrders = new Map(
+        incomingQuestions.map((question) => [question.id, question.order])
+      )
+      const questionSetMatches =
+        incomingOrders.size === s.survey.questions.length &&
+        s.survey.questions.every((question) => incomingOrders.has(question.id))
+
+      if (incomingRevision < knownRevision) {
+        outcome = {
+          status: "ignored",
+          reason: "stale-revision",
+          knownRevision,
+          incomingRevision,
+        }
+        return s
+      }
+      if (incomingRevision === knownRevision) {
+        const orderMatches =
+          questionSetMatches &&
+          s.survey.questions.every(
+            (question) => incomingOrders.get(question.id) === question.order
+          )
+        outcome = {
+          status: orderMatches ? "ignored" : "fallback",
+          reason: orderMatches ? "duplicate-revision" : "state-mismatch",
+          knownRevision,
+          incomingRevision,
+        }
+        return s
+      }
+
+      const orderMutation = s.mutationStates[editorMutationKey.order(surveyId)]
+      if (
+        orderMutation &&
+        PROTECTED_MUTATION_STATUSES.has(orderMutation.status)
+      ) {
+        outcome = {
+          status: "fallback",
+          reason: "structure-mutation-protected",
+          knownRevision,
+          incomingRevision,
+        }
+        return s
+      }
+      if (s.pendingQuestionIds.size > 0) {
+        outcome = {
+          status: "fallback",
+          reason: "local-structure-pending",
+          knownRevision,
+          incomingRevision,
+        }
+        return s
+      }
+      if (!questionSetMatches) {
+        outcome = {
+          status: "fallback",
+          reason: "state-mismatch",
+          knownRevision,
+          incomingRevision,
+        }
+        return s
+      }
+
+      const questions = s.survey.questions
+        .map(
+          (question) =>
+            ({
+              ...question,
+              order: incomingOrders.get(question.id)!,
+            }) as Question
+        )
+        .sort((left, right) => left.order - right.order)
+
+      outcome = {
+        status: "applied",
+        reason: "newer-revision",
+        knownRevision,
+        incomingRevision,
+      }
+      return {
+        survey: {
+          ...s.survey,
+          structureRevision: incomingRevision,
+          questions,
+        },
+        questionBaselines: alignQuestionBaselines(
+          s.questionBaselines,
+          questions
+        ),
+      }
+    })
+
+    return outcome
+  },
+
+  applyRemoteSurveyDetails: (surveyId, incoming) => {
+    let outcome: RemoteEditorEventOutcome = {
+      status: "fallback",
+      reason: "survey-unavailable",
+      knownRevision: null,
+      incomingRevision: incoming.detailsRevision,
+    }
+
+    set((s) => {
+      if (!s.survey || s.survey.id !== surveyId) return s
+      if (!s.surveyDetailsBaseline) {
+        outcome = {
+          ...outcome,
+          reason: "survey-details-unavailable",
+        }
+        return s
+      }
+
+      const knownRevision = Math.max(
+        s.survey.detailsRevision,
+        s.surveyDetailsBaseline.detailsRevision
+      )
+      const incomingRevision = incoming.detailsRevision
+      if (incomingRevision < knownRevision) {
+        outcome = {
+          status: "ignored",
+          reason: "stale-revision",
+          knownRevision,
+          incomingRevision,
+        }
+        return s
+      }
+      if (incomingRevision === knownRevision) {
+        const contentMatches =
+          surveyDetailsEqual(incoming, s.surveyDetailsBaseline) ||
+          surveyDetailsEqual(incoming, s.survey)
+        outcome = {
+          status: contentMatches ? "ignored" : "fallback",
+          reason: contentMatches
+            ? "duplicate-revision"
+            : "revision-content-mismatch",
+          knownRevision,
+          incomingRevision,
+        }
+        return s
+      }
+
+      const mutationKey = editorMutationKey.surveyDetails(surveyId)
+      const mutation = s.mutationStates[mutationKey]
+      const mutationProtected = Boolean(
+        mutation && PROTECTED_MUTATION_STATUSES.has(mutation.status)
+      )
+      const hasLocalDraft = !surveyDetailsEqual(
+        s.survey,
+        s.surveyDetailsBaseline
+      )
+      if (mutationProtected || hasLocalDraft) {
+        outcome = {
+          status: "fallback",
+          reason: mutationProtected
+            ? "mutation-protected"
+            : "local-survey-draft",
+          knownRevision,
+          incomingRevision,
+        }
+
+        if (!mutationProtected && hasLocalDraft) {
+          return {
+            mutationStates: {
+              ...s.mutationStates,
+              [mutationKey]: {
+                status: "conflict",
+                message:
+                  "问卷信息已被其他协作者更新，请选择保留本地修改或使用服务器版本",
+                updatedAt: Date.now(),
+              },
+            },
+          }
+        }
+        return s
+      }
+
+      outcome = {
+        status: "applied",
+        reason: "newer-revision",
+        knownRevision,
+        incomingRevision,
+      }
+      return {
+        survey: {
+          ...s.survey,
+          title: incoming.title,
+          description: incoming.description,
+          settings: incoming.settings,
+          detailsRevision: incomingRevision,
+        },
+        surveyDetailsBaseline: incoming,
       }
     })
 

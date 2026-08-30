@@ -70,11 +70,14 @@ export type QuestionData = {
   config: Record<string, unknown>
 }
 
+export type QuestionOrderData = Pick<QuestionData, "id" | "order">
+
 // 问卷数据类型（用于实时同步）
 export type SurveyData = {
   title: string
   description?: string | null
-  settings?: Record<string, unknown>
+  settings?: Record<string, unknown> | null
+  detailsRevision?: number
 }
 
 // 实时同步事件数据类型
@@ -83,7 +86,7 @@ export type SyncEventData = {
   clientId?: string
   questionId?: string
   question?: QuestionData
-  questions?: QuestionData[]
+  questions?: Array<QuestionData | QuestionOrderData>
   structureRevision?: number
   survey?: SurveyData
   fromUserId: string

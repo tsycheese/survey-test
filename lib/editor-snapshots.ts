@@ -1,5 +1,9 @@
 import type { Question, Survey, SurveySettings } from "@/lib/questions/types"
-import type { LockInfo, SyncEventData } from "@/lib/realtime-shared"
+import type {
+  LockInfo,
+  QuestionData,
+  SyncEventData,
+} from "@/lib/realtime-shared"
 
 export type SurveyQuestionSnapshot = {
   id: string
@@ -37,6 +41,28 @@ export type PersistedSurveyDetailsResponse = {
   detailsRevision: number
 }
 
+export type RemoteQuestionsCreatedPayload = {
+  questions: Question[]
+  structureRevision: number
+}
+
+export type RemoteQuestionDeletedPayload = {
+  questionId: string
+  structureRevision: number
+}
+
+export type RemoteQuestionsReorderedPayload = {
+  questions: Array<{ id: string; order: number }>
+  structureRevision: number
+}
+
+export type RemoteSurveyDetailsPayload = Omit<
+  PersistedSurveyDetailsResponse,
+  "settings"
+> & {
+  settings?: SurveySettings
+}
+
 export function toEditorQuestion(question: SurveyQuestionSnapshot): Question {
   return {
     id: question.id,
@@ -50,15 +76,10 @@ export function toEditorQuestion(question: SurveyQuestionSnapshot): Question {
   } as Question
 }
 
-export function toEditorQuestionFromSyncEvent(data: unknown): Question | null {
-  if (!data || typeof data !== "object") return null
-
-  const event = data as Partial<SyncEventData>
-  const question = event.question
+function toEditorQuestionData(
+  question: Partial<QuestionData>
+): Question | null {
   if (
-    !event.questionId ||
-    !question ||
-    event.questionId !== question.id ||
     typeof question.id !== "string" ||
     typeof question.type !== "string" ||
     typeof question.title !== "string" ||
@@ -66,7 +87,7 @@ export function toEditorQuestionFromSyncEvent(data: unknown): Question | null {
       typeof question.description !== "string") ||
     typeof question.required !== "boolean" ||
     !Number.isInteger(question.order) ||
-    question.order < 0 ||
+    (question.order ?? -1) < 0 ||
     !Number.isInteger(question.revision) ||
     (question.revision ?? -1) < 0 ||
     !question.config ||
@@ -82,10 +103,154 @@ export function toEditorQuestionFromSyncEvent(data: unknown): Question | null {
     title: question.title,
     description: question.description ?? null,
     required: question.required,
-    order: question.order,
+    order: question.order!,
     revision: question.revision!,
     config: question.config,
   })
+}
+
+export function toEditorQuestionFromSyncEvent(data: unknown): Question | null {
+  if (!data || typeof data !== "object") return null
+
+  const event = data as Partial<SyncEventData>
+  const question = event.question
+  if (!event.questionId || !question || event.questionId !== question.id) {
+    return null
+  }
+
+  return toEditorQuestionData(question)
+}
+
+export function toRemoteQuestionsCreatedPayload(
+  data: unknown
+): RemoteQuestionsCreatedPayload | null {
+  if (!data || typeof data !== "object") return null
+
+  const event = data as Partial<SyncEventData>
+  if (
+    !Number.isInteger(event.structureRevision) ||
+    (event.structureRevision ?? -1) < 0
+  ) {
+    return null
+  }
+
+  const rawQuestions =
+    event.questions ?? (event.question ? [event.question] : [])
+  if (rawQuestions.length === 0) return null
+
+  const questions = rawQuestions.map((question) =>
+    toEditorQuestionData(question as Partial<QuestionData>)
+  )
+  if (questions.some((question) => question === null)) return null
+
+  const parsed = questions as Question[]
+  if (
+    new Set(parsed.map((question) => question.id)).size !== parsed.length ||
+    new Set(parsed.map((question) => question.order)).size !== parsed.length
+  ) {
+    return null
+  }
+
+  return {
+    questions: parsed,
+    structureRevision: event.structureRevision!,
+  }
+}
+
+export function toRemoteQuestionDeletedPayload(
+  data: unknown
+): RemoteQuestionDeletedPayload | null {
+  if (!data || typeof data !== "object") return null
+
+  const event = data as Partial<SyncEventData>
+  if (
+    typeof event.questionId !== "string" ||
+    !event.questionId ||
+    !Number.isInteger(event.structureRevision) ||
+    (event.structureRevision ?? -1) < 0
+  ) {
+    return null
+  }
+
+  return {
+    questionId: event.questionId,
+    structureRevision: event.structureRevision!,
+  }
+}
+
+export function toRemoteQuestionsReorderedPayload(
+  data: unknown
+): RemoteQuestionsReorderedPayload | null {
+  if (!data || typeof data !== "object") return null
+
+  const event = data as Partial<SyncEventData>
+  if (
+    !Array.isArray(event.questions) ||
+    event.questions.length === 0 ||
+    !Number.isInteger(event.structureRevision) ||
+    (event.structureRevision ?? -1) < 0
+  ) {
+    return null
+  }
+
+  const questions = event.questions.map((question) => ({
+    id: question.id,
+    order: question.order,
+  }))
+  if (
+    questions.some(
+      (question) =>
+        typeof question.id !== "string" ||
+        !question.id ||
+        !Number.isInteger(question.order) ||
+        question.order < 0
+    ) ||
+    new Set(questions.map((question) => question.id)).size !==
+      questions.length ||
+    new Set(questions.map((question) => question.order)).size !==
+      questions.length ||
+    ![...questions]
+      .sort((left, right) => left.order - right.order)
+      .every((question, index) => question.order === index)
+  ) {
+    return null
+  }
+
+  return {
+    questions,
+    structureRevision: event.structureRevision!,
+  }
+}
+
+export function toRemoteSurveyDetailsPayload(
+  data: unknown
+): RemoteSurveyDetailsPayload | null {
+  if (!data || typeof data !== "object") return null
+
+  const event = data as Partial<SyncEventData>
+  const survey = event.survey
+  if (
+    !survey ||
+    typeof survey.title !== "string" ||
+    (survey.description !== undefined &&
+      survey.description !== null &&
+      typeof survey.description !== "string") ||
+    (survey.settings !== undefined &&
+      survey.settings !== null &&
+      (typeof survey.settings !== "object" ||
+        Array.isArray(survey.settings))) ||
+    !Number.isInteger(survey.detailsRevision) ||
+    (survey.detailsRevision ?? -1) < 0
+  ) {
+    return null
+  }
+
+  return {
+    title: survey.title,
+    description: survey.description ?? null,
+    settings: (survey.settings ?? undefined) as SurveySettings | undefined,
+    detailsRevision: survey.detailsRevision!,
+  }
 }
 
 export function toEditorSurvey(snapshot: SurveySnapshot): Survey {
