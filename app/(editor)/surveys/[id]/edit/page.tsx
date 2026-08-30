@@ -156,11 +156,22 @@ export default function EditSurveyPage() {
     onSelect: handleSelectQuestion,
   })
 
+  useEffect(() => {
+    if (!selectedId || !clientId) return
+    const lock = lockedQuestions.get(selectedId)
+    if (
+      !lock ||
+      lock.userId !== permission.userId ||
+      lock.lockClientId !== clientId
+    ) {
+      selectQuestion(null)
+    }
+  }, [clientId, lockedQuestions, permission.userId, selectQuestion, selectedId])
+
   const { reconcileFromServer, scheduleReconciliation } =
     useSurveyReconciliation({
       surveyId: id,
       canAccess: permission.canAccess,
-      currentUserId: permission.userId,
       clientId,
       subscriptionEpoch,
       onEvent,
@@ -194,6 +205,8 @@ export default function EditSurveyPage() {
   const structureMutation = useSurveyStructureMutation({
     surveyId: id,
     clientId,
+    currentUserId: permission.userId,
+    lockedQuestions,
     coordinator: mutationCoordinator,
     reconcileFromServer,
     scheduleReconciliation,
@@ -344,7 +357,7 @@ export default function EditSurveyPage() {
         if (canAccess) {
           const snapshot = surveyData as SurveySnapshot
           setSurvey(toEditorSurvey(snapshot))
-          setLockedQuestions(toLockedQuestions(snapshot, userId))
+          setLockedQuestions(toLockedQuestions(snapshot))
         }
       } catch {
         if (controller.signal.aborted) return
@@ -730,7 +743,8 @@ export default function EditSurveyPage() {
                         const isPending = pendingQuestionIds.has(q.id)
                         const lockInfo = getLockInfo(q.id)
                         const isLockedByMe =
-                          lockInfo?.userId === permission.userId
+                          lockInfo?.userId === permission.userId &&
+                          lockInfo.lockClientId === clientId
                         const isLockedByOther = lockInfo && !isLockedByMe
 
                         return (
@@ -1399,6 +1413,7 @@ function SortableQuestionCard({
           <def.QuestionCard
             question={question as never}
             selected={selectedId === question.id}
+            readOnly={!isLockedByMe}
             order={idx + 1}
             showNumber={survey?.settings?.showQuestionNumber ?? true}
             onUpdate={onUpdate}

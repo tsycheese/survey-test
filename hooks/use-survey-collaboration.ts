@@ -27,6 +27,44 @@ type RealtimeDiagnosticPayload = {
 
 type RealtimeEventCallback = (data: unknown) => void
 
+type LockPayload = {
+  questionId?: string
+  userId?: string
+  userName?: string | null
+  lockedAt?: string
+  lockClientId?: string
+  lockId?: string
+  lockExpiresAt?: string
+  leaseRemainingMs?: number
+}
+
+function toClientLock(data: LockPayload): LockInfo | null {
+  if (
+    !data.questionId ||
+    !data.userId ||
+    !data.lockedAt ||
+    !data.lockClientId ||
+    !data.lockId ||
+    !data.lockExpiresAt ||
+    typeof data.leaseRemainingMs !== "number" ||
+    data.leaseRemainingMs <= 0
+  ) {
+    return null
+  }
+
+  return {
+    questionId: data.questionId,
+    userId: data.userId,
+    userName: data.userName ?? null,
+    lockedAt: data.lockedAt,
+    lockClientId: data.lockClientId,
+    lockId: data.lockId,
+    lockExpiresAt: data.lockExpiresAt,
+    leaseRemainingMs: data.leaseRemainingMs,
+    clientExpiresAt: performance.now() + data.leaseRemainingMs,
+  }
+}
+
 function getRealtimeClientId(): string | null {
   if (typeof window === "undefined") return null
   realtimeClientId ??= crypto.randomUUID()
@@ -120,9 +158,7 @@ export type CollaborationState = {
 }
 
 export type CollaborationActions = {
-  lockQuestion: (questionId: string) => Promise<boolean>
-  unlockQuestion: (questionId: string) => Promise<boolean>
-  unlockAllQuestions: (userId?: string) => Promise<boolean>
+  unlockQuestion: (questionId: string, lockId: string) => Promise<boolean>
   reconcileLockedQuestions: (
     snapshot: Map<string, LockInfo>,
     snapshotStartedEventSequence: number
@@ -154,6 +190,12 @@ export function useSurveyCollaboration(
   const realtimeEventSequenceRef = useRef(0)
   const lockEventSequencesRef = useRef<Map<string, number>>(new Map())
   const userUnlockSequencesRef = useRef<Map<string, number>>(new Map())
+  const releasedLockIdsRef = useRef<Set<string>>(new Set())
+  const lockedQuestionsRef = useRef<Map<string, LockInfo>>(new Map())
+
+  useEffect(() => {
+    lockedQuestionsRef.current = lockedQuestions
+  }, [lockedQuestions])
 
   // 订阅 Presence Channel
   useEffect(() => {
@@ -162,6 +204,7 @@ export function useSurveyCollaboration(
     const seenEventIds = seenEventIdsRef.current
     const lockEventSequences = lockEventSequencesRef.current
     const userUnlockSequences = userUnlockSequencesRef.current
+    const releasedLockIds = releasedLockIdsRef.current
 
     const pusher = getPusherClient()
     if (!pusher) {
@@ -236,53 +279,61 @@ export function useSurveyCollaboration(
         }
       }
 
-      const eventData = data as RealtimeDiagnosticPayload & {
-        questionId?: string
-        userId?: string
-        userName?: string | null
-        lockedAt?: string
-        unlockedAt?: string
-      }
+      const eventData = data as RealtimeDiagnosticPayload &
+        LockPayload & {
+          unlockedAt?: string
+          leases?: Array<{ questionId?: string; lockId?: string }>
+        }
       if (
         !isOwnClientEvent &&
-        eventName === COLLABORATION_EVENTS.QUESTION_LOCKED &&
-        eventData.questionId &&
-        eventData.userId &&
-        eventData.lockedAt
+        (eventName === COLLABORATION_EVENTS.QUESTION_LOCKED ||
+          eventName === COLLABORATION_EVENTS.QUESTION_LOCK_RENEWED)
       ) {
+        const incomingLock = toClientLock(eventData)
+        if (!incomingLock) return
+        if (releasedLockIdsRef.current.has(incomingLock.lockId)) return
         const lastQuestionEvent =
-          lockEventSequencesRef.current.get(eventData.questionId) ?? 0
+          lockEventSequencesRef.current.get(incomingLock.questionId) ?? 0
         const lastUserUnlock =
-          userUnlockSequencesRef.current.get(eventData.userId) ?? 0
+          userUnlockSequencesRef.current.get(incomingLock.userId) ?? 0
 
         if (
           eventSequence > lastQuestionEvent &&
           eventSequence > lastUserUnlock
         ) {
-          lockEventSequencesRef.current.set(eventData.questionId, eventSequence)
-          setLockedQuestions((prev) =>
-            new Map(prev).set(eventData.questionId!, {
-              questionId: eventData.questionId!,
-              userId: eventData.userId!,
-              userName: eventData.userName ?? null,
-              lockedAt: eventData.lockedAt!,
-            })
+          lockEventSequencesRef.current.set(
+            incomingLock.questionId,
+            eventSequence
           )
+          setLockedQuestions((prev) => {
+            const current = prev.get(incomingLock.questionId)
+            if (
+              eventName === COLLABORATION_EVENTS.QUESTION_LOCK_RENEWED &&
+              current?.lockId !== incomingLock.lockId
+            ) {
+              return prev
+            }
+            return new Map(prev).set(incomingLock.questionId, incomingLock)
+          })
         }
       }
 
       if (
         !isOwnClientEvent &&
         eventName === COLLABORATION_EVENTS.QUESTION_UNLOCKED &&
-        eventData.questionId
+        eventData.questionId &&
+        eventData.lockId
       ) {
         const lastQuestionEvent =
           lockEventSequencesRef.current.get(eventData.questionId) ?? 0
         if (eventSequence > lastQuestionEvent) {
           lockEventSequencesRef.current.set(eventData.questionId, eventSequence)
+          releasedLockIdsRef.current.add(eventData.lockId)
           setLockedQuestions((prev) => {
             const next = new Map(prev)
-            next.delete(eventData.questionId!)
+            if (next.get(eventData.questionId!)?.lockId === eventData.lockId) {
+              next.delete(eventData.questionId!)
+            }
             return next
           })
         }
@@ -291,7 +342,8 @@ export function useSurveyCollaboration(
       if (
         !isOwnClientEvent &&
         eventName === COLLABORATION_EVENTS.QUESTIONS_UNLOCK_ALL &&
-        eventData.userId
+        eventData.userId &&
+        Array.isArray(eventData.leases)
       ) {
         const lastUserUnlock =
           userUnlockSequencesRef.current.get(eventData.userId) ?? 0
@@ -299,10 +351,20 @@ export function useSurveyCollaboration(
           userUnlockSequencesRef.current.set(eventData.userId, eventSequence)
           setLockedQuestions((prev) => {
             const next = new Map(prev)
-            for (const [questionId, lock] of next.entries()) {
-              if (lock.userId === eventData.userId) {
-                next.delete(questionId)
-                lockEventSequencesRef.current.set(questionId, eventSequence)
+            for (const lease of eventData.leases ?? []) {
+              if (!lease.questionId || !lease.lockId) continue
+              releasedLockIdsRef.current.add(lease.lockId)
+              const lock = next.get(lease.questionId)
+              if (
+                lock &&
+                lock.userId === eventData.userId &&
+                lock.lockId === lease.lockId
+              ) {
+                next.delete(lease.questionId)
+                lockEventSequencesRef.current.set(
+                  lease.questionId,
+                  eventSequence
+                )
               }
             }
             return next
@@ -391,32 +453,13 @@ export function useSurveyCollaboration(
       }
     )
 
-    // Presence Channel: 成员离开（关键！自动解锁）
+    // Presence 只维护在线成员。数据库锁由租约保证最终失效，客户端观察者不再代为清理。
     channel.bind("pusher:member_removed", (member: { id: string }) => {
-      // 从成员列表移除
       setMembers((prev) => {
         const next = new Map(prev)
         next.delete(member.id)
         return next
       })
-
-      // 自动解锁该用户锁定的所有题目
-      setLockedQuestions((prev) => {
-        const next = new Map(prev)
-        for (const [qid, lock] of next.entries()) {
-          if (lock.userId === member.id) {
-            next.delete(qid)
-          }
-        }
-        return next
-      })
-
-      // 调用 API 解锁数据库中的题目
-      fetch("/api/surveys/collaboration/unlock-all", {
-        method: "POST",
-        headers: getRealtimeRequestHeaders(clientId),
-        body: JSON.stringify({ surveyId, userId: member.id }),
-      }).catch(console.error)
     })
 
     // 订阅错误
@@ -438,43 +481,32 @@ export function useSurveyCollaboration(
       seenEventIds.clear()
       lockEventSequences.clear()
       userUnlockSequences.clear()
+      releasedLockIds.clear()
       realtimeEventSequenceRef.current = 0
     }
   }, [clientId, surveyId, userId])
 
-  // 锁定题目
-  const lockQuestion = useCallback(
-    async (questionId: string): Promise<boolean> => {
-      if (!surveyId) return false
-
-      try {
-        const response = await fetch("/api/surveys/collaboration/lock", {
-          method: "POST",
-          headers: getRealtimeRequestHeaders(clientId),
-          body: JSON.stringify({ surveyId, questionId }),
-        })
-
-        return response.ok
-      } catch (error) {
-        console.error("Lock question error:", error)
-        return false
-      }
-    },
-    [clientId, surveyId]
-  )
-
   // 解锁题目
   const unlockQuestion = useCallback(
-    async (questionId: string): Promise<boolean> => {
+    async (questionId: string, lockId: string): Promise<boolean> => {
       if (!surveyId) return false
 
       try {
         const response = await fetch("/api/surveys/collaboration/unlock", {
           method: "POST",
           headers: getRealtimeRequestHeaders(clientId),
-          body: JSON.stringify({ surveyId, questionId }),
+          body: JSON.stringify({ surveyId, questionId, lockId }),
         })
 
+        if (response.ok) {
+          releasedLockIdsRef.current.add(lockId)
+          setLockedQuestions((current) => {
+            if (current.get(questionId)?.lockId !== lockId) return current
+            const next = new Map(current)
+            next.delete(questionId)
+            return next
+          })
+        }
         return response.ok
       } catch (error) {
         console.error("Unlock question error:", error)
@@ -484,26 +516,140 @@ export function useSurveyCollaboration(
     [clientId, surveyId]
   )
 
-  // 解锁所有题目
-  const unlockAllQuestions = useCallback(
-    async (targetUserId?: string): Promise<boolean> => {
-      if (!surveyId) return false
+  const renewQuestion = useCallback(
+    async (lock: LockInfo): Promise<boolean> => {
+      if (!surveyId || !clientId) return false
 
       try {
-        const response = await fetch("/api/surveys/collaboration/unlock-all", {
+        const response = await fetch("/api/surveys/collaboration/renew", {
           method: "POST",
           headers: getRealtimeRequestHeaders(clientId),
-          body: JSON.stringify({ surveyId, userId: targetUserId }),
+          body: JSON.stringify({
+            surveyId,
+            questionId: lock.questionId,
+            lockId: lock.lockId,
+          }),
         })
 
-        return response.ok
+        if (response.ok) {
+          const data = (await response.json()) as { lock?: LockPayload }
+          const renewed = data.lock ? toClientLock(data.lock) : null
+          if (!renewed) return false
+          setLockedQuestions((current) => {
+            if (current.get(lock.questionId)?.lockId !== lock.lockId) {
+              return current
+            }
+            return new Map(current).set(lock.questionId, renewed)
+          })
+          return true
+        }
+
+        if (response.status === 409) {
+          setLockedQuestions((current) => {
+            if (current.get(lock.questionId)?.lockId !== lock.lockId) {
+              return current
+            }
+            const next = new Map(current)
+            next.delete(lock.questionId)
+            return next
+          })
+        }
+        return false
       } catch (error) {
-        console.error("Unlock all questions error:", error)
+        console.error("Renew question lock error:", error)
         return false
       }
     },
     [clientId, surveyId]
   )
+
+  // 浏览器计时仅用于及时更新 UI；服务端仍会在每次读写时重新判断租约。
+  useEffect(() => {
+    if (lockedQuestions.size === 0) return
+    const now = performance.now()
+    const nearestExpiry = Math.min(
+      ...[...lockedQuestions.values()].map(
+        (lock) => lock.clientExpiresAt ?? now
+      )
+    )
+    const timer = window.setTimeout(
+      () => {
+        const expiredAt = performance.now()
+        setLockedQuestions((current) => {
+          const next = new Map(current)
+          for (const [questionId, lock] of next) {
+            if ((lock.clientExpiresAt ?? 0) <= expiredAt) {
+              next.delete(questionId)
+            }
+          }
+          return next.size === current.size ? current : next
+        })
+      },
+      Math.max(0, nearestExpiry - now)
+    )
+    return () => window.clearTimeout(timer)
+  }, [lockedQuestions])
+
+  useEffect(() => {
+    if (!clientId || !userId) return
+    const ownedLocks = [...lockedQuestions.values()].filter(
+      (lock) => lock.userId === userId && lock.lockClientId === clientId
+    )
+    if (ownedLocks.length === 0) return
+
+    const renewOwnedLocks = () => {
+      if (document.visibilityState !== "visible") return
+      void Promise.all(ownedLocks.map((lock) => renewQuestion(lock)))
+    }
+    const now = performance.now()
+    const nextExpiry = Math.min(
+      ...ownedLocks.map((lock) => lock.clientExpiresAt ?? now)
+    )
+    const timer = window.setTimeout(
+      renewOwnedLocks,
+      Math.max(1_000, Math.floor((nextExpiry - now) / 3))
+    )
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") renewOwnedLocks()
+    }
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+    return () => {
+      window.clearTimeout(timer)
+      document.removeEventListener("visibilitychange", handleVisibilityChange)
+    }
+  }, [clientId, lockedQuestions, renewQuestion, userId])
+
+  useEffect(() => {
+    if (!surveyId || !clientId || !userId) return
+    const sentLeaseIds = new Set<string>()
+
+    const leave = () => {
+      const leases = [...lockedQuestionsRef.current.values()]
+        .filter(
+          (lock) => lock.userId === userId && lock.lockClientId === clientId
+        )
+        .map((lock) => ({
+          questionId: lock.questionId,
+          lockId: lock.lockId,
+        }))
+        .filter((lease) => !sentLeaseIds.has(lease.lockId))
+      if (leases.length === 0) return
+      leases.forEach((lease) => sentLeaseIds.add(lease.lockId))
+
+      void fetch("/api/surveys/collaboration/leave", {
+        method: "POST",
+        headers: getRealtimeRequestHeaders(clientId),
+        body: JSON.stringify({ surveyId, leases }),
+        keepalive: true,
+      }).catch(() => undefined)
+    }
+
+    window.addEventListener("pagehide", leave)
+    return () => {
+      window.removeEventListener("pagehide", leave)
+      leave()
+    }
+  }, [clientId, surveyId, userId])
 
   const reconcileLockedQuestions = useCallback(
     (snapshot: Map<string, LockInfo>, snapshotStartedEventSequence: number) => {
@@ -571,9 +717,7 @@ export function useSurveyCollaboration(
     currentUser,
     clientId,
     subscriptionEpoch,
-    lockQuestion,
     unlockQuestion,
-    unlockAllQuestions,
     reconcileLockedQuestions,
     getRealtimeEventSequence,
     onEvent,

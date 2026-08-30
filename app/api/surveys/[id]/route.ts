@@ -9,6 +9,7 @@ import {
   getRealtimeRequestIdFromRequest,
 } from "@/lib/realtime-shared"
 import { logPerformance } from "@/lib/performance-logging"
+import { isQuestionLockActive } from "@/lib/question-locks"
 import {
   formatPerformanceTimings,
   formatServerTiming,
@@ -59,6 +60,9 @@ export async function GET(
             revision: true,
             lockedBy: true,
             lockedAt: true,
+            lockClientId: true,
+            lockId: true,
+            lockExpiresAt: true,
           },
         },
         _count: { select: { responses: true } },
@@ -90,9 +94,37 @@ export async function GET(
     ...formatPerformanceTimings(timings),
   })
 
+  const [clock] = await prisma.$queryRaw<Array<{ now: Date }>>`
+    SELECT CURRENT_TIMESTAMP AS "now"
+  `
+  const snapshotNow = clock.now
+  const questions = survey.questions.map((question) => {
+    if (!isQuestionLockActive(question, snapshotNow)) {
+      return {
+        ...question,
+        lockedBy: null,
+        lockedAt: null,
+        lockClientId: null,
+        lockId: null,
+        lockExpiresAt: null,
+        leaseRemainingMs: 0,
+      }
+    }
+
+    return {
+      ...question,
+      leaseRemainingMs: Math.max(
+        0,
+        question.lockExpiresAt.getTime() - snapshotNow.getTime()
+      ),
+    }
+  })
+
   return NextResponse.json(
     {
       ...survey,
+      questions,
+      serverNow: snapshotNow.toISOString(),
       settings: survey.settings ?? { showQuestionNumber: true },
     },
     {

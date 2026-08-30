@@ -1,28 +1,25 @@
 import { auth } from "@/lib/auth"
+import {
+  getQuestionLockExpiry,
+  isQuestionLockActive,
+  serializeQuestionLock,
+} from "@/lib/question-locks"
 import { scheduleSurveyBroadcast } from "@/lib/realtime-broadcast"
 import {
   COLLABORATION_EVENTS,
   getRealtimeClientIdFromRequest,
   getRealtimeRequestIdFromRequest,
 } from "@/lib/realtime-shared"
-import {
-  getQuestionLockExpiry,
-  isQuestionLockActive,
-  serializeQuestionLock,
-} from "@/lib/question-locks"
 import { prisma } from "@/prisma"
 import { NextResponse } from "next/server"
 import { z } from "zod"
 
-const lockQuestionSchema = z.object({
+const renewQuestionLockSchema = z.object({
   surveyId: z.string().min(1),
   questionId: z.string().min(1),
+  lockId: z.string().min(1),
 })
 
-/**
- * POST /api/surveys/collaboration/lock
- * 锁定题目进行编辑
- */
 export async function POST(request: Request) {
   try {
     const session = await auth()
@@ -32,36 +29,29 @@ export async function POST(request: Request) {
     const userId = session.user.id
 
     const body = await request.json().catch(() => null)
-    const parsed = lockQuestionSchema.safeParse(body)
+    const parsed = renewQuestionLockSchema.safeParse(body)
     if (!parsed.success) {
-      return NextResponse.json({ error: "缺少必要参数" }, { status: 400 })
+      return NextResponse.json({ error: "请求体格式不正确" }, { status: 400 })
     }
-    const { surveyId, questionId } = parsed.data
+    const { surveyId, questionId, lockId } = parsed.data
     const clientId = getRealtimeClientIdFromRequest(request)
     if (!clientId) {
       return NextResponse.json({ error: "缺少客户端ID" }, { status: 400 })
     }
 
-    // 验证权限
     const survey = await prisma.survey.findUnique({
       where: { id: surveyId },
       include: {
         collaborators: {
-          where: { userId },
+          where: { userId, canEdit: true },
+          select: { id: true },
         },
       },
     })
-
     if (!survey) {
       return NextResponse.json({ error: "问卷不存在" }, { status: 404 })
     }
-
-    const isOwner = survey.userId === userId
-    const isCollaborator = survey.collaborators.some(
-      (c: { canEdit: boolean }) => c.canEdit
-    )
-
-    if (!isOwner && !isCollaborator) {
+    if (survey.userId !== userId && survey.collaborators.length === 0) {
       return NextResponse.json({ error: "没有编辑权限" }, { status: 403 })
     }
 
@@ -88,25 +78,18 @@ export async function POST(request: Request) {
         SELECT CURRENT_TIMESTAMP AS "now"
       `
       const now = clock.now
-      const active = isQuestionLockActive(current, now)
-      const isSameClient =
-        active &&
-        current.lockedBy === userId &&
-        current.lockClientId === clientId
-
-      if (active && !isSameClient) {
-        return { kind: "locked" as const, lock: current, now }
+      if (
+        !isQuestionLockActive(current, now) ||
+        current.lockedBy !== userId ||
+        current.lockClientId !== clientId ||
+        current.lockId !== lockId
+      ) {
+        return { kind: "lost" as const }
       }
 
       const lock = await tx.question.update({
         where: { id: questionId },
-        data: {
-          lockedBy: userId,
-          lockedAt: isSameClient ? current.lockedAt : now,
-          lockClientId: clientId,
-          lockId: isSameClient ? current.lockId : crypto.randomUUID(),
-          lockExpiresAt: getQuestionLockExpiry(now),
-        },
+        data: { lockExpiresAt: getQuestionLockExpiry(now) },
         select: {
           id: true,
           lockedBy: true,
@@ -116,36 +99,19 @@ export async function POST(request: Request) {
           lockExpiresAt: true,
         },
       })
-      return { kind: "locked-by-me" as const, lock, now }
+      return { kind: "renewed" as const, lock, now }
     })
 
     if (result.kind === "not-found") {
       return NextResponse.json({ error: "题目不存在" }, { status: 404 })
     }
-
-    if (result.kind === "locked") {
-      const lockedByUser = result.lock.lockedBy
-        ? await prisma.user.findUnique({
-            where: { id: result.lock.lockedBy },
-            select: { name: true },
-          })
-        : null
-      const lock = serializeQuestionLock(
-        result.lock,
-        lockedByUser?.name ?? null,
-        result.now
-      )
+    if (result.kind === "lost") {
       return NextResponse.json(
-        {
-          error: "题目已被锁定",
-          code: "QUESTION_LOCKED",
-          lock,
-        },
+        { error: "题目租约已失效", code: "QUESTION_LOCK_LEASE_LOST" },
         { status: 409 }
       )
     }
 
-    // 获取用户信息
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: { name: true },
@@ -156,24 +122,20 @@ export async function POST(request: Request) {
       result.now
     )
     if (!lock) {
-      return NextResponse.json({ error: "题目租约创建失败" }, { status: 500 })
+      return NextResponse.json({ error: "题目续租失败" }, { status: 500 })
     }
 
-    // 数据库锁定成功即可响应；实时通知在响应后发送。
     scheduleSurveyBroadcast({
       surveyId,
-      event: COLLABORATION_EVENTS.QUESTION_LOCKED,
-      operation: "question-lock",
+      event: COLLABORATION_EVENTS.QUESTION_LOCK_RENEWED,
+      operation: "question-lock-renew",
       requestId: getRealtimeRequestIdFromRequest(request),
-      payload: {
-        ...lock,
-        clientId,
-      },
+      payload: { ...lock, clientId },
     })
 
     return NextResponse.json({ success: true, lock })
   } catch (error) {
-    console.error("Lock question error:", error)
-    return NextResponse.json({ error: "锁定题目失败" }, { status: 500 })
+    console.error("Renew question lock error:", error)
+    return NextResponse.json({ error: "题目续租失败" }, { status: 500 })
   }
 }

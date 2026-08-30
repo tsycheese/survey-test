@@ -4,6 +4,7 @@ export const getSurveyChannel = (surveyId: string) =>
 
 export const REALTIME_CLIENT_ID_HEADER = "x-realtime-client-id"
 export const REALTIME_REQUEST_ID_HEADER = "x-request-id"
+export const QUESTION_LOCK_ID_HEADER = "x-question-lock-id"
 
 export function getRealtimeClientIdFromRequest(
   request: Request
@@ -28,6 +29,7 @@ export const COLLABORATION_EVENTS = {
 
   // 题目锁定
   QUESTION_LOCKED: "question-locked",
+  QUESTION_LOCK_RENEWED: "question-lock-renewed",
   QUESTION_UNLOCKED: "question-unlocked",
   QUESTIONS_UNLOCK_ALL: "questions-unlock-all",
 
@@ -56,6 +58,11 @@ export type LockInfo = {
   userId: string
   userName: string | null
   lockedAt: string
+  lockClientId: string
+  lockId: string
+  lockExpiresAt: string
+  leaseRemainingMs: number
+  clientExpiresAt?: number
 }
 
 // 题目数据类型（用于实时同步）

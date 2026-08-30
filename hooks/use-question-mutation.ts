@@ -34,8 +34,19 @@ export function useQuestionMutation({
 }: UseQuestionMutationOptions) {
   function update(updated: Question, forceConflictRetry = false) {
     const lockInfo = lockedQuestions.get(updated.id)
-    if (lockInfo && lockInfo.userId !== currentUserId) {
-      toast.error(`该题目正在被 ${lockInfo.userName || "其他用户"} 编辑`)
+    if (
+      !clientId ||
+      !lockInfo ||
+      lockInfo.userId !== currentUserId ||
+      lockInfo.lockClientId !== clientId
+    ) {
+      toast.error(
+        lockInfo?.userId === currentUserId
+          ? "该题目已在您的另一个标签页中编辑"
+          : lockInfo
+            ? `该题目正在被 ${lockInfo.userName || "其他用户"} 编辑`
+            : "题目租约已失效，请重新选择题目后编辑"
+      )
       return
     }
 
@@ -63,7 +74,11 @@ export function useQuestionMutation({
           `/api/surveys/${surveyId}/questions/${updated.id}`,
           {
             method: "PUT",
-            headers: getEditorMutationHeaders(clientId, requestId),
+            headers: getEditorMutationHeaders(
+              clientId,
+              requestId,
+              lockInfo.lockId
+            ),
             body: JSON.stringify({
               expectedRevision: baseline.revision ?? 0,
               title: updated.title,

@@ -6,12 +6,14 @@ import {
   getRealtimeRequestIdFromRequest,
 } from "@/lib/realtime-shared"
 import { prisma } from "@/prisma"
+import { clearedQuestionLock } from "@/lib/question-locks"
 import { NextResponse } from "next/server"
 import { z } from "zod"
 
 const unlockQuestionSchema = z.object({
   surveyId: z.string().min(1),
   questionId: z.string().min(1),
+  lockId: z.string().min(1),
 })
 
 /**
@@ -30,7 +32,11 @@ export async function POST(request: Request) {
     if (!parsed.success) {
       return NextResponse.json({ error: "缺少必要参数" }, { status: 400 })
     }
-    const { surveyId, questionId } = parsed.data
+    const { surveyId, questionId, lockId } = parsed.data
+    const clientId = getRealtimeClientIdFromRequest(request)
+    if (!clientId) {
+      return NextResponse.json({ error: "缺少客户端ID" }, { status: 400 })
+    }
 
     // 验证权限
     const survey = await prisma.survey.findUnique({
@@ -55,22 +61,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "没有编辑权限" }, { status: 403 })
     }
 
-    // 所有者可以解锁问卷内任意题目；协作者只能解锁未锁定或自己锁定的题目。
-    // 所属问卷和锁拥有者都放进写入条件，避免检查后锁状态发生变化。
+    // 只允许当前租约持有人释放精确的租约代际。延迟到达的旧请求不会误伤新锁。
     const updateResult = await prisma.question.updateMany({
       where: {
         id: questionId,
         surveyId,
-        ...(!isOwner
-          ? {
-              OR: [{ lockedBy: null }, { lockedBy: session.user.id }],
-            }
-          : {}),
+        lockedBy: session.user.id,
+        lockClientId: clientId,
+        lockId,
       },
-      data: {
-        lockedBy: null,
-        lockedAt: null,
-      },
+      data: clearedQuestionLock,
     })
 
     if (updateResult.count === 0) {
@@ -83,10 +83,8 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "题目不存在" }, { status: 404 })
       }
 
-      return NextResponse.json(
-        { error: "不能解锁其他用户的题目" },
-        { status: 403 }
-      )
+      // 已过期、已释放或已被新租约替代时视为幂等成功。
+      return NextResponse.json({ success: true, released: false })
     }
 
     // 数据库解锁成功即可响应；实时通知在响应后发送。
@@ -97,13 +95,14 @@ export async function POST(request: Request) {
       requestId: getRealtimeRequestIdFromRequest(request),
       payload: {
         questionId,
+        lockId,
         userId: session.user.id,
         unlockedAt: new Date().toISOString(),
-        clientId: getRealtimeClientIdFromRequest(request),
+        clientId,
       },
     })
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true, released: true })
   } catch (error) {
     console.error("Unlock question error:", error)
     return NextResponse.json({ error: "解锁题目失败" }, { status: 500 })

@@ -13,6 +13,7 @@ import { useEditorStore } from "@/lib/editor-store"
 import { createQuestion } from "@/lib/questions/registry"
 import type { Question, QuestionType } from "@/lib/questions/types"
 import { PERFORMANCE_LOGS_ENABLED } from "@/lib/performance-logging"
+import type { LockInfo } from "@/lib/realtime-shared"
 
 function waitForNextPaint(): Promise<number> {
   return new Promise((resolve) => {
@@ -25,6 +26,8 @@ function waitForNextPaint(): Promise<number> {
 type UseSurveyStructureMutationOptions = {
   surveyId: string
   clientId: string | null
+  currentUserId: string | null
+  lockedQuestions: Map<string, LockInfo>
   coordinator: KeyedMutationCoordinator
   reconcileFromServer: (reason: string) => Promise<void>
   scheduleReconciliation: (reason: string, delay?: number) => void
@@ -34,6 +37,8 @@ type UseSurveyStructureMutationOptions = {
 export function useSurveyStructureMutation({
   surveyId,
   clientId,
+  currentUserId,
+  lockedQuestions,
   coordinator,
   reconcileFromServer,
   scheduleReconciliation,
@@ -297,12 +302,22 @@ export function useSurveyStructureMutation({
       .getState()
       .survey?.questions.find((question) => question.id === questionId)
     if (!currentQuestion) return
+    const lock = lockedQuestions.get(questionId)
+    if (
+      !clientId ||
+      !lock ||
+      lock.userId !== currentUserId ||
+      lock.lockClientId !== clientId
+    ) {
+      toast.error("题目租约已失效，请重新选择题目后删除")
+      return
+    }
 
     const response = await fetch(
       `/api/surveys/${surveyId}/questions/${questionId}`,
       {
         method: "DELETE",
-        headers: getEditorMutationHeaders(clientId),
+        headers: getEditorMutationHeaders(clientId, undefined, lock.lockId),
         body: JSON.stringify({
           expectedRevision: currentQuestion.revision ?? 0,
         }),

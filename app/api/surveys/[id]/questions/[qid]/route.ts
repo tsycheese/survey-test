@@ -7,7 +7,9 @@ import {
   COLLABORATION_EVENTS,
   getRealtimeClientIdFromRequest,
   getRealtimeRequestIdFromRequest,
+  QUESTION_LOCK_ID_HEADER,
 } from "@/lib/realtime-shared"
+import { isQuestionLockActive } from "@/lib/question-locks"
 import { logPerformance } from "@/lib/performance-logging"
 import {
   formatPerformanceTimings,
@@ -100,6 +102,13 @@ export async function PUT(
 
   const { id, qid } = await params
   const userId = session.user.id
+  const lockId = request.headers.get(QUESTION_LOCK_ID_HEADER)?.trim()
+  if (!clientId || !lockId) {
+    return NextResponse.json(
+      { error: "缺少有效题目租约", code: "QUESTION_LOCK_REQUIRED" },
+      { status: 409 }
+    )
+  }
 
   // 检查是否是创建者或协作者
   const survey = await measurePerformance(timings, "permission", () =>
@@ -147,7 +156,18 @@ export async function PUT(
       const current = await tx.question.findUniqueOrThrow({
         where: { id: qid },
       })
-      if (current.lockedBy && current.lockedBy !== userId) {
+      const [clock] = await tx.$queryRaw<Array<{ now: Date }>>`
+        SELECT CURRENT_TIMESTAMP AS "now"
+      `
+      const now = clock.now
+      if (!isQuestionLockActive(current, now)) {
+        return { kind: "lease-required" as const, current }
+      }
+      if (
+        current.lockedBy !== userId ||
+        current.lockClientId !== clientId ||
+        current.lockId !== lockId
+      ) {
         return { kind: "locked" as const, current }
       }
       if (current.revision !== expectedRevision) {
@@ -173,6 +193,16 @@ export async function PUT(
       {
         error: "题目正在被其他协作者编辑",
         code: "QUESTION_LOCKED",
+        current: serializeQuestion(result.current),
+      },
+      { status: 409 }
+    )
+  }
+  if (result.kind === "lease-required") {
+    return NextResponse.json(
+      {
+        error: "题目租约已失效，请重新获取后保存",
+        code: "QUESTION_LOCK_LEASE_LOST",
         current: serializeQuestion(result.current),
       },
       { status: 409 }
@@ -240,6 +270,14 @@ export async function DELETE(
 
   const { id, qid } = await params
   const userId = session.user.id
+  const clientId = getRealtimeClientIdFromRequest(request)
+  const lockId = request.headers.get(QUESTION_LOCK_ID_HEADER)?.trim()
+  if (!clientId || !lockId) {
+    return NextResponse.json(
+      { error: "缺少有效题目租约", code: "QUESTION_LOCK_REQUIRED" },
+      { status: 409 }
+    )
+  }
 
   // 检查是否是创建者或协作者
   const survey = await prisma.survey.findUnique({
@@ -284,7 +322,18 @@ export async function DELETE(
     if (lockedRows.length === 0) return { kind: "not-found" as const }
 
     const current = await tx.question.findUniqueOrThrow({ where: { id: qid } })
-    if (current.lockedBy && current.lockedBy !== userId) {
+    const [clock] = await tx.$queryRaw<Array<{ now: Date }>>`
+      SELECT CURRENT_TIMESTAMP AS "now"
+    `
+    const now = clock.now
+    if (!isQuestionLockActive(current, now)) {
+      return { kind: "lease-required" as const, current }
+    }
+    if (
+      current.lockedBy !== userId ||
+      current.lockClientId !== clientId ||
+      current.lockId !== lockId
+    ) {
       return { kind: "locked" as const, current }
     }
     if (current.revision !== parsed.data.expectedRevision) {
@@ -309,6 +358,15 @@ export async function DELETE(
   if (result.kind === "locked") {
     return NextResponse.json(
       { error: "题目正在被其他协作者编辑", code: "QUESTION_LOCKED" },
+      { status: 409 }
+    )
+  }
+  if (result.kind === "lease-required") {
+    return NextResponse.json(
+      {
+        error: "题目租约已失效，请重新获取后删除",
+        code: "QUESTION_LOCK_LEASE_LOST",
+      },
       { status: 409 }
     )
   }

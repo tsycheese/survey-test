@@ -37,13 +37,17 @@ model Question {
   clientMutationId String?
   revision     Int          @default(0) // 题目内容的并发修订号
   lockedBy    String?      // 正在编辑的用户ID
-  lockedAt    DateTime?    // 锁定时间
+  lockedAt    DateTime?    // 当前租约首次获取时间
+  lockClientId String?     // 持有租约的编辑器客户端实例
+  lockId       String?     // 当前租约代际，防止延迟请求误释放新锁
+  lockExpiresAt DateTime?  // 租约到期时间
 
   survey  Survey   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
   answers Answer[]
 
   @@unique([surveyId, clientMutationId])
   @@index([lockedBy])
+  @@index([surveyId, lockExpiresAt])
 }
 
 enum QuestionType {

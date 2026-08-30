@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth"
 import { prisma } from "@/prisma"
+import { clearedQuestionLock } from "@/lib/question-locks"
 import { scheduleSurveyBroadcast } from "@/lib/realtime-broadcast"
 import {
   COLLABORATION_EVENTS,
@@ -7,6 +8,19 @@ import {
   getRealtimeRequestIdFromRequest,
 } from "@/lib/realtime-shared"
 import { NextResponse } from "next/server"
+import { z } from "zod"
+
+const leaveCollaborationSchema = z.object({
+  surveyId: z.string().min(1),
+  leases: z
+    .array(
+      z.object({
+        questionId: z.string().min(1),
+        lockId: z.string().min(1),
+      })
+    )
+    .max(10),
+})
 
 /**
  * POST /api/surveys/collaboration/leave
@@ -20,26 +34,53 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "未登录" }, { status: 401 })
     }
 
-    const { surveyId } = await request.json()
-
-    if (!surveyId) {
-      return NextResponse.json({ error: "缺少问卷ID" }, { status: 400 })
+    const body = await request.json().catch(() => null)
+    const parsed = leaveCollaborationSchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json({ error: "请求体格式不正确" }, { status: 400 })
+    }
+    const { surveyId, leases } = parsed.data
+    const clientId = getRealtimeClientIdFromRequest(request)
+    if (!clientId) {
+      return NextResponse.json({ error: "缺少客户端ID" }, { status: 400 })
     }
 
-    // 解锁该用户锁定的所有题目
-    const updateResult = await prisma.question.updateMany({
-      where: {
-        surveyId,
-        lockedBy: session.user.id,
-      },
-      data: {
-        lockedBy: null,
-        lockedAt: null,
+    const survey = await prisma.survey.findUnique({
+      where: { id: surveyId },
+      include: {
+        collaborators: {
+          where: { userId: session.user.id },
+          select: { id: true },
+        },
       },
     })
+    if (!survey) {
+      return NextResponse.json({ error: "问卷不存在" }, { status: 404 })
+    }
+    if (
+      survey.userId !== session.user.id &&
+      survey.collaborators.length === 0
+    ) {
+      return NextResponse.json({ error: "没有权限" }, { status: 403 })
+    }
+
+    const releasedLeases = [] as typeof leases
+    for (const lease of leases) {
+      const result = await prisma.question.updateMany({
+        where: {
+          id: lease.questionId,
+          surveyId,
+          lockedBy: session.user.id,
+          lockClientId: clientId,
+          lockId: lease.lockId,
+        },
+        data: clearedQuestionLock,
+      })
+      if (result.count > 0) releasedLeases.push(lease)
+    }
 
     // 如果确实解锁了题目，通过 Pusher 通知所有在线客户端
-    if (updateResult.count > 0) {
+    if (releasedLeases.length > 0) {
       scheduleSurveyBroadcast({
         surveyId,
         event: COLLABORATION_EVENTS.QUESTIONS_UNLOCK_ALL,
@@ -47,9 +88,10 @@ export async function POST(request: Request) {
         requestId: getRealtimeRequestIdFromRequest(request),
         payload: {
           userId: session.user.id,
+          leases: releasedLeases,
           unlockedBy: session.user.id,
           unlockedAt: new Date().toISOString(),
-          clientId: getRealtimeClientIdFromRequest(request),
+          clientId,
         },
       })
     }
@@ -64,7 +106,7 @@ export async function POST(request: Request) {
       },
     })
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true, released: releasedLeases.length })
   } catch (error) {
     console.error("Leave collaboration error:", error)
     return NextResponse.json({ error: "离开协作失败" }, { status: 500 })

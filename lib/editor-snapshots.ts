@@ -16,6 +16,10 @@ export type SurveyQuestionSnapshot = {
   config: Record<string, unknown> | null
   lockedBy?: string | null
   lockedAt?: string | null
+  lockClientId?: string | null
+  lockId?: string | null
+  lockExpiresAt?: string | null
+  leaseRemainingMs?: number
 }
 
 export type SurveySnapshot = {
@@ -268,20 +272,32 @@ export function toEditorSurvey(snapshot: SurveySnapshot): Survey {
 }
 
 export function toLockedQuestions(
-  snapshot: SurveySnapshot,
-  currentUserId: string | null
+  snapshot: SurveySnapshot
 ): Map<string, LockInfo> {
   const locks = new Map<string, LockInfo>()
 
   for (const question of snapshot.questions ?? []) {
-    if (!question.lockedBy || question.lockedBy === currentUserId) continue
+    if (
+      !question.lockedBy ||
+      !question.lockedAt ||
+      !question.lockClientId ||
+      !question.lockId ||
+      !question.lockExpiresAt ||
+      !question.leaseRemainingMs ||
+      question.leaseRemainingMs <= 0
+    ) {
+      continue
+    }
     locks.set(question.id, {
       questionId: question.id,
       userId: question.lockedBy,
       userName: null,
-      lockedAt: question.lockedAt
-        ? new Date(question.lockedAt).toISOString()
-        : new Date().toISOString(),
+      lockedAt: new Date(question.lockedAt).toISOString(),
+      lockClientId: question.lockClientId,
+      lockId: question.lockId,
+      lockExpiresAt: new Date(question.lockExpiresAt).toISOString(),
+      leaseRemainingMs: question.leaseRemainingMs,
+      clientExpiresAt: performance.now() + question.leaseRemainingMs,
     })
   }
 

@@ -27,7 +27,6 @@ import { logPerformance } from "@/lib/performance-logging"
 type UseSurveyReconciliationOptions = {
   surveyId: string
   canAccess: boolean
-  currentUserId: string | null
   clientId: string | null
   subscriptionEpoch: number
   onEvent: (event: string, callback: (data: unknown) => void) => () => void
@@ -41,7 +40,6 @@ type UseSurveyReconciliationOptions = {
 export function useSurveyReconciliation({
   surveyId,
   canAccess,
-  currentUserId,
   clientId,
   subscriptionEpoch,
   onEvent,
@@ -98,7 +96,7 @@ export function useSurveyReconciliation({
 
         reconcileSurvey(toEditorSurvey(snapshot))
         reconcileLockedQuestions(
-          toLockedQuestions(snapshot, currentUserId),
+          toLockedQuestions(snapshot),
           snapshotStartedEventSequence
         )
         logPerformance("[Realtime Snapshot Reconciliation]", {
@@ -119,7 +117,6 @@ export function useSurveyReconciliation({
     },
     [
       canAccess,
-      currentUserId,
       getRealtimeEventSequence,
       reconcileLockedQuestions,
       reconcileSurvey,

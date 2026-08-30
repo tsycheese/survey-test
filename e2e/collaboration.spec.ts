@@ -1,7 +1,12 @@
 import type { Page } from "@playwright/test"
 import Pusher from "pusher"
 import { expect, prisma, test } from "./fixtures/collaboration"
-import { COLLABORATION_EVENTS, getSurveyChannel } from "../lib/realtime-shared"
+import {
+  COLLABORATION_EVENTS,
+  getSurveyChannel,
+  QUESTION_LOCK_ID_HEADER,
+  REALTIME_CLIENT_ID_HEADER,
+} from "../lib/realtime-shared"
 
 const realtimeTestPublisher = new Pusher({
   appId: process.env.SOKETI_APP_ID ?? "survey-local",
@@ -46,6 +51,31 @@ async function publishQuestionUpdate(
 
 function questionCard(page: Page, questionId: string) {
   return page.locator(`[data-question-id="${questionId}"]`)
+}
+
+async function acquireQuestionLock(
+  page: Page,
+  surveyId: string,
+  questionId: string,
+  clientId = `playwright-${crypto.randomUUID()}`
+) {
+  const response = await page.request.post("/api/surveys/collaboration/lock", {
+    headers: { [REALTIME_CLIENT_ID_HEADER]: clientId },
+    data: { surveyId, questionId },
+  })
+  expect(response.ok()).toBe(true)
+  const data = (await response.json()) as {
+    lock: { lockId: string; lockExpiresAt: string }
+  }
+  return {
+    clientId,
+    lockId: data.lock.lockId,
+    lockExpiresAt: data.lock.lockExpiresAt,
+    headers: {
+      [REALTIME_CLIENT_ID_HEADER]: clientId,
+      [QUESTION_LOCK_ID_HEADER]: data.lock.lockId,
+    },
+  }
 }
 
 function trackSurveySnapshotRequests(page: Page, surveyId: string) {
@@ -495,6 +525,195 @@ test.describe("问卷双账号协作", () => {
       .toBe(0)
   })
 
+  test("租约续期、同账号多标签互斥且旧释放不会误伤新锁", async ({
+    scenario,
+    ownerPage,
+    collaboratorPage,
+  }) => {
+    const firstLease = await acquireQuestionLock(
+      collaboratorPage,
+      scenario.surveyId,
+      scenario.firstQuestionId,
+      "playwright-collaborator-tab-one"
+    )
+
+    const sameUserOtherTab = await collaboratorPage.request.post(
+      "/api/surveys/collaboration/lock",
+      {
+        headers: {
+          [REALTIME_CLIENT_ID_HEADER]: "playwright-collaborator-tab-two",
+        },
+        data: {
+          surveyId: scenario.surveyId,
+          questionId: scenario.firstQuestionId,
+        },
+      }
+    )
+    expect(sameUserOtherTab.status()).toBe(409)
+    expect(await sameUserOtherTab.json()).toMatchObject({
+      code: "QUESTION_LOCKED",
+      lock: { lockId: firstLease.lockId },
+    })
+
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    const renew = await collaboratorPage.request.post(
+      "/api/surveys/collaboration/renew",
+      {
+        headers: {
+          [REALTIME_CLIENT_ID_HEADER]: firstLease.clientId,
+        },
+        data: {
+          surveyId: scenario.surveyId,
+          questionId: scenario.firstQuestionId,
+          lockId: firstLease.lockId,
+        },
+      }
+    )
+    expect(renew.ok()).toBe(true)
+    const renewed = (await renew.json()) as {
+      lock: { lockId: string; lockExpiresAt: string }
+    }
+    expect(renewed.lock.lockId).toBe(firstLease.lockId)
+    expect(Date.parse(renewed.lock.lockExpiresAt)).toBeGreaterThan(
+      Date.parse(firstLease.lockExpiresAt)
+    )
+
+    const wrongTabRelease = await collaboratorPage.request.post(
+      "/api/surveys/collaboration/unlock",
+      {
+        headers: {
+          [REALTIME_CLIENT_ID_HEADER]: "playwright-collaborator-tab-two",
+        },
+        data: {
+          surveyId: scenario.surveyId,
+          questionId: scenario.firstQuestionId,
+          lockId: firstLease.lockId,
+        },
+      }
+    )
+    expect(await wrongTabRelease.json()).toMatchObject({ released: false })
+
+    await prisma.question.update({
+      where: { id: scenario.firstQuestionId },
+      data: { lockExpiresAt: new Date(Date.now() - 1_000) },
+    })
+    const ownerLease = await acquireQuestionLock(
+      ownerPage,
+      scenario.surveyId,
+      scenario.firstQuestionId,
+      "playwright-owner-new-lease"
+    )
+    expect(ownerLease.lockId).not.toBe(firstLease.lockId)
+
+    const staleRelease = await collaboratorPage.request.post(
+      "/api/surveys/collaboration/unlock",
+      {
+        headers: {
+          [REALTIME_CLIENT_ID_HEADER]: firstLease.clientId,
+        },
+        data: {
+          surveyId: scenario.surveyId,
+          questionId: scenario.firstQuestionId,
+          lockId: firstLease.lockId,
+        },
+      }
+    )
+    expect(await staleRelease.json()).toMatchObject({ released: false })
+    await expect
+      .poll(() =>
+        prisma.question.findUnique({
+          where: { id: scenario.firstQuestionId },
+          select: { lockId: true },
+        })
+      )
+      .toEqual({ lockId: ownerLease.lockId })
+  })
+
+  test("双方断网关闭且没有幸存客户端时，租约到期后可重新编辑", async ({
+    scenario,
+    ownerPage,
+    collaboratorPage,
+  }) => {
+    await openEditorPair(
+      ownerPage,
+      collaboratorPage,
+      scenario.surveyId,
+      scenario.firstQuestionId
+    )
+    const collaboratorFirst = questionCard(
+      collaboratorPage,
+      scenario.firstQuestionId
+    )
+    await collaboratorFirst.getByText("E2E 第一题", { exact: true }).click()
+    await expect(collaboratorFirst).toHaveAttribute("data-lock-state", "mine")
+
+    const ownerContext = ownerPage.context()
+    await Promise.all([
+      ownerContext.setOffline(true),
+      collaboratorPage.context().setOffline(true),
+    ])
+    await Promise.all([ownerPage.close(), collaboratorPage.close()])
+
+    await new Promise((resolve) => setTimeout(resolve, 4_500))
+    await ownerContext.setOffline(false)
+    const reopenedOwner = await ownerContext.newPage()
+    await reopenedOwner.goto(`/surveys/${scenario.surveyId}/edit`)
+    const reopenedFirst = questionCard(reopenedOwner, scenario.firstQuestionId)
+    await expect(reopenedFirst).toBeVisible()
+    await expect(reopenedFirst).toHaveAttribute("data-lock-state", "none")
+    await reopenedFirst.getByText("E2E 第一题", { exact: true }).click()
+    await expect(reopenedFirst).toHaveAttribute("data-lock-state", "mine")
+  })
+
+  test("成员离开不会让多个幸存标签页扇出 unlock-all", async ({
+    scenario,
+    ownerPage,
+    collaboratorPage,
+  }) => {
+    await openEditorPair(
+      ownerPage,
+      collaboratorPage,
+      scenario.surveyId,
+      scenario.firstQuestionId
+    )
+    const secondOwnerTab = await ownerPage.context().newPage()
+    await secondOwnerTab.goto(`/surveys/${scenario.surveyId}/edit`)
+    await expect(
+      questionCard(secondOwnerTab, scenario.firstQuestionId)
+    ).toBeVisible()
+
+    let unlockAllRequests = 0
+    for (const page of [ownerPage, secondOwnerTab]) {
+      page.on("request", (request) => {
+        if (
+          request.method() === "POST" &&
+          new URL(request.url()).pathname ===
+            "/api/surveys/collaboration/unlock-all"
+        ) {
+          unlockAllRequests += 1
+        }
+      })
+    }
+
+    const collaboratorFirst = questionCard(
+      collaboratorPage,
+      scenario.firstQuestionId
+    )
+    await collaboratorFirst.getByText("E2E 第一题", { exact: true }).click()
+    await expect(collaboratorFirst).toHaveAttribute("data-lock-state", "mine")
+    await collaboratorPage.goto("/surveys")
+
+    await expect
+      .poll(() =>
+        prisma.question.count({
+          where: { surveyId: scenario.surveyId, lockedBy: { not: null } },
+        })
+      )
+      .toBe(0)
+    expect(unlockAllRequests).toBe(0)
+    await secondOwnerTab.close()
+  })
+
   test("连续新增后两端和数据库保持幂等且顺序连续", async ({
     scenario,
     ownerPage,
@@ -604,9 +823,17 @@ test.describe("问卷双账号协作", () => {
       where: { id: scenario.secondQuestionId },
       select: { revision: true },
     })
+    const lease = await acquireQuestionLock(
+      collaboratorPage,
+      scenario.surveyId,
+      scenario.secondQuestionId
+    )
     const deleteResponse = await collaboratorPage.request.delete(
       `/api/surveys/${scenario.surveyId}/questions/${scenario.secondQuestionId}`,
-      { data: { expectedRevision: secondQuestion.revision } }
+      {
+        headers: lease.headers,
+        data: { expectedRevision: secondQuestion.revision },
+      }
     )
     expect(deleteResponse.ok()).toBe(true)
 
@@ -1157,16 +1384,21 @@ test.describe("问卷双账号协作", () => {
   test("陈旧题目修订号会返回冲突而不是覆盖新内容", async ({
     scenario,
     ownerPage,
-    collaboratorPage,
   }) => {
     const initial = await prisma.question.findUniqueOrThrow({
       where: { id: scenario.firstQuestionId },
       select: { revision: true },
     })
+    const lease = await acquireQuestionLock(
+      ownerPage,
+      scenario.surveyId,
+      scenario.firstQuestionId
+    )
 
     const first = await ownerPage.request.put(
       `/api/surveys/${scenario.surveyId}/questions/${scenario.firstQuestionId}`,
       {
+        headers: lease.headers,
         data: {
           expectedRevision: initial.revision,
           title: "所有者的新标题",
@@ -1175,9 +1407,10 @@ test.describe("问卷双账号协作", () => {
     )
     expect(first.ok()).toBe(true)
 
-    const stale = await collaboratorPage.request.put(
+    const stale = await ownerPage.request.put(
       `/api/surveys/${scenario.surveyId}/questions/${scenario.firstQuestionId}`,
       {
+        headers: lease.headers,
         data: {
           expectedRevision: initial.revision,
           title: "协作者的陈旧标题",
@@ -1205,16 +1438,11 @@ test.describe("问卷双账号协作", () => {
     ownerPage,
     collaboratorPage,
   }) => {
-    const lock = await collaboratorPage.request.post(
-      "/api/surveys/collaboration/lock",
-      {
-        data: {
-          surveyId: scenario.surveyId,
-          questionId: scenario.firstQuestionId,
-        },
-      }
+    const collaboratorLease = await acquireQuestionLock(
+      collaboratorPage,
+      scenario.surveyId,
+      scenario.firstQuestionId
     )
-    expect(lock.ok()).toBe(true)
 
     const question = await prisma.question.findUniqueOrThrow({
       where: { id: scenario.firstQuestionId },
@@ -1223,6 +1451,10 @@ test.describe("问卷双账号协作", () => {
     const update = await ownerPage.request.put(
       `/api/surveys/${scenario.surveyId}/questions/${scenario.firstQuestionId}`,
       {
+        headers: {
+          [REALTIME_CLIENT_ID_HEADER]: "playwright-owner-other-client",
+          [QUESTION_LOCK_ID_HEADER]: collaboratorLease.lockId,
+        },
         data: {
           expectedRevision: question.revision,
           title: "不应保存的标题",

@@ -1,5 +1,6 @@
 import type { Survey } from "@/lib/questions/types"
 import { getRealtimeRequestHeaders } from "@/lib/realtime-performance"
+import { QUESTION_LOCK_ID_HEADER } from "@/lib/realtime-shared"
 
 export type EditorMutationStatus =
   | "idle"
@@ -31,9 +32,13 @@ export const editorMutationKey = {
 
 export function getEditorMutationHeaders(
   clientId: string | null,
-  requestId?: string
+  requestId?: string,
+  lockId?: string
 ) {
-  return getRealtimeRequestHeaders(clientId, requestId)
+  return {
+    ...getRealtimeRequestHeaders(clientId, requestId),
+    ...(lockId ? { [QUESTION_LOCK_ID_HEADER]: lockId } : {}),
+  }
 }
 
 /**

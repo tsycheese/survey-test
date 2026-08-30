@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef } from "react"
 import type { Dispatch, SetStateAction } from "react"
 import { toast } from "sonner"
 import { getEditorMutationHeaders } from "@/lib/editor-mutations"
@@ -13,7 +13,7 @@ type UseQuestionLockManagerOptions = {
   currentUserId: string | null
   clientId: string | null
   lockedQuestions: Map<string, LockInfo>
-  unlockQuestion: (questionId: string) => Promise<boolean>
+  unlockQuestion: (questionId: string, lockId: string) => Promise<boolean>
   setLockedQuestions: SetLockedQuestions
   onSelect: (questionId: string) => void
 }
@@ -27,46 +27,52 @@ export function useQuestionLockManager({
   setLockedQuestions,
   onSelect,
 }: UseQuestionLockManagerOptions) {
-  const [optimisticLockedId, setOptimisticLockedId] = useState<string | null>(
-    null
-  )
   const previousSelectedRef = useRef<string | null>(null)
   const lockQueueRef = useRef<Promise<void>>(Promise.resolve())
   const activeSurveyRef = useRef(surveyId)
+  const lockedQuestionsRef = useRef(lockedQuestions)
+
+  useEffect(() => {
+    lockedQuestionsRef.current = lockedQuestions
+  }, [lockedQuestions])
 
   useEffect(() => {
     activeSurveyRef.current = surveyId
     previousSelectedRef.current = null
     lockQueueRef.current = Promise.resolve()
-    setOptimisticLockedId(null)
   }, [surveyId])
 
   const selectWithLock = useCallback(
     (questionId: string) => {
-      if (previousSelectedRef.current === questionId) return
-
-      onSelect(questionId)
-      setOptimisticLockedId(questionId)
+      if (previousSelectedRef.current === questionId) {
+        const currentLock = lockedQuestionsRef.current.get(questionId)
+        if (
+          currentLock?.userId === currentUserId &&
+          currentLock.lockClientId === clientId
+        ) {
+          return
+        }
+        previousSelectedRef.current = null
+      }
 
       const targetSurveyId = surveyId
-      const previousId = previousSelectedRef.current
-      previousSelectedRef.current = questionId
 
       lockQueueRef.current = lockQueueRef.current
         .then(async () => {
-          if (previousId) {
-            await unlockQuestion(previousId).catch(() => false)
-          }
           if (activeSurveyRef.current !== targetSurveyId) return
+          const previousId = previousSelectedRef.current
 
-          const lockInfo = lockedQuestions.get(questionId)
-          if (lockInfo && lockInfo.userId !== currentUserId) {
-            setOptimisticLockedId((current) =>
-              current === questionId ? null : current
+          const lockInfo = lockedQuestionsRef.current.get(questionId)
+          if (
+            lockInfo &&
+            (lockInfo.userId !== currentUserId ||
+              lockInfo.lockClientId !== clientId)
+          ) {
+            toast.warning(
+              lockInfo.userId === currentUserId
+                ? "该题目已在您的另一个标签页中编辑"
+                : `该题目正在被 ${lockInfo.userName || "其他用户"} 编辑`
             )
-            if (previousSelectedRef.current === questionId) {
-              previousSelectedRef.current = null
-            }
             return
           }
 
@@ -78,53 +84,68 @@ export function useQuestionLockManager({
               questionId,
             }),
           })
-          if (response.ok || activeSurveyRef.current !== targetSurveyId) return
-
-          setOptimisticLockedId((current) =>
-            current === questionId ? null : current
-          )
-          if (previousSelectedRef.current === questionId) {
-            previousSelectedRef.current = null
+          const data = (await response.json().catch(() => ({}))) as {
+            lock?: LockInfo
+            error?: string
           }
+          if (activeSurveyRef.current !== targetSurveyId) return
 
           if (response.status === 409) {
-            const data = (await response.json().catch(() => ({}))) as {
-              lockedByUserId?: string
-              lockedBy?: string
-              lockedAt?: string
-            }
-            if (data.lockedByUserId) {
+            if (data.lock) {
+              const conflictLock = {
+                ...data.lock,
+                clientExpiresAt: performance.now() + data.lock.leaseRemainingMs,
+              }
               setLockedQuestions((current) => {
                 const next = new Map(current)
-                next.set(questionId, {
-                  questionId,
-                  userId: data.lockedByUserId!,
-                  userName: data.lockedBy || "其他用户",
-                  lockedAt: data.lockedAt || new Date().toISOString(),
-                })
+                next.set(questionId, conflictLock)
                 return next
               })
             }
-            toast.warning(`该题目正在被 ${data.lockedBy || "其他用户"} 编辑`)
+            toast.warning(
+              data.lock?.userId === currentUserId
+                ? "该题目已在您的另一个标签页中编辑"
+                : `该题目正在被 ${data.lock?.userName || "其他用户"} 编辑`
+            )
             return
           }
 
-          toast.error("锁定题目失败，请刷新页面重试")
+          if (!response.ok || !data.lock) {
+            toast.error(data.error || "锁定题目失败，请刷新页面重试")
+            return
+          }
+
+          const acquiredLock = {
+            ...data.lock,
+            clientExpiresAt: performance.now() + data.lock.leaseRemainingMs,
+          }
+          setLockedQuestions((current) =>
+            new Map(current).set(questionId, acquiredLock)
+          )
+          previousSelectedRef.current = questionId
+          onSelect(questionId)
+
+          if (previousId && previousId !== questionId) {
+            const previousLock = lockedQuestionsRef.current.get(previousId)
+            if (
+              previousLock?.userId === currentUserId &&
+              previousLock.lockClientId === clientId
+            ) {
+              await unlockQuestion(previousId, previousLock.lockId).catch(
+                () => false
+              )
+            }
+          }
         })
         .catch(() => {
-          if (activeSurveyRef.current !== targetSurveyId) return
-          setOptimisticLockedId((current) =>
-            current === questionId ? null : current
-          )
-          if (previousSelectedRef.current === questionId) {
-            previousSelectedRef.current = null
+          if (activeSurveyRef.current === targetSurveyId) {
+            toast.error("锁定题目失败，请检查网络后重试")
           }
         })
     },
     [
       clientId,
       currentUserId,
-      lockedQuestions,
       onSelect,
       setLockedQuestions,
       surveyId,
@@ -134,18 +155,9 @@ export function useQuestionLockManager({
 
   const getLockInfo = useCallback(
     (questionId: string): LockInfo | undefined => {
-      const serverLock = lockedQuestions.get(questionId)
-      if (serverLock) return serverLock
-      if (optimisticLockedId !== questionId || !currentUserId) return undefined
-
-      return {
-        questionId,
-        userId: currentUserId,
-        userName: "我",
-        lockedAt: new Date().toISOString(),
-      }
+      return lockedQuestions.get(questionId)
     },
-    [currentUserId, lockedQuestions, optimisticLockedId]
+    [lockedQuestions]
   )
 
   return { selectWithLock, getLockInfo }

@@ -55,6 +55,7 @@ export default defineConfig({
       DATABASE_URL: databaseUrl,
       NEXT_DIST_DIR: ".next-e2e",
       NEXT_PUBLIC_ENABLE_PERF_LOGS: "true",
+      QUESTION_LOCK_LEASE_MS: "4000",
     },
   },
   projects: [
