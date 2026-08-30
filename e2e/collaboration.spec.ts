@@ -881,7 +881,7 @@ test.describe("问卷双账号协作", () => {
       .toEqual({ title: "本地未保存标题", revision: 1 })
   })
 
-  test("问卷标题和描述串行保存并反馈顶部状态", async ({
+  test("问卷标题和描述各自只保存一次并反馈顶部状态", async ({
     scenario,
     ownerPage,
     collaboratorPage,
@@ -919,14 +919,26 @@ test.describe("问卷双账号协作", () => {
     await expect(
       collaboratorPage.getByText("保存中", { exact: true })
     ).toBeVisible()
+    await expect(
+      collaboratorPage.getByText("已保存", { exact: true })
+    ).toBeVisible({ timeout: 15_000 })
+    expect(submittedBodies).toHaveLength(1)
+    expect(submittedBodies[0]).toMatchObject({
+      title: "串行保存后的问卷标题",
+      description: "由 Playwright 创建并在用例结束后清理",
+    })
 
     await collaboratorPage
       .getByText("由 Playwright 创建并在用例结束后清理", { exact: true })
       .click()
+    await collaboratorPage.waitForTimeout(700)
+    expect(submittedBodies).toHaveLength(1)
+
     const descriptionEditor = collaboratorPage.locator("textarea").first()
     await descriptionEditor.fill("串行保存后的问卷描述")
-    await descriptionEditor.blur()
-
+    await expect(
+      collaboratorPage.getByText("保存中", { exact: true })
+    ).toBeVisible()
     await expect(
       collaboratorPage.getByText("已保存", { exact: true })
     ).toBeVisible({ timeout: 15_000 })
@@ -935,6 +947,9 @@ test.describe("问卷双账号协作", () => {
       title: "串行保存后的问卷标题",
       description: "串行保存后的问卷描述",
     })
+    await descriptionEditor.blur()
+    await collaboratorPage.waitForTimeout(700)
+    expect(submittedBodies).toHaveLength(2)
     await expect
       .poll(() =>
         prisma.survey.findUnique({

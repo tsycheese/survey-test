@@ -138,11 +138,10 @@ export function useSurveyDetailsMutation({
     if (timerRef.current) {
       clearTimeout(timerRef.current)
       timerRef.current = null
-    } else if (
-      enqueuedVersionRef.current === draftVersionRef.current &&
-      coordinator.hasPending(key)
-    ) {
-      return coordinator.waitForKey(key)
+    } else if (enqueuedVersionRef.current === draftVersionRef.current) {
+      return coordinator.hasPending(key)
+        ? coordinator.waitForKey(key)
+        : Promise.resolve()
     }
     return enqueueSave()
   }
